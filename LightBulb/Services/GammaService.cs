@@ -154,7 +154,22 @@ public partial class GammaService : IDisposable
         InvalidateGamma();
     }
 
-    public void SetGamma(ColorConfiguration configuration)
+    public void SetGamma(ColorConfiguration configuration) =>
+        SetGamma(configuration, 0, 0, 0, 0);
+
+    /// <summary>
+    /// Applies gamma to all monitors with optional per-channel RGBL bias coefficients.
+    /// Each bias is in [-1.0, +1.0]: at 0 no change, at +1.0 the channel is doubled
+    /// (clamped to 1), at -1.0 the channel is zeroed.
+    /// L bias scales effective brightness before channel calculations.
+    /// </summary>
+    public void SetGamma(
+        ColorConfiguration configuration,
+        double rBias,
+        double gBias,
+        double bBias,
+        double lBias
+    )
     {
         // Avoid unnecessary changes as updating too often will cause stuttering
         if (!IsGammaStale() && !IsSignificantChange(configuration))
@@ -164,12 +179,15 @@ public partial class GammaService : IDisposable
 
         _isUpdatingGamma = true;
 
+        // L bias scales the overall brightness; then each channel gets its own multiplicative bias.
+        var effectiveBrightness = configuration.Brightness * (1.0 + lBias);
+
         foreach (var deviceContext in _deviceContexts)
         {
             deviceContext.SetGamma(
-                GetRed(configuration) * configuration.Brightness,
-                GetGreen(configuration) * configuration.Brightness,
-                GetBlue(configuration) * configuration.Brightness
+                Math.Clamp(GetRed(configuration) * effectiveBrightness * (1.0 + rBias), 0, 1),
+                Math.Clamp(GetGreen(configuration) * effectiveBrightness * (1.0 + gBias), 0, 1),
+                Math.Clamp(GetBlue(configuration) * effectiveBrightness * (1.0 + bBias), 0, 1)
             );
         }
 
@@ -177,7 +195,9 @@ public partial class GammaService : IDisposable
 
         _lastConfiguration = configuration;
         _lastUpdateTimestamp = DateTimeOffset.Now;
-        Debug.WriteLine($"Updated gamma to {configuration}.");
+        Debug.WriteLine(
+            $"Updated gamma to {configuration} (rBias={rBias:F2}, gBias={gBias:F2}, bBias={bBias:F2}, lBias={lBias:F2})."
+        );
     }
 
     public void Dispose()

@@ -1,0 +1,146 @@
+<UserControl
+    x:Class="LightBulb.Views.Components.Settings.UsbSensorSettingsTabView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:LightBulb.Converters"
+    xmlns:settings="clr-namespace:LightBulb.ViewModels.Components.Settings"
+    x:DataType="settings:UsbSensorSettingsTabViewModel">
+    <StackPanel Margin="16" Orientation="Vertical">
+
+        <!--  Enable toggle  -->
+        <DockPanel LastChildFill="False" ToolTip.Tip="Enable adaptive screen adjustment via USB RGB sensor">
+            <TextBlock DockPanel.Dock="Left" Text="Enable USB Sensor" />
+            <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsEnabled}" />
+        </DockPanel>
+
+        <!--  Port selection  -->
+        <DockPanel Margin="0,16,0,0" LastChildFill="False" ToolTip.Tip="Serial port the sensor is connected to (e.g. COM3)">
+            <TextBlock DockPanel.Dock="Left" Text="Serial Port" />
+            <ComboBox
+                DockPanel.Dock="Right"
+                IsEnabled="{Binding !IsEnabled}"
+                ItemsSource="{Binding AvailablePortNames}"
+                SelectedItem="{Binding PortName}" />
+        </DockPanel>
+
+        <!--  Read interval  -->
+        <DockPanel Margin="0,24,0,0" ToolTip.Tip="How often (in minutes) to query the sensor">
+            <TextBlock DockPanel.Dock="Left" Text="Read Interval (min)" />
+            <TextBox
+                MinWidth="36"
+                HorizontalAlignment="Right"
+                DockPanel.Dock="Right"
+                Text="{Binding ReadIntervalMinutes, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </DockPanel>
+        <Slider
+            Margin="0,12,0,0"
+            IsSnapToTickEnabled="True"
+            LargeChange="15"
+            Maximum="120"
+            Minimum="1"
+            SmallChange="1"
+            TickFrequency="1"
+            Value="{Binding ReadIntervalMinutes}" />
+
+        <!--  Live status  -->
+        <Border
+            Margin="0,24,0,0"
+            Padding="8"
+            Background="{DynamicResource MaterialCardBackgroundBrush}"
+            CornerRadius="4">
+            <StackPanel Orientation="Vertical" Spacing="4">
+                <TextBlock FontWeight="SemiBold" Text="Last Reading" />
+                <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Raw" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding LastRawReading}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="CCT" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding LatestCctText}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Luminance" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding LatestLuminance, Converter={x:Static converters:FractionToPercentageStringConverter.Instance}}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Time" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding LastReadTime}" />
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <!--  R Bias  -->
+        <DockPanel Margin="0,24,0,0" ToolTip.Tip="Red channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
+            <TextBlock DockPanel.Dock="Left" Text="R Bias" />
+            <TextBox
+                MinWidth="36"
+                HorizontalAlignment="Right"
+                DockPanel.Dock="Right"
+                Text="{Binding RBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </DockPanel>
+        <Slider
+            Margin="0,12,0,0"
+            LargeChange="0.2"
+            Maximum="1"
+            Minimum="-1"
+            SmallChange="0.05"
+            Value="{Binding RBias}" />
+
+        <!--  G Bias  -->
+        <DockPanel Margin="0,16,0,0" ToolTip.Tip="Green channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
+            <TextBlock DockPanel.Dock="Left" Text="G Bias" />
+            <TextBox
+                MinWidth="36"
+                HorizontalAlignment="Right"
+                DockPanel.Dock="Right"
+                Text="{Binding GBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </DockPanel>
+        <Slider
+            Margin="0,12,0,0"
+            LargeChange="0.2"
+            Maximum="1"
+            Minimum="-1"
+            SmallChange="0.05"
+            Value="{Binding GBias}" />
+
+        <!--  B Bias  -->
+        <DockPanel Margin="0,16,0,0" ToolTip.Tip="Blue channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
+            <TextBlock DockPanel.Dock="Left" Text="B Bias" />
+            <TextBox
+                MinWidth="36"
+                HorizontalAlignment="Right"
+                DockPanel.Dock="Right"
+                Text="{Binding BBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </DockPanel>
+        <Slider
+            Margin="0,12,0,0"
+            LargeChange="0.2"
+            Maximum="1"
+            Minimum="-1"
+            SmallChange="0.05"
+            Value="{Binding BBias}" />
+
+        <!--  L Bias (Luminance / Brightness)  -->
+        <DockPanel Margin="0,16,0,0" ToolTip.Tip="Luminance (brightness) bias — scales effective screen brightness (-1.0 to +1.0)">
+            <TextBlock DockPanel.Dock="Left" Text="L Bias" />
+            <TextBox
+                MinWidth="36"
+                HorizontalAlignment="Right"
+                DockPanel.Dock="Right"
+                Text="{Binding LBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </DockPanel>
+        <Slider
+            Margin="0,12,0,0"
+            LargeChange="0.2"
+            Maximum="1"
+            Minimum="-1"
+            SmallChange="0.05"
+            Value="{Binding LBias}" />
+
+    </StackPanel>
+</UserControl>

@@ -25,6 +25,7 @@ public partial class ViewManager
             GeneralSettingsTabViewModel => new GeneralSettingsTabView(),
             HotKeySettingsTabViewModel => new HotKeySettingsTabView(),
             LocationSettingsTabViewModel => new LocationSettingsTabView(),
+            UsbSensorSettingsTabViewModel => new UsbSensorSettingsTabView(),
             _ => null,
         };
 

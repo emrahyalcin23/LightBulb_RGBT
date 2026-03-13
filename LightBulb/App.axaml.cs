@@ -50,6 +50,7 @@ public class App : Application, IDisposable
         services.AddSingleton<HotKeyService>();
         services.AddSingleton<SettingsService>();
         services.AddSingleton<UpdateService>();
+        services.AddSingleton<UsbSensorService>();
 
         // View models
         services.AddTransient<MainViewModel>();
@@ -61,6 +62,7 @@ public class App : Application, IDisposable
         services.AddTransient<SettingsTabViewModelBase, GeneralSettingsTabViewModel>();
         services.AddTransient<SettingsTabViewModelBase, HotKeySettingsTabViewModel>();
         services.AddTransient<SettingsTabViewModelBase, LocationSettingsTabViewModel>();
+        services.AddTransient<SettingsTabViewModelBase, UsbSensorSettingsTabViewModel>();
 
         _services = services.BuildServiceProvider(true);
         _settingsService = _services.GetRequiredService<SettingsService>();

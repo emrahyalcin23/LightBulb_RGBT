@@ -119,6 +119,32 @@ public partial class SettingsService()
     [ObservableProperty]
     public partial IReadOnlyList<ExternalApplication>? WhitelistedApplications { get; set; }
 
+    // USB Sensor
+
+    [ObservableProperty]
+    public partial bool IsUsbSensorEnabled { get; set; } = false;
+
+    [ObservableProperty]
+    [JsonPropertyName("UsbPortName")]
+    public partial string UsbPortName { get; set; } = "COM3";
+
+    [ObservableProperty]
+    [JsonPropertyName("UsbReadIntervalMinutes")]
+    public partial double UsbReadIntervalMinutes { get; set; } = 15;
+
+    // RGBL bias coefficients [-1.0, +1.0]
+    [ObservableProperty]
+    public partial double UsbRBias { get; set; } = 0;
+
+    [ObservableProperty]
+    public partial double UsbGBias { get; set; } = 0;
+
+    [ObservableProperty]
+    public partial double UsbBBias { get; set; } = 0;
+
+    [ObservableProperty]
+    public partial double UsbLBias { get; set; } = 0;
+
     // HotKeys
 
     [ObservableProperty]

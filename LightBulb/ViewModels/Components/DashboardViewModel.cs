@@ -22,6 +22,7 @@ public partial class DashboardViewModel : ViewModelBase
     private readonly GammaService _gammaService;
     private readonly HotKeyService _hotKeyService;
     private readonly ExternalApplicationService _externalApplicationService;
+    private readonly UsbSensorService _usbSensorService;
 
     private readonly DisposableCollector _eventRoot = new();
 
@@ -38,7 +39,8 @@ public partial class DashboardViewModel : ViewModelBase
         LocalizationManager localizationManager,
         GammaService gammaService,
         HotKeyService hotKeyService,
-        ExternalApplicationService externalApplicationService
+        ExternalApplicationService externalApplicationService,
+        UsbSensorService usbSensorService
     )
     {
         _settingsService = settingsService;
@@ -46,6 +48,7 @@ public partial class DashboardViewModel : ViewModelBase
         _gammaService = gammaService;
         _hotKeyService = hotKeyService;
         _externalApplicationService = externalApplicationService;
+        _usbSensorService = usbSensorService;
 
         _eventRoot.Add(
             this.WatchProperty(
@@ -77,6 +80,20 @@ public partial class DashboardViewModel : ViewModelBase
                     o => o.ResetConfigurationOffsetHotKey,
                 ],
                 RegisterHotKeys
+            )
+        );
+
+        _eventRoot.Add(
+            // Invalidate gamma immediately when USB bias or enable state changes
+            settingsService.WatchProperties(
+                [
+                    o => o.IsUsbSensorEnabled,
+                    o => o.UsbRBias,
+                    o => o.UsbGBias,
+                    o => o.UsbBBias,
+                    o => o.UsbLBias,
+                ],
+                _gammaService.InvalidateGamma
             )
         );
 
@@ -317,11 +334,39 @@ public partial class DashboardViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Returns the effective target configuration.
+    /// When the USB sensor is enabled, replaces temperature and brightness
+    /// with the sensor-derived CCT and luminance values.
+    /// </summary>
+    private ColorConfiguration GetEffectiveTarget()
+    {
+        if (_settingsService.IsUsbSensorEnabled)
+        {
+            return new ColorConfiguration(
+                Math.Clamp(
+                    _usbSensorService.LatestCct,
+                    _settingsService.MinimumTemperature,
+                    _settingsService.MaximumTemperature
+                ),
+                Math.Clamp(
+                    _usbSensorService.LatestLuminance,
+                    _settingsService.MinimumBrightness,
+                    _settingsService.MaximumBrightness
+                )
+            );
+        }
+
+        return TargetConfiguration;
+    }
+
     private void UpdateConfiguration()
     {
+        var effectiveTarget = GetEffectiveTarget();
+
         var isSmooth =
             !IsCyclePreviewEnabled
-            && CurrentConfiguration != TargetConfiguration
+            && CurrentConfiguration != effectiveTarget
             && _settingsService.IsConfigurationSmoothingEnabled
             && _settingsService.ConfigurationSmoothingMaxDuration.TotalSeconds >= 0.1;
 
@@ -329,12 +374,12 @@ public partial class DashboardViewModel : ViewModelBase
         {
             // Check if the target configuration has changed since the last transition started
             if (
-                _configurationSmoothingTarget != TargetConfiguration
+                _configurationSmoothingTarget != effectiveTarget
                 || _configurationSmoothingSource is null
             )
             {
                 _configurationSmoothingSource = CurrentConfiguration;
-                _configurationSmoothingTarget = TargetConfiguration;
+                _configurationSmoothingTarget = effectiveTarget;
             }
 
             var brightnessDelta = Math.Abs(
@@ -362,19 +407,32 @@ public partial class DashboardViewModel : ViewModelBase
             );
 
             CurrentConfiguration = CurrentConfiguration.StepTo(
-                TargetConfiguration,
+                effectiveTarget,
                 temperatureStep,
                 brightnessStep
             );
         }
         else
         {
-            CurrentConfiguration = TargetConfiguration;
+            CurrentConfiguration = effectiveTarget;
             _configurationSmoothingSource = null;
             _configurationSmoothingTarget = null;
         }
 
-        _gammaService.SetGamma(CurrentConfiguration);
+        if (_settingsService.IsUsbSensorEnabled)
+        {
+            _gammaService.SetGamma(
+                CurrentConfiguration,
+                _settingsService.UsbRBias,
+                _settingsService.UsbGBias,
+                _settingsService.UsbBBias,
+                _settingsService.UsbLBias
+            );
+        }
+        else
+        {
+            _gammaService.SetGamma(CurrentConfiguration);
+        }
     }
 
     private void UpdateIsPaused()
