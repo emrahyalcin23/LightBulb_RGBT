@@ -13,8 +13,7 @@ namespace LightBulb.Services;
 /// Periodically sends "read" command and parses "R:xxx.xx, G:xxx.xx, B:xxx.xx" responses.
 /// Converts raw RGB sensor values to CCT (Kelvin) and relative luminance.
 /// </summary>
-[ObservableObject]
-public partial class UsbSensorService : IDisposable
+public partial class UsbSensorService : ObservableObject, IDisposable
 {
     // Robertson's CCT formula reference luminance (auto-scales to sensor range)
     private const double ReferenceMax = 4000.0;
