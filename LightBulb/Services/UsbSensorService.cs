@@ -222,6 +222,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return Math.Clamp(rawY / ReferenceMax, 0.1, 1.0);
     }
 
+    /// <summary>
+    /// Injects a fake sensor reading directly — for testing without hardware.
+    /// Uses the same CCT/luminance pipeline as real serial data.
+    /// </summary>
+    public void InjectSimulatedReading(double r, double g, double b)
+    {
+        var fakeResponse = string.Create(
+            CultureInfo.InvariantCulture,
+            $"R:{r:F2}, G:{g:F2}, B:{b:F2}"
+        );
+        ParseAndDispatch(fakeResponse);
+    }
+
     public void Dispose()
     {
         if (_isDisposed)

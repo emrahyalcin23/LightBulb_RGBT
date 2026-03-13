@@ -1,4 +1,5 @@
 using System;
+using CommunityToolkit.Mvvm.Input;
 using LightBulb.Localization;
 using LightBulb.Services;
 using LightBulb.Utils;
@@ -10,6 +11,10 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 {
     private readonly UsbSensorService _usbSensorService;
     private readonly DisposableCollector _usbEventRoot = new();
+
+    private double _simR = 1200;
+    private double _simG = 800;
+    private double _simB = 400;
 
     public UsbSensorSettingsTabViewModel(
         SettingsService settingsService,
@@ -23,6 +28,9 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         _usbEventRoot.Add(
             _usbSensorService.WatchAllProperties(OnAllPropertiesChanged)
         );
+
+        InjectSimulatedReadingCommand = new RelayCommand(() =>
+            _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB));
     }
 
     public override string DisplayName => "USB Sensor";
@@ -70,6 +78,14 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string LatestCctText => $"{_usbSensorService.LatestCct:F0} K";
 
     public double LatestLuminance => _usbSensorService.LatestLuminance;
+
+    // ── Simulation ────────────────────────────────────────────────────────────
+
+    public double SimulatedR { get => _simR; set => SetProperty(ref _simR, value); }
+    public double SimulatedG { get => _simG; set => SetProperty(ref _simG, value); }
+    public double SimulatedB { get => _simB; set => SetProperty(ref _simB, value); }
+
+    public IRelayCommand InjectSimulatedReadingCommand { get; }
 
     // ── RGBL bias coefficients [-1.0, +1.0] ──────────────────────────────────
 

@@ -6,7 +6,7 @@
     xmlns:dialogs="clr-namespace:LightBulb.ViewModels.Dialogs"
     xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
     Width="350"
-    Height="270"
+    Height="380"
     x:DataType="dialogs:SettingsViewModel">
     <Grid ColumnDefinitions="Auto,*">
         <!--  Settings tab selection  -->

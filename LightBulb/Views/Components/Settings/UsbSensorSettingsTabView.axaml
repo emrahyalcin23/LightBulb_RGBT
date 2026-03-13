@@ -70,6 +70,46 @@
             </StackPanel>
         </Border>
 
+        <!--  Simulate Reading  -->
+        <Border
+            Margin="0,16,0,0"
+            Padding="8"
+            Background="{DynamicResource MaterialCardBackgroundBrush}"
+            CornerRadius="4">
+            <StackPanel Orientation="Vertical" Spacing="8">
+                <TextBlock FontWeight="SemiBold" Text="Simulate Reading" />
+                <DockPanel LastChildFill="False" ToolTip.Tip="Simulated Red channel (sensor count)">
+                    <TextBlock DockPanel.Dock="Left" Text="R" />
+                    <TextBox
+                        MinWidth="60"
+                        DockPanel.Dock="Right"
+                        Text="{Binding SimulatedR, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False" ToolTip.Tip="Simulated Green channel (sensor count)">
+                    <TextBlock DockPanel.Dock="Left" Text="G" />
+                    <TextBox
+                        MinWidth="60"
+                        DockPanel.Dock="Right"
+                        Text="{Binding SimulatedG, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False" ToolTip.Tip="Simulated Blue channel (sensor count)">
+                    <TextBlock DockPanel.Dock="Left" Text="B" />
+                    <TextBox
+                        MinWidth="60"
+                        DockPanel.Dock="Right"
+                        Text="{Binding SimulatedB, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                </DockPanel>
+                <Button
+                    HorizontalAlignment="Right"
+                    Command="{Binding InjectSimulatedReadingCommand}"
+                    Content="Inject"
+                    Theme="{DynamicResource MaterialOutlinedButton}" />
+            </StackPanel>
+        </Border>
+
         <!--  R Bias  -->
         <DockPanel Margin="0,24,0,0" ToolTip.Tip="Red channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
             <TextBlock DockPanel.Dock="Left" Text="R Bias" />
