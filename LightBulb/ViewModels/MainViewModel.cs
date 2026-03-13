@@ -175,7 +175,7 @@ public partial class MainViewModel(
 
     [RelayCommand]
     private async Task ShowSettingsAsync() =>
-        await dialogManager.ShowDialogAsync(viewModelManager.CreateSettingsViewModel());
+        await dialogManager.ShowWindowDialogAsync(viewModelManager.CreateSettingsViewModel());
 
     [RelayCommand]
     private void ShowAbout() => Process.StartShellExecute(Program.ProjectUrl);
