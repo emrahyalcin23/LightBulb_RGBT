@@ -2,13 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO.Ports;
-using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
-using Microsoft.Win32;
 
 namespace LightBulb.Services;
 
@@ -21,6 +19,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 {
     // Robertson's CCT formula reference luminance (auto-scales to sensor range)
     private const double ReferenceMax = 4000.0;
+
+    // PiColor firmware identity handshake
+    private const string KimsinCommand = "KIMSIN";
+    private const string PicoIdentity = "BENIM_OZEL_PICOM_V1";
+
+    // OKU_0 = single instantaneous reading (no buffer needed, always immediate)
+    private const string InstantReadCommand = "OKU_0";
 
     private static readonly Regex ReadingPattern = new(
         @"R:\s*(?<r>[\d.]+)[\s,]+G:\s*(?<g>[\d.]+)[\s,]+B:\s*(?<b>[\d.]+)",
@@ -65,48 +70,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>Returns all available serial port names on this system.</summary>
     public static string[] GetAvailablePortNames() => SerialPort.GetPortNames();
-
-    /// <summary>
-    /// Returns the set of COM port names that are associated with a Raspberry Pi Pico (VID 0x2E8A)
-    /// by querying the Windows registry. Returns an empty set if no Pico is found or on error,
-    /// in which case the caller should fall back to trying all ports.
-    /// </summary>
-    private static IReadOnlySet<string> GetPicoPortNames()
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            using var usbKey = Registry.LocalMachine.OpenSubKey(
-                @"SYSTEM\CurrentControlSet\Enum\USB"
-            );
-            if (usbKey is null)
-                return result;
-
-            foreach (var vidPid in usbKey.GetSubKeyNames())
-            {
-                if (!vidPid.StartsWith("VID_2E8A", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                using var vidKey = usbKey.OpenSubKey(vidPid);
-                if (vidKey is null)
-                    continue;
-
-                foreach (var instance in vidKey.GetSubKeyNames())
-                {
-                    using var deviceParams = vidKey.OpenSubKey($@"{instance}\Device Parameters");
-                    var portName = deviceParams?.GetValue("PortName")?.ToString();
-                    if (!string.IsNullOrWhiteSpace(portName))
-                        result.Add(portName);
-                }
-            }
-        }
-        catch
-        {
-            // Registry unavailable — return empty (caller falls back to all ports)
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Opens the serial port and starts periodic sensor reads.
@@ -234,24 +197,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return Task.Run(() =>
         {
             var baud = _settingsService.UsbBaudRate;
-            var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
-                ? "OKU"
-                : _settingsService.UsbReadCommand.Trim();
-            var testCommand = $"{prefix}_1";
-
-            // Prefer ports belonging to a Raspberry Pi Pico 2W (VID 0x2E8A).
-            // If none are found in the registry, fall back to scanning all ports.
-            var picoPortNames = GetPicoPortNames();
-            var allPortNames = SerialPort.GetPortNames();
-            var portNames = picoPortNames.Count > 0
-                ? allPortNames.Where(picoPortNames.Contains).ToArray()
-                : allPortNames;
-
+            var portNames = SerialPort.GetPortNames();
             var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
 
-            // Phase 1 — open all candidate ports up-front so DTR-reset starts simultaneously.
+            // Phase 1 — open all ports up-front so any DTR-reset starts simultaneously.
             var opened = new List<(string Name, SerialPort Port)>();
             foreach (var portName in portNames)
             {
@@ -267,27 +218,38 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 }
             }
 
-            // Phase 2 — wait for the Pico to finish its boot sequence (~2 s).
+            // Phase 2 — short wait to let the device settle after port open.
             if (opened.Count > 0)
-                System.Threading.Thread.Sleep(2500);
+                System.Threading.Thread.Sleep(1500);
 
-            // Phase 3 — flush boot messages, send command, read response on each open port.
+            // Phase 3 — identify device with KIMSIN, then get an instant reading.
             foreach (var (portName, p) in opened)
             {
                 try
                 {
-                    // Discard any boot messages buffered during the DTR-reset wait.
+                    // Discard any buffered data before sending commands.
                     p.DiscardInBuffer();
-                    p.WriteLine(testCommand);
+
+                    // Step 1: Verify this is a PiColor device before sending any read command.
+                    p.WriteLine(KimsinCommand);
+                    var identity = p.ReadLine().Trim();
+                    if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
+                    {
+                        triedPorts.Add((portName, $"✗ Yabancı cihaz: {identity}"));
+                        continue;
+                    }
+
+                    // Step 2: Request an instant reading to confirm the sensor works.
+                    p.WriteLine(InstantReadCommand);
                     var raw = p.ReadLine().Trim();
                     if (ReadingPattern.IsMatch(raw))
                     {
                         foundPort = portName;
                         foundRaw = raw;
-                        triedPorts.Add((portName, $"✓ Yanıt: {raw}"));
+                        triedPorts.Add((portName, $"✓ PiColor bulundu — Yanıt: {raw}"));
                         break;
                     }
-                    triedPorts.Add((portName, $"✗ Geçersiz yanıt: {raw}"));
+                    triedPorts.Add((portName, $"✗ Kimlik doğrulandı ama sensör yanıtı geçersiz: {raw}"));
                 }
                 catch (TimeoutException)
                 {
@@ -320,7 +282,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                         : "✗ Sensör hiçbir portta bulunamadı";
                 });
 
-            return new PortScanResult(testCommand, baud, triedPorts, foundPort, foundRaw);
+            return new PortScanResult($"{KimsinCommand} → {InstantReadCommand}", baud, triedPorts, foundPort, foundRaw);
         });
     }
 
@@ -343,25 +305,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         var portName = _settingsService.UsbPortName;
         var baud = _settingsService.UsbBaudRate;
-        var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
-            ? "OKU"
-            : _settingsService.UsbReadCommand.Trim();
-        var testCommand = $"{prefix}_1";
-
-        // Verify the configured port belongs to a Pico 2W (only when opening a new port).
-        var picoPortNames = GetPicoPortNames();
-        if (picoPortNames.Count > 0 && !picoPortNames.Contains(portName))
-        {
-            var result = new ConnectionTestResult(portName, baud, testCommand, false, "",
-                "Bu port Raspberry Pi Pico 2W cihazına ait değil");
-            Dispatcher.UIThread.Post(() =>
-            {
-                IsConnected = false;
-                IsTestingConnection = false;
-                ConnectionTestMessage = "✗ Seçili port Pico 2W değil";
-            });
-            return result;
-        }
 
         // If already running use the existing open port.
         var useExisting = _port is { IsOpen: true };
@@ -377,17 +320,35 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             if (!useExisting)
             {
                 port.Open();
-                // Wait for Pico to finish its boot sequence before sending the command.
-                System.Threading.Thread.Sleep(2500);
+                // Short settle wait after port open.
+                System.Threading.Thread.Sleep(1500);
             }
 
-            // Discard any boot messages buffered during the DTR-reset wait.
+            // Discard any buffered data before sending commands.
             port.DiscardInBuffer();
-            port.WriteLine(testCommand);
+
+            // Step 1: Verify device identity — must respond with PicoIdentity.
+            port.WriteLine(KimsinCommand);
+            var identity = port.ReadLine().Trim();
+            if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
+            {
+                var badResult = new ConnectionTestResult(portName, baud, KimsinCommand, false, identity,
+                    $"Kimlik doğrulanamadı — beklenen: {PicoIdentity}, gelen: {identity}");
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsConnected = false;
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = "✗ PiColor cihazı değil";
+                });
+                return badResult;
+            }
+
+            // Step 2: Request an instant reading to confirm the sensor works.
+            port.WriteLine(InstantReadCommand);
             var raw = port.ReadLine().Trim();
             var ok = ReadingPattern.IsMatch(raw);
 
-            var result = new ConnectionTestResult(portName, baud, testCommand, ok, raw,
+            var result = new ConnectionTestResult(portName, baud, InstantReadCommand, ok, raw,
                 ok ? "" : "Yanıt formatı beklenenle eşleşmedi");
 
             Dispatcher.UIThread.Post(() =>
@@ -401,7 +362,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         catch (TimeoutException)
         {
-            var result = new ConnectionTestResult(portName, baud, testCommand, false, "",
+            var result = new ConnectionTestResult(portName, baud, KimsinCommand, false, "",
                 "Zaman aşımı — sensörden yanıt gelmedi");
             Dispatcher.UIThread.Post(() =>
             {
@@ -413,7 +374,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            var result = new ConnectionTestResult(portName, baud, testCommand, false, "",
+            var result = new ConnectionTestResult(portName, baud, KimsinCommand, false, "",
                 ex.Message);
             Dispatcher.UIThread.Post(() =>
             {
