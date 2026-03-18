@@ -16,11 +16,18 @@
         <!--  Port selection  -->
         <DockPanel Margin="0,16,0,0" LastChildFill="False" ToolTip.Tip="Serial port the sensor is connected to (e.g. COM3)">
             <TextBlock DockPanel.Dock="Left" Text="Serial Port" />
-            <ComboBox
-                DockPanel.Dock="Right"
-                IsEnabled="{Binding !IsEnabled}"
-                ItemsSource="{Binding AvailablePortNames}"
-                SelectedItem="{Binding PortName}" />
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                <ComboBox
+                    IsEnabled="{Binding !IsEnabled}"
+                    ItemsSource="{Binding AvailablePortNames}"
+                    SelectedItem="{Binding PortName}" />
+                <Button
+                    Command="{Binding AutoDetectPortCommand}"
+                    Content="Otomatik Bul"
+                    IsEnabled="{Binding !IsTestingConnection}"
+                    Theme="{DynamicResource MaterialOutlinedButton}"
+                    ToolTip.Tip="Tüm portları tarar ve sensörün bağlı olduğu portu otomatik seçer" />
+            </StackPanel>
         </DockPanel>
 
         <!--  Baud rate  -->

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO.Ports;
 using System.Text.RegularExpressions;
@@ -172,6 +173,85 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// Only effective when the sensor is started and the port is open.
     /// </summary>
     public void ReadNow() => Task.Run(PerformRead);
+
+    /// <summary>
+    /// Scans all available serial ports and returns the first one that responds with a valid
+    /// RGB reading. Updates <see cref="SettingsService.UsbPortName"/> on success.
+    /// Each port is tried with a 1-second read timeout so the scan is fast.
+    /// </summary>
+    public Task<PortScanResult> AutoDetectPortAsync()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsTestingConnection = true;
+            ConnectionTestMessage = "Port taranıyor...";
+        });
+
+        return Task.Run(() =>
+        {
+            var baud = _settingsService.UsbBaudRate;
+            var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
+                ? "OKU"
+                : _settingsService.UsbReadCommand.Trim();
+            var testCommand = $"{prefix}_1";
+
+            var ports = SerialPort.GetPortNames();
+            var triedPorts = new List<(string Port, string Outcome)>();
+            string? foundPort = null;
+            string foundRaw = "";
+
+            foreach (var portName in ports)
+            {
+                SerialPort? p = null;
+                try
+                {
+                    p = new SerialPort(portName, baud) { ReadTimeout = 1500, WriteTimeout = 500 };
+                    p.Open();
+                    p.WriteLine(testCommand);
+                    var raw = p.ReadLine().Trim();
+                    if (ReadingPattern.IsMatch(raw))
+                    {
+                        foundPort = portName;
+                        foundRaw = raw;
+                        triedPorts.Add((portName, $"✓ Yanıt: {raw}"));
+                        break;
+                    }
+                    triedPorts.Add((portName, $"✗ Geçersiz yanıt: {raw}"));
+                }
+                catch (TimeoutException)
+                {
+                    triedPorts.Add((portName, "✗ Zaman aşımı"));
+                }
+                catch (Exception ex)
+                {
+                    triedPorts.Add((portName, $"✗ {ex.Message}"));
+                }
+                finally
+                {
+                    try { p?.Close(); } catch { }
+                    p?.Dispose();
+                }
+            }
+
+            if (foundPort is not null)
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _settingsService.UsbPortName = foundPort;
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = $"✓ Sensör {foundPort} portunda bulundu";
+                });
+            else
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = ports.Length == 0
+                        ? "✗ Sistemde hiç seri port bulunamadı"
+                        : "✗ Sensör hiçbir portta bulunamadı";
+                });
+
+            return new PortScanResult(testCommand, baud, triedPorts, foundPort, foundRaw);
+        });
+    }
 
     /// <summary>
     /// Tests the hardware connection by sending a test command and waiting for a valid RGB
@@ -372,4 +452,15 @@ public record ConnectionTestResult(
     bool Success,
     string RawResponse,
     string ErrorMessage
+);
+
+/// <summary>
+/// Result of <see cref="UsbSensorService.AutoDetectPortAsync"/>.
+/// </summary>
+public record PortScanResult(
+    string SentCommand,
+    int BaudRate,
+    List<(string Port, string Outcome)> TriedPorts,
+    string? FoundPort,
+    string FoundRaw
 );

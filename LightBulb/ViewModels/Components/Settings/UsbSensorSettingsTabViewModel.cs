@@ -44,6 +44,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         );
 
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
+        AutoDetectPortCommand = new AsyncRelayCommand(AutoDetectPortAsync);
 
         ReadNowCommand = new RelayCommand(
             () => _usbSensorService.ReadNow(),
@@ -73,6 +74,48 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         await _dialogManager.ShowDialogAsync(
             _viewModelManager.CreateMessageBoxViewModel(
                 title: "USB Sensör Tanılama",
+                message: sb.ToString(),
+                okButtonText: "Tamam",
+                cancelButtonText: null
+            )
+        );
+    }
+
+    private async Task AutoDetectPortAsync()
+    {
+        var result = await _usbSensorService.AutoDetectPortAsync();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Baud Rate :  {result.BaudRate}");
+        sb.AppendLine($"Komut     :  {result.SentCommand}");
+        sb.AppendLine();
+        sb.AppendLine("── Taranan Portlar ──");
+
+        if (result.TriedPorts.Count == 0)
+        {
+            sb.AppendLine("(sistemde seri port bulunamadı)");
+        }
+        else
+        {
+            foreach (var (port, outcome) in result.TriedPorts)
+                sb.AppendLine($"{port,-8} {outcome}");
+        }
+
+        sb.AppendLine();
+        if (result.FoundPort is not null)
+        {
+            sb.Append($"✓ Sensör bulundu → {result.FoundPort} portuna geçildi");
+            // Refresh the port ComboBox
+            OnPropertyChanged(nameof(PortName));
+        }
+        else
+        {
+            sb.Append("✗ Sensör hiçbir portta bulunamadı");
+        }
+
+        await _dialogManager.ShowDialogAsync(
+            _viewModelManager.CreateMessageBoxViewModel(
+                title: "Otomatik Port Tarama",
                 message: sb.ToString(),
                 okButtonText: "Tamam",
                 cancelButtonText: null
@@ -138,9 +181,11 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string FinalCommand =>
         $"{(string.IsNullOrWhiteSpace(SettingsService.UsbReadCommand) ? "OKU" : SettingsService.UsbReadCommand.Trim())}_{(int)Math.Max(1, SettingsService.UsbReadIntervalMinutes)}";
 
-    // ── Connection test ───────────────────────────────────────────────────────
+    // ── Connection test & port scan ───────────────────────────────────────────
 
     public IAsyncRelayCommand TestConnectionCommand { get; }
+
+    public IAsyncRelayCommand AutoDetectPortCommand { get; }
 
     // ── Live readings (pass-through from service) ─────────────────────────────
 
