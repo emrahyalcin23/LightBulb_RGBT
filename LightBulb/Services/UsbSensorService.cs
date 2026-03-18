@@ -223,6 +223,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     p.Open();
                     opened.Add((portName, p));
                 }
+                catch (UnauthorizedAccessException)
+                {
+                    triedPorts.Add((portName, "✗ Port meşgul — Arduino IDE veya başka bir uygulama bu portu açık tutuyor"));
+                }
                 catch (Exception ex)
                 {
                     triedPorts.Add((portName, $"✗ {ex.Message}"));
@@ -391,6 +395,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 ConnectionTestMessage = ok ? "✓ Bağlantı başarılı" : "✗ Geçersiz yanıt formatı";
             });
 
+            return result;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            var result = new ConnectionTestResult(portName, baud, KimsinCommand, false, "",
+                "Port meşgul — Arduino IDE veya başka bir uygulama bu portu açık tutuyor");
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected = false;
+                IsTestingConnection = false;
+                ConnectionTestMessage = "✗ Port meşgul — diğer uygulamayı kapatın";
+            });
             return result;
         }
         catch (TimeoutException)
