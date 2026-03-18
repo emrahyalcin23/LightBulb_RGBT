@@ -71,6 +71,14 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         set => SettingsService.UsbPortName = value ?? "COM3";
     }
 
+    public static int[] AvailableBaudRates { get; } = [9600, 19200, 38400, 57600, 115200, 230400];
+
+    public int BaudRate
+    {
+        get => SettingsService.UsbBaudRate;
+        set => SettingsService.UsbBaudRate = value;
+    }
+
     public double ReadIntervalMinutes
     {
         get => SettingsService.UsbReadIntervalMinutes;

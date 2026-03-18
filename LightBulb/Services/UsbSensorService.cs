@@ -73,7 +73,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         try
         {
-            _port = new SerialPort(_settingsService.UsbPortName, 9600)
+            _port = new SerialPort(_settingsService.UsbPortName, _settingsService.UsbBaudRate)
             {
                 ReadTimeout = 2000,
                 WriteTimeout = 1000,
@@ -239,7 +239,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             SerialPort? testPort = null;
             try
             {
-                testPort = new SerialPort(portName, 9600)
+                testPort = new SerialPort(portName, _settingsService.UsbBaudRate)
                 {
                     ReadTimeout = 3000,
                     WriteTimeout = 1000,

@@ -23,6 +23,16 @@
                 SelectedItem="{Binding PortName}" />
         </DockPanel>
 
+        <!--  Baud rate  -->
+        <DockPanel Margin="0,8,0,0" LastChildFill="False" ToolTip.Tip="Sensörün baud rate hızı (Arduino firmware ile aynı olmalı)">
+            <TextBlock DockPanel.Dock="Left" Text="Baud Rate" />
+            <ComboBox
+                DockPanel.Dock="Right"
+                IsEnabled="{Binding !IsEnabled}"
+                ItemsSource="{Binding AvailableBaudRates}"
+                SelectedItem="{Binding BaudRate}" />
+        </DockPanel>
+
         <!--  Connection test  -->
         <DockPanel Margin="0,8,0,0" LastChildFill="False" ToolTip.Tip="Sensöre test komutu gönderir ve geçerli bir RGB yanıtı alınırsa bağlantı kurulmuş sayılır">
             <TextBlock

@@ -129,6 +129,10 @@ public partial class SettingsService()
     public partial string UsbPortName { get; set; } = "COM3";
 
     [ObservableProperty]
+    [JsonPropertyName("UsbBaudRate")]
+    public partial int UsbBaudRate { get; set; } = 115200;
+
+    [ObservableProperty]
     [JsonPropertyName("UsbReadIntervalMinutes")]
     public partial double UsbReadIntervalMinutes { get; set; } = 15;
 
