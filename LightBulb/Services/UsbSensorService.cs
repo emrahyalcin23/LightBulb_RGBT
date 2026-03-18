@@ -244,59 +244,41 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return Task.Run(() =>
         {
             var baud = _settingsService.UsbBaudRate;
-
-            // Candidate list: registry/GetPortNames + brute-force COM1-COM30.
-            // Ports that do not physically exist fail instantly with IOException
-            // ("file not found" / "device not ready") and are silently skipped.
-            // This is the only reliable way to find CDC/VCP devices whose drivers
-            // do not register in HARDWARE\DEVICEMAP\SERIALCOMM.
-            var candidates = new HashSet<string>(GetAvailablePortNames(), StringComparer.OrdinalIgnoreCase);
-            for (int i = 1; i <= 30; i++)
-                candidates.Add($"COM{i}");
-
-            var portNames = candidates.OrderBy(p => p, StringComparer.OrdinalIgnoreCase);
             var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
 
-            // Phase 1 — open all ports up-front so any DTR-reset starts simultaneously.
-            // Non-existent ports throw IOException immediately and are silently ignored.
-            var opened = new List<(string Name, SerialPort Port)>();
-            foreach (var portName in portNames)
+            // Brute-force COM1-COM30: non-existent ports throw IOException instantly
+            // and are silently skipped. This finds CDC/VCP devices whose drivers do
+            // not register in HARDWARE\DEVICEMAP\SERIALCOMM (e.g. Raspberry Pi Pico).
+            for (int i = 1; i <= 30; i++)
             {
+                var portName = $"COM{i}";
+                SerialPort? p = null;
                 try
                 {
-                    var p = new SerialPort(portName, baud) { ReadTimeout = 3000, WriteTimeout = 1000 };
+                    p = new SerialPort(portName, baud) { ReadTimeout = 3000, WriteTimeout = 1000 };
                     p.Open();
-                    opened.Add((portName, p));
                 }
                 catch (UnauthorizedAccessException)
                 {
                     triedPorts.Add((portName, "✗ Port meşgul — Arduino IDE veya başka bir uygulama bu portu açık tutuyor"));
+                    p?.Dispose();
+                    continue;
                 }
                 catch (IOException)
                 {
-                    // Port does not exist — skip silently (expected for most COM1-COM30 entries)
+                    p?.Dispose();
+                    continue; // Port does not exist — skip silently
                 }
-                catch (Exception ex)
-                {
-                    triedPorts.Add((portName, $"✗ {ex.Message}"));
-                }
-            }
 
-            // Phase 2 — short wait to let the device settle after port open.
-            if (opened.Count > 0)
-                System.Threading.Thread.Sleep(1500);
-
-            // Phase 3 — identify device with KIMSIN, then get an instant reading.
-            foreach (var (portName, p) in opened)
-            {
+                // Port opened — query device, then close regardless of outcome.
                 try
                 {
-                    // Discard any buffered data before sending commands.
+                    // DTR-reset: wait for the device to boot after port open.
+                    System.Threading.Thread.Sleep(1500);
                     p.DiscardInBuffer();
 
-                    // Step 1: Verify this is a PiColor device before sending any read command.
                     p.WriteLine(KimsinCommand);
                     var identity = p.ReadLine().Trim();
                     if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
@@ -305,7 +287,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                         continue;
                     }
 
-                    // Step 2: Request an instant reading to confirm the sensor works.
                     p.WriteLine(InstantReadCommand);
                     var raw = p.ReadLine().Trim();
                     if (ReadingPattern.IsMatch(raw))
@@ -321,13 +302,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 {
                     triedPorts.Add((portName, "✗ Zaman aşımı"));
                 }
-                catch (Exception ex)
-                {
-                    triedPorts.Add((portName, $"✗ {ex.Message}"));
-                }
                 finally
                 {
-                    try { p.Close(); } catch { }
+                    p.Close();
                     p.Dispose();
                 }
             }
@@ -352,9 +329,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     if (picoPortNames.Length > 0)
                         DetectedPicoPortNames = picoPortNames;
                     IsTestingConnection = false;
-                    ConnectionTestMessage = portNames.Length == 0
-                        ? "✗ Sistemde hiç seri port bulunamadı"
-                        : "✗ Sensör hiçbir portta bulunamadı";
+                    ConnectionTestMessage = "✗ Sensör hiçbir portta bulunamadı";
                 });
 
             return new PortScanResult($"{KimsinCommand} → {InstantReadCommand}", baud, triedPorts, foundPort, foundRaw);
