@@ -71,7 +71,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             ? "✓ Bağlantı başarılı — RGB verisi alındı"
             : $"✗ {result.ErrorMessage}");
 
-        await _dialogManager.ShowDialogAsync(
+        await _dialogManager.ShowWindowDialogAsync(
             _viewModelManager.CreateMessageBoxViewModel(
                 title: "USB Sensör Tanılama",
                 message: sb.ToString(),
@@ -105,7 +105,6 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         if (result.FoundPort is not null)
         {
             sb.Append($"✓ Sensör bulundu → {result.FoundPort} portuna geçildi");
-            // Refresh the port ComboBox
             OnPropertyChanged(nameof(PortName));
         }
         else
@@ -113,7 +112,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             sb.Append("✗ Sensör hiçbir portta bulunamadı");
         }
 
-        await _dialogManager.ShowDialogAsync(
+        await _dialogManager.ShowWindowDialogAsync(
             _viewModelManager.CreateMessageBoxViewModel(
                 title: "Otomatik Port Tarama",
                 message: sb.ToString(),

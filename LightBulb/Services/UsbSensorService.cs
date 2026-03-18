@@ -195,18 +195,36 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 : _settingsService.UsbReadCommand.Trim();
             var testCommand = $"{prefix}_1";
 
-            var ports = SerialPort.GetPortNames();
+            var portNames = SerialPort.GetPortNames();
             var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
 
-            foreach (var portName in ports)
+            // Phase 1 — open all ports up-front so Arduino DTR-reset starts simultaneously.
+            var opened = new List<(string Name, SerialPort Port)>();
+            foreach (var portName in portNames)
             {
-                SerialPort? p = null;
                 try
                 {
-                    p = new SerialPort(portName, baud) { ReadTimeout = 1500, WriteTimeout = 500 };
+                    var p = new SerialPort(portName, baud) { ReadTimeout = 3000, WriteTimeout = 1000 };
                     p.Open();
+                    opened.Add((portName, p));
+                }
+                catch (Exception ex)
+                {
+                    triedPorts.Add((portName, $"✗ {ex.Message}"));
+                }
+            }
+
+            // Phase 2 — wait once for all Arduinos to finish their boot sequence (~2 s).
+            if (opened.Count > 0)
+                System.Threading.Thread.Sleep(2500);
+
+            // Phase 3 — send command and read response on each open port.
+            foreach (var (portName, p) in opened)
+            {
+                try
+                {
                     p.WriteLine(testCommand);
                     var raw = p.ReadLine().Trim();
                     if (ReadingPattern.IsMatch(raw))
@@ -228,8 +246,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 }
                 finally
                 {
-                    try { p?.Close(); } catch { }
-                    p?.Dispose();
+                    try { p.Close(); } catch { }
+                    p.Dispose();
                 }
             }
 
@@ -244,7 +262,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     IsTestingConnection = false;
-                    ConnectionTestMessage = ports.Length == 0
+                    ConnectionTestMessage = portNames.Length == 0
                         ? "✗ Sistemde hiç seri port bulunamadı"
                         : "✗ Sensör hiçbir portta bulunamadı";
                 });
@@ -289,7 +307,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             var port = useExisting ? _port! : testPort!;
             if (!useExisting)
+            {
                 port.Open();
+                // Wait for Arduino DTR-reset to complete before sending the command.
+                System.Threading.Thread.Sleep(2500);
+            }
 
             port.WriteLine(testCommand);
             var raw = port.ReadLine().Trim();
