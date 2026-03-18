@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
+using Microsoft.Win32;
 
 namespace LightBulb.Services;
 
@@ -25,8 +26,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private const string KimsinCommand = "KIMSIN";
     private const string PicoIdentity = "BENIM_OZEL_PICOM_V1";
 
-    // OKU_0 = single instantaneous reading (no buffer needed, always immediate)
-    private const string InstantReadCommand = "OKU_0";
+    // OKU = single instantaneous reading (OKU_N only when N>0, i.e. periodic interval)
+    private const string InstantReadCommand = "OKU";
 
     private static readonly Regex ReadingPattern = new(
         @"R:\s*(?<r>[\d.]+)[\s,]+G:\s*(?<g>[\d.]+)[\s,]+B:\s*(?<b>[\d.]+)",
@@ -76,8 +77,42 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _settingsService = settingsService;
     }
 
-    /// <summary>Returns all available serial port names on this system.</summary>
-    public static string[] GetAvailablePortNames() => SerialPort.GetPortNames();
+    /// <summary>
+    /// Returns all available serial port names on this system.
+    /// Combines the standard registry map with USB device enumeration so that
+    /// CDC/VCP devices (e.g. Raspberry Pi Pico) are found even when they are
+    /// not yet reflected in HARDWARE\DEVICEMAP\SERIALCOMM.
+    /// </summary>
+    public static string[] GetAvailablePortNames()
+    {
+        var ports = new HashSet<string>(SerialPort.GetPortNames(), StringComparer.OrdinalIgnoreCase);
+
+        // Also scan USB devices — some CDC drivers register PortName here but
+        // do not always update HARDWARE\DEVICEMAP\SERIALCOMM in time.
+        try
+        {
+            using var usbKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB");
+            if (usbKey is not null)
+            {
+                foreach (var vidPid in usbKey.GetSubKeyNames())
+                {
+                    using var vidPidKey = usbKey.OpenSubKey(vidPid);
+                    if (vidPidKey is null) continue;
+
+                    foreach (var instance in vidPidKey.GetSubKeyNames())
+                    {
+                        using var deviceParams = vidPidKey.OpenSubKey($"{instance}\\Device Parameters");
+                        var portName = deviceParams?.GetValue("PortName")?.ToString();
+                        if (!string.IsNullOrEmpty(portName))
+                            ports.Add(portName);
+                    }
+                }
+            }
+        }
+        catch { /* registry unavailable or permission denied — fall back to standard list */ }
+
+        return [.. ports.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
+    }
 
     /// <summary>
     /// Opens the serial port and starts periodic sensor reads.
@@ -208,7 +243,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return Task.Run(() =>
         {
             var baud = _settingsService.UsbBaudRate;
-            var portNames = SerialPort.GetPortNames();
+            var portNames = GetAvailablePortNames();
             var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
