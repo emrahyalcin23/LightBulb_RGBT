@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO.Ports;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
+using Microsoft.Win32;
 
 namespace LightBulb.Services;
 
@@ -63,6 +65,48 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>Returns all available serial port names on this system.</summary>
     public static string[] GetAvailablePortNames() => SerialPort.GetPortNames();
+
+    /// <summary>
+    /// Returns the set of COM port names that are associated with a Raspberry Pi Pico (VID 0x2E8A)
+    /// by querying the Windows registry. Returns an empty set if no Pico is found or on error,
+    /// in which case the caller should fall back to trying all ports.
+    /// </summary>
+    private static IReadOnlySet<string> GetPicoPortNames()
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var usbKey = Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Enum\USB"
+            );
+            if (usbKey is null)
+                return result;
+
+            foreach (var vidPid in usbKey.GetSubKeyNames())
+            {
+                if (!vidPid.StartsWith("VID_2E8A", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                using var vidKey = usbKey.OpenSubKey(vidPid);
+                if (vidKey is null)
+                    continue;
+
+                foreach (var instance in vidKey.GetSubKeyNames())
+                {
+                    using var deviceParams = vidKey.OpenSubKey($@"{instance}\Device Parameters");
+                    var portName = deviceParams?.GetValue("PortName")?.ToString();
+                    if (!string.IsNullOrWhiteSpace(portName))
+                        result.Add(portName);
+                }
+            }
+        }
+        catch
+        {
+            // Registry unavailable — return empty (caller falls back to all ports)
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Opens the serial port and starts periodic sensor reads.
@@ -195,12 +239,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 : _settingsService.UsbReadCommand.Trim();
             var testCommand = $"{prefix}_1";
 
-            var portNames = SerialPort.GetPortNames();
+            // Prefer ports belonging to a Raspberry Pi Pico 2W (VID 0x2E8A).
+            // If none are found in the registry, fall back to scanning all ports.
+            var picoPortNames = GetPicoPortNames();
+            var allPortNames = SerialPort.GetPortNames();
+            var portNames = picoPortNames.Count > 0
+                ? allPortNames.Where(picoPortNames.Contains).ToArray()
+                : allPortNames;
+
             var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
 
-            // Phase 1 — open all ports up-front so Arduino DTR-reset starts simultaneously.
+            // Phase 1 — open all candidate ports up-front so DTR-reset starts simultaneously.
             var opened = new List<(string Name, SerialPort Port)>();
             foreach (var portName in portNames)
             {
@@ -216,15 +267,17 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 }
             }
 
-            // Phase 2 — wait once for all Arduinos to finish their boot sequence (~2 s).
+            // Phase 2 — wait for the Pico to finish its boot sequence (~2 s).
             if (opened.Count > 0)
                 System.Threading.Thread.Sleep(2500);
 
-            // Phase 3 — send command and read response on each open port.
+            // Phase 3 — flush boot messages, send command, read response on each open port.
             foreach (var (portName, p) in opened)
             {
                 try
                 {
+                    // Discard any boot messages buffered during the DTR-reset wait.
+                    p.DiscardInBuffer();
                     p.WriteLine(testCommand);
                     var raw = p.ReadLine().Trim();
                     if (ReadingPattern.IsMatch(raw))
@@ -295,6 +348,21 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             : _settingsService.UsbReadCommand.Trim();
         var testCommand = $"{prefix}_1";
 
+        // Verify the configured port belongs to a Pico 2W (only when opening a new port).
+        var picoPortNames = GetPicoPortNames();
+        if (picoPortNames.Count > 0 && !picoPortNames.Contains(portName))
+        {
+            var result = new ConnectionTestResult(portName, baud, testCommand, false, "",
+                "Bu port Raspberry Pi Pico 2W cihazına ait değil");
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected = false;
+                IsTestingConnection = false;
+                ConnectionTestMessage = "✗ Seçili port Pico 2W değil";
+            });
+            return result;
+        }
+
         // If already running use the existing open port.
         var useExisting = _port is { IsOpen: true };
         SerialPort? testPort = useExisting ? null : new SerialPort(portName, baud)
@@ -309,10 +377,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             if (!useExisting)
             {
                 port.Open();
-                // Wait for Arduino DTR-reset to complete before sending the command.
+                // Wait for Pico to finish its boot sequence before sending the command.
                 System.Threading.Thread.Sleep(2500);
             }
 
+            // Discard any boot messages buffered during the DTR-reset wait.
+            port.DiscardInBuffer();
             port.WriteLine(testCommand);
             var raw = port.ReadLine().Trim();
             var ok = ReadingPattern.IsMatch(raw);

@@ -60,52 +60,45 @@ public class DialogManager : IDisposable
     /// <summary>
     /// Shows a dialog as a standalone top-level window, unconstrained by the main window size.
     /// Useful for dialogs that are taller than the main window (e.g. Settings with many tabs).
+    /// Each call creates its own OS-managed modal window, so no shared lock is needed.
     /// </summary>
     public async Task<T?> ShowWindowDialogAsync<T>(DialogViewModelBase<T> dialog)
     {
-        await _dialogLock.WaitAsync();
-        try
-        {
-            var view = _viewManager.TryBindView(dialog);
+        var view = _viewManager.TryBindView(dialog);
 
-            var window = new Window
+        var window = new Window
+        {
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            SystemDecorations = SystemDecorations.Full,
+            Content = view,
+        };
+
+        // When the ViewModel is closed (Save/Cancel) → close the Window
+        _ = dialog.WaitForCloseAsync().ContinueWith(
+            _ => Dispatcher.UIThread.Post(() =>
             {
-                SizeToContent = SizeToContent.WidthAndHeight,
-                CanResize = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                SystemDecorations = SystemDecorations.Full,
-                Content = view,
-            };
+                try { window.Close(); }
+                catch { /* already closed — ignore */ }
+            }),
+            TaskContinuationOptions.ExecuteSynchronously
+        );
 
-            // When the ViewModel is closed (Save/Cancel) → close the Window
-            _ = dialog.WaitForCloseAsync().ContinueWith(
-                _ => Dispatcher.UIThread.Post(() =>
-                {
-                    try { window.Close(); }
-                    catch { /* already closed — ignore */ }
-                }),
-                TaskContinuationOptions.ExecuteSynchronously
-            );
+        // Prefer the currently active window as owner so nested dialogs (e.g. a MessageBox
+        // triggered from inside the Settings window) appear on top of their actual parent.
+        var owner =
+            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                ?.Windows.FirstOrDefault(w => w.IsActive)
+            ?? Application.Current?.ApplicationLifetime?.TryGetMainWindow();
 
-            // Prefer the currently focused window (e.g. the Settings window) so that
-            // dialogs appear on top of their actual parent, not behind it.
-            var owner =
-                (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
-                    ?.Windows.FirstOrDefault(w => w.IsActive)
-                ?? Application.Current?.ApplicationLifetime?.TryGetMainWindow();
+        if (owner is not null)
+            await window.ShowDialog(owner);
+        else
+            window.Show();
 
-            if (owner is not null)
-                await window.ShowDialog(owner);
-            else
-                window.Show();
-
-            await Task.Yield();
-            return dialog.DialogResult;
-        }
-        finally
-        {
-            _dialogLock.Release();
-        }
+        await Task.Yield();
+        return dialog.DialogResult;
     }
 
     public void Dispose() => _dialogLock.Dispose();
