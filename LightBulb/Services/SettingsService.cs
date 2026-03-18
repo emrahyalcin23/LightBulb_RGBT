@@ -126,7 +126,7 @@ public partial class SettingsService()
 
     [ObservableProperty]
     [JsonPropertyName("UsbPortName")]
-    public partial string UsbPortName { get; set; } = "COM3";
+    public partial string UsbPortName { get; set; } = string.Empty;
 
     [ObservableProperty]
     [JsonPropertyName("UsbBaudRate")]

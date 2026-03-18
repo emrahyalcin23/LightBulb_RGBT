@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO.Ports;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -57,6 +58,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     public partial bool IsTestingConnection { get; private set; }
 
     /// <summary>
+    /// COM ports where a PiColor device was detected during the last auto-detect scan.
+    /// Empty until the first scan is completed.
+    /// </summary>
+    [ObservableProperty]
+    public partial string[] DetectedPicoPortNames { get; private set; } = [];
+
+    /// <summary>
     /// Human-readable result of the last TestConnection() call.
     /// Empty string means no test has been run yet.
     /// </summary>
@@ -78,6 +86,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     public void Start()
     {
         Stop();
+
+        if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName))
+            return; // No port configured yet — wait for auto-detect
 
         try
         {
@@ -266,16 +277,25 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 }
             }
 
+            // Collect all ports that positively identified as PiColor (✓ prefix).
+            var picoPortNames = triedPorts
+                .Where(t => t.Outcome.StartsWith("✓"))
+                .Select(t => t.Port)
+                .ToArray();
+
             if (foundPort is not null)
                 Dispatcher.UIThread.Post(() =>
                 {
                     _settingsService.UsbPortName = foundPort;
+                    DetectedPicoPortNames = picoPortNames;
                     IsTestingConnection = false;
                     ConnectionTestMessage = $"✓ Sensör {foundPort} portunda bulundu";
                 });
             else
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (picoPortNames.Length > 0)
+                        DetectedPicoPortNames = picoPortNames;
                     IsTestingConnection = false;
                     ConnectionTestMessage = portNames.Length == 0
                         ? "✗ Sistemde hiç seri port bulunamadı"
@@ -305,6 +325,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         var portName = _settingsService.UsbPortName;
         var baud = _settingsService.UsbBaudRate;
+
+        if (string.IsNullOrWhiteSpace(portName))
+        {
+            var noPortResult = new ConnectionTestResult("", baud, KimsinCommand, false, "",
+                "Port seçilmedi — önce Otomatik Bul'u çalıştırın");
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected = false;
+                IsTestingConnection = false;
+                ConnectionTestMessage = "✗ Port seçilmedi";
+            });
+            return noPortResult;
+        }
 
         // If already running use the existing open port.
         var useExisting = _port is { IsOpen: true };

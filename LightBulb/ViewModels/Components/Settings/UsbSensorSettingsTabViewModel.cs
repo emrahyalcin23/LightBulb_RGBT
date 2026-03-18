@@ -126,7 +126,14 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     // ── Connection ────────────────────────────────────────────────────────────
 
-    public string[] AvailablePortNames => UsbSensorService.GetAvailablePortNames();
+    /// <summary>
+    /// Returns only PiColor-detected ports after the first auto-detect scan;
+    /// falls back to all system COM ports before the first scan.
+    /// </summary>
+    public string[] AvailablePortNames =>
+        _usbSensorService.DetectedPicoPortNames.Length > 0
+            ? _usbSensorService.DetectedPicoPortNames
+            : UsbSensorService.GetAvailablePortNames();
 
     public bool IsEnabled
     {
@@ -145,7 +152,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string PortName
     {
         get => SettingsService.UsbPortName;
-        set => SettingsService.UsbPortName = value ?? "COM3";
+        set { if (value is not null) SettingsService.UsbPortName = value; }
     }
 
     public static int[] AvailableBaudRates { get; } = [9600, 19200, 38400, 57600, 115200, 230400];
