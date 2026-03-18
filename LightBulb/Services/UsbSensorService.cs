@@ -174,11 +174,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     public void ReadNow() => Task.Run(PerformRead);
 
     /// <summary>
-    /// Tests the hardware connection by opening the port (if not already open), sending
-    /// a test command with interval=1 and checking for a valid RGB response.
-    /// Updates <see cref="IsConnected"/> with the result.
+    /// Tests the hardware connection by sending a test command and waiting for a valid RGB
+    /// response. Returns a <see cref="ConnectionTestResult"/> with full diagnostic details.
     /// </summary>
-    public void TestConnection()
+    public Task<ConnectionTestResult> TestConnectionAsync()
     {
         Dispatcher.UIThread.Post(() =>
         {
@@ -186,110 +185,80 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             ConnectionTestMessage = "Test ediliyor...";
         });
 
-        // If already running, use the open port for the test read.
-        if (_port is { IsOpen: true })
+        return Task.Run(RunTest);
+    }
+
+    private ConnectionTestResult RunTest()
+    {
+        var portName = _settingsService.UsbPortName;
+        var baud = _settingsService.UsbBaudRate;
+        var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
+            ? "OKU"
+            : _settingsService.UsbReadCommand.Trim();
+        var testCommand = $"{prefix}_1";
+
+        // If already running use the existing open port.
+        var useExisting = _port is { IsOpen: true };
+        SerialPort? testPort = useExisting ? null : new SerialPort(portName, baud)
         {
-            Task.Run(() =>
+            ReadTimeout = 3000,
+            WriteTimeout = 1000,
+        };
+
+        try
+        {
+            var port = useExisting ? _port! : testPort!;
+            if (!useExisting)
+                port.Open();
+
+            port.WriteLine(testCommand);
+            var raw = port.ReadLine().Trim();
+            var ok = ReadingPattern.IsMatch(raw);
+
+            var result = new ConnectionTestResult(portName, baud, testCommand, ok, raw,
+                ok ? "" : "Yanıt formatı beklenenle eşleşmedi");
+
+            Dispatcher.UIThread.Post(() =>
             {
-                try
-                {
-                    _port.WriteLine(BuildReadCommand());
-                    var response = _port.ReadLine();
-                    var ok = ReadingPattern.IsMatch(response);
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        IsConnected = ok;
-                        IsTestingConnection = false;
-                        ConnectionTestMessage = ok
-                            ? "✓ Bağlantı başarılı — RGB verisi alındı"
-                            : $"✗ Geçersiz yanıt formatı: \"{response.Trim()}\"";
-                    });
-                }
-                catch (TimeoutException)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        IsConnected = false;
-                        IsTestingConnection = false;
-                        ConnectionTestMessage = "✗ Zaman aşımı — sensörden yanıt gelmedi";
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        IsConnected = false;
-                        IsTestingConnection = false;
-                        ConnectionTestMessage = $"✗ Hata: {ex.Message}";
-                    });
-                }
+                IsConnected = ok;
+                IsTestingConnection = false;
+                ConnectionTestMessage = ok ? "✓ Bağlantı başarılı" : "✗ Geçersiz yanıt formatı";
             });
-            return;
+
+            return result;
         }
-
-        // Port not open — open a temporary connection just for the test.
-        Task.Run(() =>
+        catch (TimeoutException)
         {
-            var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
-                ? "OKU"
-                : _settingsService.UsbReadCommand.Trim();
-            var testCommand = $"{prefix}_1";
-            var portName = _settingsService.UsbPortName;
-
-            SerialPort? testPort = null;
-            try
+            var result = new ConnectionTestResult(portName, baud, testCommand, false, "",
+                "Zaman aşımı — sensörden yanıt gelmedi");
+            Dispatcher.UIThread.Post(() =>
             {
-                testPort = new SerialPort(portName, _settingsService.UsbBaudRate)
-                {
-                    ReadTimeout = 3000,
-                    WriteTimeout = 1000,
-                };
-                testPort.Open();
-                testPort.WriteLine(testCommand);
-                var response = testPort.ReadLine();
-                var ok = ReadingPattern.IsMatch(response);
-                Dispatcher.UIThread.Post(() =>
-                {
-                    IsConnected = ok;
-                    IsTestingConnection = false;
-                    ConnectionTestMessage = ok
-                        ? "✓ Bağlantı başarılı — RGB verisi alındı"
-                        : $"✗ Geçersiz yanıt formatı: \"{response.Trim()}\"";
-                });
-            }
-            catch (TimeoutException)
+                IsConnected = false;
+                IsTestingConnection = false;
+                ConnectionTestMessage = "✗ Zaman aşımı";
+            });
+            return result;
+        }
+        catch (Exception ex)
+        {
+            var result = new ConnectionTestResult(portName, baud, testCommand, false, "",
+                ex.Message);
+            Dispatcher.UIThread.Post(() =>
             {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    IsConnected = false;
-                    IsTestingConnection = false;
-                    ConnectionTestMessage = "✗ Zaman aşımı — sensörden yanıt gelmedi";
-                });
-            }
-            catch (Exception ex) when (ex.Message.Contains("denied") || ex.Message.Contains("access", StringComparison.OrdinalIgnoreCase))
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    IsConnected = false;
-                    IsTestingConnection = false;
-                    ConnectionTestMessage = $"✗ Port erişim engellendi: {portName}";
-                });
-            }
-            catch (Exception ex)
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    IsConnected = false;
-                    IsTestingConnection = false;
-                    ConnectionTestMessage = $"✗ Port açılamadı ({portName}): {ex.Message}";
-                });
-            }
-            finally
+                IsConnected = false;
+                IsTestingConnection = false;
+                ConnectionTestMessage = $"✗ {ex.Message}";
+            });
+            return result;
+        }
+        finally
+        {
+            if (!useExisting)
             {
                 try { testPort?.Close(); } catch { }
                 testPort?.Dispose();
             }
-        });
+        }
     }
 
     private void ParseAndDispatch(string response)
@@ -392,3 +361,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         Stop();
     }
 }
+
+/// <summary>
+/// Diagnostic result returned by <see cref="UsbSensorService.TestConnectionAsync"/>.
+/// </summary>
+public record ConnectionTestResult(
+    string PortName,
+    int BaudRate,
+    string SentCommand,
+    bool Success,
+    string RawResponse,
+    string ErrorMessage
+);

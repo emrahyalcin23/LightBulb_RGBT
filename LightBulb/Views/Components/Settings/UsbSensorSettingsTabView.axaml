@@ -46,13 +46,6 @@
                 IsEnabled="{Binding !IsTestingConnection}"
                 Theme="{DynamicResource MaterialOutlinedButton}" />
         </DockPanel>
-        <TextBlock
-            Margin="0,4,0,0"
-            FontSize="11"
-            IsVisible="{Binding ConnectionTestMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-            Opacity="0.75"
-            Text="{Binding ConnectionTestMessage}"
-            TextWrapping="Wrap" />
 
         <!--  Read interval  -->
         <DockPanel Margin="0,24,0,0" ToolTip.Tip="How often (in minutes) to query the sensor">

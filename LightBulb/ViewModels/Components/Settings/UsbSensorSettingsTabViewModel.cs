@@ -1,5 +1,8 @@
 using System;
+using System.Text;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
+using LightBulb.Framework;
 using LightBulb.Localization;
 using LightBulb.Services;
 using LightBulb.Utils;
@@ -10,6 +13,8 @@ namespace LightBulb.ViewModels.Components.Settings;
 public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 {
     private readonly UsbSensorService _usbSensorService;
+    private readonly DialogManager _dialogManager;
+    private readonly ViewModelManager _viewModelManager;
     private readonly DisposableCollector _usbEventRoot = new();
 
     private double _simR = 1200;
@@ -19,10 +24,14 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public UsbSensorSettingsTabViewModel(
         SettingsService settingsService,
         LocalizationManager localizationManager,
-        UsbSensorService usbSensorService
+        UsbSensorService usbSensorService,
+        DialogManager dialogManager,
+        ViewModelManager viewModelManager
     ) : base(settingsService, localizationManager, 5)
     {
         _usbSensorService = usbSensorService;
+        _dialogManager = dialogManager;
+        _viewModelManager = viewModelManager;
 
         // Propagate live sensor readings to the UI;
         // also re-evaluate ReadNowCommand.CanExecute when IsConnected changes.
@@ -34,7 +43,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             })
         );
 
-        TestConnectionCommand = new RelayCommand(() => _usbSensorService.TestConnection());
+        TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
 
         ReadNowCommand = new RelayCommand(
             () => _usbSensorService.ReadNow(),
@@ -43,6 +52,32 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         InjectSimulatedReadingCommand = new RelayCommand(() =>
             _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB));
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        var result = await _usbSensorService.TestConnectionAsync();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Port      :  {result.PortName}");
+        sb.AppendLine($"Baud Rate :  {result.BaudRate}");
+        sb.AppendLine($"Komut     :  {result.SentCommand}");
+        sb.AppendLine();
+        sb.AppendLine("── Alınan Yanıt ──");
+        sb.AppendLine(string.IsNullOrEmpty(result.RawResponse) ? "(yanıt yok)" : result.RawResponse);
+        sb.AppendLine();
+        sb.Append(result.Success
+            ? "✓ Bağlantı başarılı — RGB verisi alındı"
+            : $"✗ {result.ErrorMessage}");
+
+        await _dialogManager.ShowDialogAsync(
+            _viewModelManager.CreateMessageBoxViewModel(
+                title: "USB Sensör Tanılama",
+                message: sb.ToString(),
+                okButtonText: "Tamam",
+                cancelButtonText: null
+            )
+        );
     }
 
     public override string DisplayName => "USB Sensor";
@@ -105,7 +140,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     // ── Connection test ───────────────────────────────────────────────────────
 
-    public IRelayCommand TestConnectionCommand { get; }
+    public IAsyncRelayCommand TestConnectionCommand { get; }
 
     // ── Live readings (pass-through from service) ─────────────────────────────
 
