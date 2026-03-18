@@ -21,7 +21,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private const double ReferenceMax = 4000.0;
 
     private static readonly Regex ReadingPattern = new(
-        @"R:\s*(?<r>[\d.]+)\s*,\s*G:\s*(?<g>[\d.]+)\s*,\s*B:\s*(?<b>[\d.]+)",
+        @"R:\s*(?<r>[\d.]+)[\s,]+G:\s*(?<g>[\d.]+)[\s,]+B:\s*(?<b>[\d.]+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 

@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using DialogHostAvalonia;
 using LightBulb.Utils.Extensions;
@@ -85,7 +87,13 @@ public class DialogManager : IDisposable
                 TaskContinuationOptions.ExecuteSynchronously
             );
 
-            var owner = Application.Current?.ApplicationLifetime?.TryGetMainWindow();
+            // Prefer the currently focused window (e.g. the Settings window) so that
+            // dialogs appear on top of their actual parent, not behind it.
+            var owner =
+                (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                    ?.Windows.FirstOrDefault(w => w.IsActive)
+                ?? Application.Current?.ApplicationLifetime?.TryGetMainWindow();
+
             if (owner is not null)
                 await window.ShowDialog(owner);
             else
