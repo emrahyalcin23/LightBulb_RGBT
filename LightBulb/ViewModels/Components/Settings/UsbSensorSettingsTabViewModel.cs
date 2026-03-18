@@ -24,9 +24,14 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     {
         _usbSensorService = usbSensorService;
 
-        // Propagate live sensor readings to the UI
+        // Propagate live sensor readings to the UI;
+        // also re-evaluate ReadNowCommand.CanExecute when IsConnected changes.
         _usbEventRoot.Add(
-            _usbSensorService.WatchAllProperties(OnAllPropertiesChanged)
+            _usbSensorService.WatchAllProperties(() =>
+            {
+                OnAllPropertiesChanged();
+                ReadNowCommand.NotifyCanExecuteChanged();
+            })
         );
 
         TestConnectionCommand = new RelayCommand(() => _usbSensorService.TestConnection());
@@ -98,7 +103,13 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public bool IsConnected => _usbSensorService.IsConnected;
 
-    public string ConnectionStatusText => IsConnected ? "● Bağlı" : "● Bağlı Değil";
+    public bool IsTestingConnection => _usbSensorService.IsTestingConnection;
+
+    public string ConnectionStatusText => IsTestingConnection
+        ? "● Test ediliyor..."
+        : IsConnected ? "● Bağlı" : "● Bağlı Değil";
+
+    public string ConnectionTestMessage => _usbSensorService.ConnectionTestMessage;
 
     public string LastRawReading => _usbSensorService.LastRawReading;
 

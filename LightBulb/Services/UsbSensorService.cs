@@ -45,6 +45,16 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool IsConnected { get; private set; }
 
+    [ObservableProperty]
+    public partial bool IsTestingConnection { get; private set; }
+
+    /// <summary>
+    /// Human-readable result of the last TestConnection() call.
+    /// Empty string means no test has been run yet.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ConnectionTestMessage { get; private set; } = string.Empty;
+
     public UsbSensorService(SettingsService settingsService)
     {
         _settingsService = settingsService;
@@ -170,24 +180,66 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// </summary>
     public void TestConnection()
     {
-        // If already running, just do an immediate read on the open port.
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsTestingConnection = true;
+            ConnectionTestMessage = "Test ediliyor...";
+        });
+
+        // If already running, use the open port for the test read.
         if (_port is { IsOpen: true })
         {
-            Task.Run(PerformRead);
+            Task.Run(() =>
+            {
+                try
+                {
+                    _port.WriteLine(BuildReadCommand());
+                    var response = _port.ReadLine();
+                    var ok = ReadingPattern.IsMatch(response);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        IsConnected = ok;
+                        IsTestingConnection = false;
+                        ConnectionTestMessage = ok
+                            ? "✓ Bağlantı başarılı — RGB verisi alındı"
+                            : $"✗ Geçersiz yanıt formatı: \"{response.Trim()}\"";
+                    });
+                }
+                catch (TimeoutException)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        IsConnected = false;
+                        IsTestingConnection = false;
+                        ConnectionTestMessage = "✗ Zaman aşımı — sensörden yanıt gelmedi";
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        IsConnected = false;
+                        IsTestingConnection = false;
+                        ConnectionTestMessage = $"✗ Hata: {ex.Message}";
+                    });
+                }
+            });
             return;
         }
 
+        // Port not open — open a temporary connection just for the test.
         Task.Run(() =>
         {
             var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
                 ? "OKU"
                 : _settingsService.UsbReadCommand.Trim();
             var testCommand = $"{prefix}_1";
+            var portName = _settingsService.UsbPortName;
 
             SerialPort? testPort = null;
             try
             {
-                testPort = new SerialPort(_settingsService.UsbPortName, 9600)
+                testPort = new SerialPort(portName, 9600)
                 {
                     ReadTimeout = 3000,
                     WriteTimeout = 1000,
@@ -195,12 +247,42 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 testPort.Open();
                 testPort.WriteLine(testCommand);
                 var response = testPort.ReadLine();
-                var success = ReadingPattern.IsMatch(response);
-                Dispatcher.UIThread.Post(() => IsConnected = success);
+                var ok = ReadingPattern.IsMatch(response);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsConnected = ok;
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = ok
+                        ? "✓ Bağlantı başarılı — RGB verisi alındı"
+                        : $"✗ Geçersiz yanıt formatı: \"{response.Trim()}\"";
+                });
             }
-            catch
+            catch (TimeoutException)
             {
-                Dispatcher.UIThread.Post(() => IsConnected = false);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsConnected = false;
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = "✗ Zaman aşımı — sensörden yanıt gelmedi";
+                });
+            }
+            catch (Exception ex) when (ex.Message.Contains("denied") || ex.Message.Contains("access", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsConnected = false;
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = $"✗ Port erişim engellendi: {portName}";
+                });
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsConnected = false;
+                    IsTestingConnection = false;
+                    ConnectionTestMessage = $"✗ Port açılamadı ({portName}): {ex.Message}";
+                });
             }
             finally
             {
