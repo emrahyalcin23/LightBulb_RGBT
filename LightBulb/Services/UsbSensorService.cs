@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO.Ports;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
@@ -126,6 +127,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         });
     }
 
+    /// <summary>
+    /// Returns the current command string to send to the sensor (e.g. "OKU_15").
+    /// </summary>
+    private string BuildReadCommand()
+    {
+        var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
+            ? "OKU"
+            : _settingsService.UsbReadCommand.Trim();
+        var interval = (int)Math.Max(1, _settingsService.UsbReadIntervalMinutes);
+        return $"{prefix}_{interval}";
+    }
+
     private void PerformRead()
     {
         if (_port is not { IsOpen: true })
@@ -133,7 +146,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         try
         {
-            _port.WriteLine("read");
+            _port.WriteLine(BuildReadCommand());
             var response = _port.ReadLine();
             ParseAndDispatch(response);
         }
@@ -142,6 +155,59 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             // On error, mark as disconnected and let the next scheduled read try again.
             Dispatcher.UIThread.Post(() => IsConnected = false);
         }
+    }
+
+    /// <summary>
+    /// Immediately performs a single sensor read without waiting for the next scheduled interval.
+    /// Only effective when the sensor is started and the port is open.
+    /// </summary>
+    public void ReadNow() => Task.Run(PerformRead);
+
+    /// <summary>
+    /// Tests the hardware connection by opening the port (if not already open), sending
+    /// a test command with interval=1 and checking for a valid RGB response.
+    /// Updates <see cref="IsConnected"/> with the result.
+    /// </summary>
+    public void TestConnection()
+    {
+        // If already running, just do an immediate read on the open port.
+        if (_port is { IsOpen: true })
+        {
+            Task.Run(PerformRead);
+            return;
+        }
+
+        Task.Run(() =>
+        {
+            var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
+                ? "OKU"
+                : _settingsService.UsbReadCommand.Trim();
+            var testCommand = $"{prefix}_1";
+
+            SerialPort? testPort = null;
+            try
+            {
+                testPort = new SerialPort(_settingsService.UsbPortName, 9600)
+                {
+                    ReadTimeout = 3000,
+                    WriteTimeout = 1000,
+                };
+                testPort.Open();
+                testPort.WriteLine(testCommand);
+                var response = testPort.ReadLine();
+                var success = ReadingPattern.IsMatch(response);
+                Dispatcher.UIThread.Post(() => IsConnected = success);
+            }
+            catch
+            {
+                Dispatcher.UIThread.Post(() => IsConnected = false);
+            }
+            finally
+            {
+                try { testPort?.Close(); } catch { }
+                testPort?.Dispose();
+            }
+        });
     }
 
     private void ParseAndDispatch(string response)

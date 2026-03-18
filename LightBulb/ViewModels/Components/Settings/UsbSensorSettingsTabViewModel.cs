@@ -29,6 +29,13 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             _usbSensorService.WatchAllProperties(OnAllPropertiesChanged)
         );
 
+        TestConnectionCommand = new RelayCommand(() => _usbSensorService.TestConnection());
+
+        ReadNowCommand = new RelayCommand(
+            () => _usbSensorService.ReadNow(),
+            () => _usbSensorService.IsConnected
+        );
+
         InjectSimulatedReadingCommand = new RelayCommand(() =>
             _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB));
     }
@@ -62,12 +69,36 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public double ReadIntervalMinutes
     {
         get => SettingsService.UsbReadIntervalMinutes;
-        set => SettingsService.UsbReadIntervalMinutes = Math.Clamp(value, 1, 1440);
+        set
+        {
+            SettingsService.UsbReadIntervalMinutes = Math.Clamp(value, 1, 1440);
+            OnPropertyChanged(nameof(FinalCommand));
+        }
     }
+
+    public string ReadCommand
+    {
+        get => SettingsService.UsbReadCommand;
+        set
+        {
+            SettingsService.UsbReadCommand = string.IsNullOrWhiteSpace(value) ? "OKU" : value.Trim();
+            OnPropertyChanged(nameof(FinalCommand));
+        }
+    }
+
+    /// <summary>Final command that will be sent to the sensor, e.g. "OKU_15".</summary>
+    public string FinalCommand =>
+        $"{(string.IsNullOrWhiteSpace(SettingsService.UsbReadCommand) ? "OKU" : SettingsService.UsbReadCommand.Trim())}_{(int)Math.Max(1, SettingsService.UsbReadIntervalMinutes)}";
+
+    // ── Connection test ───────────────────────────────────────────────────────
+
+    public IRelayCommand TestConnectionCommand { get; }
 
     // ── Live readings (pass-through from service) ─────────────────────────────
 
     public bool IsConnected => _usbSensorService.IsConnected;
+
+    public string ConnectionStatusText => IsConnected ? "● Bağlı" : "● Bağlı Değil";
 
     public string LastRawReading => _usbSensorService.LastRawReading;
 
@@ -78,6 +109,10 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string LatestCctText => $"{_usbSensorService.LatestCct:F0} K";
 
     public double LatestLuminance => _usbSensorService.LatestLuminance;
+
+    // ── On-demand read ────────────────────────────────────────────────────────
+
+    public IRelayCommand ReadNowCommand { get; }
 
     // ── Simulation ────────────────────────────────────────────────────────────
 

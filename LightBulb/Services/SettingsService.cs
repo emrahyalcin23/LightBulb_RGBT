@@ -132,6 +132,10 @@ public partial class SettingsService()
     [JsonPropertyName("UsbReadIntervalMinutes")]
     public partial double UsbReadIntervalMinutes { get; set; } = 15;
 
+    [ObservableProperty]
+    [JsonPropertyName("UsbReadCommand")]
+    public partial string UsbReadCommand { get; set; } = "OKU";
+
     // RGBL bias coefficients [-1.0, +1.0]
     [ObservableProperty]
     public partial double UsbRBias { get; set; } = 0;
