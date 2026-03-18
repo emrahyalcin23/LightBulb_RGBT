@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -243,12 +244,23 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return Task.Run(() =>
         {
             var baud = _settingsService.UsbBaudRate;
-            var portNames = GetAvailablePortNames();
+
+            // Candidate list: registry/GetPortNames + brute-force COM1-COM30.
+            // Ports that do not physically exist fail instantly with IOException
+            // ("file not found" / "device not ready") and are silently skipped.
+            // This is the only reliable way to find CDC/VCP devices whose drivers
+            // do not register in HARDWARE\DEVICEMAP\SERIALCOMM.
+            var candidates = new HashSet<string>(GetAvailablePortNames(), StringComparer.OrdinalIgnoreCase);
+            for (int i = 1; i <= 30; i++)
+                candidates.Add($"COM{i}");
+
+            var portNames = candidates.OrderBy(p => p, StringComparer.OrdinalIgnoreCase);
             var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
 
             // Phase 1 — open all ports up-front so any DTR-reset starts simultaneously.
+            // Non-existent ports throw IOException immediately and are silently ignored.
             var opened = new List<(string Name, SerialPort Port)>();
             foreach (var portName in portNames)
             {
@@ -261,6 +273,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 catch (UnauthorizedAccessException)
                 {
                     triedPorts.Add((portName, "✗ Port meşgul — Arduino IDE veya başka bir uygulama bu portu açık tutuyor"));
+                }
+                catch (IOException)
+                {
+                    // Port does not exist — skip silently (expected for most COM1-COM30 entries)
                 }
                 catch (Exception ex)
                 {
