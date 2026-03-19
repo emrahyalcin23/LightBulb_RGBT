@@ -250,6 +250,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             {
                 ReadTimeout = 2000,
                 WriteTimeout = 1000,
+                DtrEnable = false,
             };
             _port.Open();
             IsConnected = true;
@@ -633,6 +634,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             ReadTimeout = 3000,
             WriteTimeout = 1000,
+            DtrEnable = false,  // DTR=false prevents Pico/Arduino from auto-resetting on connect
         };
 
         // Pause the background reading loop while the test occupies the port.
@@ -651,8 +653,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             if (!useExisting)
             {
                 port.Open();
-                // Short settle wait after port open.
-                System.Threading.Thread.Sleep(1500);
+                // Settle wait: give firmware time to boot if it reset on connect.
+                System.Threading.Thread.Sleep(2500);
             }
 
             // Discard any buffered data before sending commands.
