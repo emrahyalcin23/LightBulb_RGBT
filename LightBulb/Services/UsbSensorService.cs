@@ -116,6 +116,45 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Looks up the Windows USB registry for devices matching the Raspberry Pi Pico VID
+    /// (VID_2E8A, Raspberry Pi Ltd) and returns the COM port names they are mapped to.
+    /// This is instant and requires no serial port communication, making it ideal as a
+    /// first-pass filter before attempting the slower brute-force port scan.
+    /// </summary>
+    public static string[] GetPicoPortNamesFromRegistry()
+    {
+        var ports = new List<string>();
+        try
+        {
+            using var usbKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB");
+            if (usbKey is null)
+                return [];
+
+            foreach (var vidPid in usbKey.GetSubKeyNames())
+            {
+                // Raspberry Pi Ltd VID is 2E8A — skip everything else immediately.
+                if (!vidPid.StartsWith("VID_2E8A", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                using var vidPidKey = usbKey.OpenSubKey(vidPid);
+                if (vidPidKey is null)
+                    continue;
+
+                foreach (var instance in vidPidKey.GetSubKeyNames())
+                {
+                    using var deviceParams = vidPidKey.OpenSubKey($"{instance}\\Device Parameters");
+                    var portName = deviceParams?.GetValue("PortName")?.ToString();
+                    if (!string.IsNullOrEmpty(portName))
+                        ports.Add(portName);
+                }
+            }
+        }
+        catch { /* registry unavailable or permission denied */ }
+
+        return [.. ports.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>
     /// Opens the serial port and starts periodic sensor reads.
     /// Safe to call multiple times — stops any previous session first.
     /// </summary>
@@ -248,12 +287,34 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             string? foundPort = null;
             string foundRaw = "";
 
-            // Brute-force COM1-COM30: non-existent ports throw IOException instantly
-            // and are silently skipped. This finds CDC/VCP devices whose drivers do
-            // not register in HARDWARE\DEVICEMAP\SERIALCOMM (e.g. Raspberry Pi Pico).
-            for (int i = 1; i <= 30; i++)
+            // Step 1: Look for Raspberry Pi Pico devices (VID_2E8A) in the USB registry.
+            // This is instant and avoids the slow 1500 ms DTR-reset sleep on every port.
+            var picoCandidates = GetPicoPortNamesFromRegistry();
+
+            // Step 2: Build the candidate list.
+            //   • Registry found Pico ports → only check those (fast path).
+            //   • No registry hits → fall back to all known COM ports.
+            //   • No known ports either → brute-force COM1-COM30 as last resort.
+            IEnumerable<string> candidates;
+            if (picoCandidates.Length > 0)
             {
-                var portName = $"COM{i}";
+                candidates = picoCandidates;
+                Dispatcher.UIThread.Post(() =>
+                    ConnectionTestMessage =
+                        $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — doğrulanıyor..."
+                );
+            }
+            else
+            {
+                var knownPorts = GetAvailablePortNames();
+                candidates =
+                    knownPorts.Length > 0
+                        ? knownPorts
+                        : Enumerable.Range(1, 30).Select(i => $"COM{i}");
+            }
+
+            foreach (var portName in candidates)
+            {
                 SerialPort? p = null;
                 try
                 {
