@@ -153,6 +153,13 @@ public partial class SettingsService()
     [ObservableProperty]
     public partial double UsbLBias { get; set; } = 0;
 
+    // Calibration curve
+    [ObservableProperty]
+    public partial bool IsUsbCalibrationEnabled { get; set; } = false;
+
+    [ObservableProperty]
+    public partial IReadOnlyList<UsbCalibrationPoint>? UsbCalibrationPoints { get; set; }
+
     // HotKeys
 
     [ObservableProperty]
@@ -234,5 +241,7 @@ public partial class SettingsService()
 public partial class SettingsService
 {
     [JsonSerializable(typeof(SettingsService))]
+    [JsonSerializable(typeof(UsbCalibrationPoint))]
+    [JsonSerializable(typeof(List<UsbCalibrationPoint>))]
     private partial class SerializerContext : JsonSerializerContext;
 }

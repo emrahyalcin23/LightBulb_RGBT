@@ -164,77 +164,14 @@
             </StackPanel>
         </Border>
 
-        <!--  R Bias  -->
-        <DockPanel Margin="0,24,0,0" ToolTip.Tip="Red channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
-            <TextBlock DockPanel.Dock="Left" Text="R Bias" />
-            <TextBox
-                MinWidth="36"
-                HorizontalAlignment="Right"
-                DockPanel.Dock="Right"
-                Text="{Binding RBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                Theme="{DynamicResource CompactTextBox}" />
-        </DockPanel>
-        <Slider
-            Margin="0,12,0,0"
-            LargeChange="0.2"
-            Maximum="1"
-            Minimum="-1"
-            SmallChange="0.05"
-            Value="{Binding RBias}" />
-
-        <!--  G Bias  -->
-        <DockPanel Margin="0,16,0,0" ToolTip.Tip="Green channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
-            <TextBlock DockPanel.Dock="Left" Text="G Bias" />
-            <TextBox
-                MinWidth="36"
-                HorizontalAlignment="Right"
-                DockPanel.Dock="Right"
-                Text="{Binding GBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                Theme="{DynamicResource CompactTextBox}" />
-        </DockPanel>
-        <Slider
-            Margin="0,12,0,0"
-            LargeChange="0.2"
-            Maximum="1"
-            Minimum="-1"
-            SmallChange="0.05"
-            Value="{Binding GBias}" />
-
-        <!--  B Bias  -->
-        <DockPanel Margin="0,16,0,0" ToolTip.Tip="Blue channel bias (-1.0 = suppress, 0 = neutral, +1.0 = boost)">
-            <TextBlock DockPanel.Dock="Left" Text="B Bias" />
-            <TextBox
-                MinWidth="36"
-                HorizontalAlignment="Right"
-                DockPanel.Dock="Right"
-                Text="{Binding BBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                Theme="{DynamicResource CompactTextBox}" />
-        </DockPanel>
-        <Slider
-            Margin="0,12,0,0"
-            LargeChange="0.2"
-            Maximum="1"
-            Minimum="-1"
-            SmallChange="0.05"
-            Value="{Binding BBias}" />
-
-        <!--  L Bias (Luminance / Brightness)  -->
-        <DockPanel Margin="0,16,0,0" ToolTip.Tip="Luminance (brightness) bias — scales effective screen brightness (-1.0 to +1.0)">
-            <TextBlock DockPanel.Dock="Left" Text="L Bias" />
-            <TextBox
-                MinWidth="36"
-                HorizontalAlignment="Right"
-                DockPanel.Dock="Right"
-                Text="{Binding LBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                Theme="{DynamicResource CompactTextBox}" />
-        </DockPanel>
-        <Slider
-            Margin="0,12,0,0"
-            LargeChange="0.2"
-            Maximum="1"
-            Minimum="-1"
-            SmallChange="0.05"
-            Value="{Binding LBias}" />
+        <!--  Calibration window  -->
+        <Button
+            Margin="0,24,0,0"
+            HorizontalAlignment="Stretch"
+            Command="{Binding OpenCalibrationWindowCommand}"
+            Content="⚙  Kalibrasyon &amp; RGBL Ayarları..."
+            Theme="{DynamicResource MaterialOutlinedButton}"
+            ToolTip.Tip="Parlaklık kalibrasyon eğrisini ve RGBL kanal ayarlarını düzenle" />
 
     </StackPanel>
 </UserControl>

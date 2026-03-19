@@ -8,6 +8,7 @@ using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using LightBulb.Models;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
@@ -53,6 +54,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     [ObservableProperty]
     public partial double LatestLuminance { get; private set; } = 1.0;
+
+    /// <summary>CIE-Y value from the last sensor read. Used by the calibration curve live dot.</summary>
+    [ObservableProperty]
+    public partial double LatestRawY { get; private set; } = 0;
 
     [ObservableProperty]
     public partial string LastRawReading { get; private set; } = "—";
@@ -822,7 +827,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             return;
 
         var cct = ComputeCct(r, g, b);
-        var luminance = ComputeLuminance(r, g, b);
+        var rawY = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        var luminance = ComputeLuminance(rawY);
         var rawText = $"R:{r:F2}  G:{g:F2}  B:{b:F2}";
         var timeText = DateTime.Now.ToString("HH:mm:ss");
 
@@ -831,6 +837,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             LatestCct = cct;
             LatestLuminance = luminance;
+            LatestRawY = rawY;
             LastRawReading = rawText;
             LastReadTime = timeText;
             IsConnected = true;
@@ -861,21 +868,57 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Computes CIE relative luminance from raw sensor values,
-    /// normalised to [0.1, 1.0] using an adaptive peak reference.
-    /// The brightest reading seen in the current session maps to 1.0;
-    /// all other readings scale proportionally.
+    /// Maps a CIE-Y sensor value to a [0.1, 1.0] luminance fraction.
+    /// When calibration is enabled and points are defined, uses piecewise
+    /// linear interpolation over the user-defined curve.
+    /// Falls back to adaptive peak scaling otherwise.
     /// </summary>
-    private double ComputeLuminance(double r, double g, double b)
+    private double ComputeLuminance(double rawY)
     {
-        // CIE Y weighting
-        var rawY = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-        // Expand peak reference whenever a brighter reading arrives.
+        // Expand adaptive peak (used as fallback when calibration is off).
         if (rawY > _peakRawY)
             _peakRawY = rawY;
 
+        if (_settingsService.IsUsbCalibrationEnabled)
+        {
+            var points = _settingsService.UsbCalibrationPoints;
+            if (points is { Count: >= 2 })
+                return InterpolateCalibration(rawY, points);
+        }
+
         return Math.Clamp(rawY / _peakRawY, 0.1, 1.0);
+    }
+
+    /// <summary>
+    /// Piecewise linear interpolation over the calibration curve.
+    /// Returns brightness fraction [0.0, 1.0].
+    /// </summary>
+    private static double InterpolateCalibration(
+        double rawY,
+        IReadOnlyList<UsbCalibrationPoint> points
+    )
+    {
+        var sorted = points.OrderBy(p => p.RawY).ToList();
+
+        // Clamp beyond the defined range.
+        if (rawY <= sorted[0].RawY)
+            return Math.Clamp(sorted[0].BrightnessPercent / 100.0, 0.0, 1.0);
+        if (rawY >= sorted[^1].RawY)
+            return Math.Clamp(sorted[^1].BrightnessPercent / 100.0, 0.0, 1.0);
+
+        for (var i = 0; i < sorted.Count - 1; i++)
+        {
+            var lo = sorted[i];
+            var hi = sorted[i + 1];
+            if (rawY < lo.RawY || rawY > hi.RawY)
+                continue;
+
+            var t = (rawY - lo.RawY) / (hi.RawY - lo.RawY);
+            var pct = lo.BrightnessPercent + t * (hi.BrightnessPercent - lo.BrightnessPercent);
+            return Math.Clamp(pct / 100.0, 0.0, 1.0);
+        }
+
+        return Math.Clamp(sorted[^1].BrightnessPercent / 100.0, 0.0, 1.0);
     }
 
     /// <summary>

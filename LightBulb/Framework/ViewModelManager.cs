@@ -32,4 +32,7 @@ public class ViewModelManager(IServiceProvider services)
 
     public SettingsViewModel CreateSettingsViewModel() =>
         services.GetRequiredService<SettingsViewModel>();
+
+    public UsbCalibrationViewModel CreateUsbCalibrationViewModel() =>
+        services.GetRequiredService<UsbCalibrationViewModel>();
 }

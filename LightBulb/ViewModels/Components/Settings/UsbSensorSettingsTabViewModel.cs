@@ -53,6 +53,12 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         InjectSimulatedReadingCommand = new RelayCommand(() =>
             _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB));
+
+        OpenCalibrationWindowCommand = new AsyncRelayCommand(async () =>
+            await _dialogManager.ShowWindowDialogAsync(
+                _viewModelManager.CreateUsbCalibrationViewModel()
+            )
+        );
     }
 
     private async Task TestConnectionAsync()
@@ -268,31 +274,9 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public IRelayCommand InjectSimulatedReadingCommand { get; }
 
-    // ── RGBL bias coefficients [-1.0, +1.0] ──────────────────────────────────
+    // ── Calibration window ────────────────────────────────────────────────────
 
-    public double RBias
-    {
-        get => SettingsService.UsbRBias;
-        set => SettingsService.UsbRBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
-    public double GBias
-    {
-        get => SettingsService.UsbGBias;
-        set => SettingsService.UsbGBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
-    public double BBias
-    {
-        get => SettingsService.UsbBBias;
-        set => SettingsService.UsbBBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
-    public double LBias
-    {
-        get => SettingsService.UsbLBias;
-        set => SettingsService.UsbLBias = Math.Clamp(value, -1.0, 1.0);
-    }
+    public IAsyncRelayCommand OpenCalibrationWindowCommand { get; }
 
     protected override void Dispose(bool disposing)
     {

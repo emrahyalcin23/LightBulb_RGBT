@@ -26,6 +26,7 @@ public partial class ViewManager
             HotKeySettingsTabViewModel => new HotKeySettingsTabView(),
             LocationSettingsTabViewModel => new LocationSettingsTabView(),
             UsbSensorSettingsTabViewModel => new UsbSensorSettingsTabView(),
+            UsbCalibrationViewModel => new UsbCalibrationWindow(),
             _ => null,
         };
 
