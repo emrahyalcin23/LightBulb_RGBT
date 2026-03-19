@@ -117,12 +117,26 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>
     /// Looks up the Windows USB registry for devices matching the Raspberry Pi Pico VID
-    /// (VID_2E8A, Raspberry Pi Ltd) and returns the COM port names they are mapped to.
-    /// This is instant and requires no serial port communication, making it ideal as a
-    /// first-pass filter before attempting the slower brute-force port scan.
+    /// (VID_2E8A, Raspberry Pi Ltd) and returns only the COM port names that are
+    /// <b>currently active</b> — i.e. present in both the USB device registry and in
+    /// <see cref="SerialPort.GetPortNames"/> (HARDWARE\DEVICEMAP\SERIALCOMM).
+    /// <para>
+    /// The USB device registry retains entries for every device ever connected, so a
+    /// stale PortName entry (e.g. COM3 from a previous session) would otherwise cause
+    /// the auto-detect scan to waste time on a port that has no Pico attached.
+    /// Cross-referencing with <see cref="SerialPort.GetPortNames"/> eliminates those
+    /// ghosts: Windows updates SERIALCOMM immediately when a device connects or
+    /// disconnects, so only currently present devices appear there.
+    /// </para>
     /// </summary>
     public static string[] GetPicoPortNamesFromRegistry()
     {
+        // HARDWARE\DEVICEMAP\SERIALCOMM reflects only currently attached serial devices.
+        var activePorts = new HashSet<string>(
+            SerialPort.GetPortNames(),
+            StringComparer.OrdinalIgnoreCase
+        );
+
         var ports = new List<string>();
         try
         {
@@ -144,7 +158,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 {
                     using var deviceParams = vidPidKey.OpenSubKey($"{instance}\\Device Parameters");
                     var portName = deviceParams?.GetValue("PortName")?.ToString();
-                    if (!string.IsNullOrEmpty(portName))
+
+                    // Only include the port if it is currently active — this filters out
+                    // stale registry entries left over from previous connections.
+                    if (!string.IsNullOrEmpty(portName) && activePorts.Contains(portName))
                         ports.Add(portName);
                 }
             }
