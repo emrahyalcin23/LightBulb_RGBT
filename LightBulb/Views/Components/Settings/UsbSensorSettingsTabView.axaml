@@ -55,24 +55,23 @@
         </DockPanel>
 
         <!--  Read interval  -->
-        <DockPanel Margin="0,24,0,0" ToolTip.Tip="How often (in minutes) to query the sensor">
-            <TextBlock DockPanel.Dock="Left" Text="Read Interval (min)" />
-            <TextBox
-                MinWidth="36"
-                HorizontalAlignment="Right"
+        <!--  Slider pozisyonu: 1-59 = saniye modu, 60-179 = dakika modu (1-120 dk)  -->
+        <DockPanel Margin="0,24,0,0" ToolTip.Tip="Sensörün ne sıklıkta okunacağı. 1-59: saniye aralığı (OKU_Sxx), 60+: dakika aralığı (OKU_xx)">
+            <TextBlock DockPanel.Dock="Left" Text="Okuma Aralığı" />
+            <TextBlock
                 DockPanel.Dock="Right"
-                Text="{Binding ReadIntervalMinutes, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                Theme="{DynamicResource CompactTextBox}" />
+                FontWeight="SemiBold"
+                Text="{Binding IntervalLabel}" />
         </DockPanel>
         <Slider
-            Margin="0,12,0,0"
+            Margin="0,4,0,0"
             IsSnapToTickEnabled="True"
             LargeChange="15"
-            Maximum="120"
+            Maximum="179"
             Minimum="1"
             SmallChange="1"
             TickFrequency="1"
-            Value="{Binding ReadIntervalMinutes}" />
+            Value="{Binding SliderPosition}" />
 
         <!--  Read command  -->
         <DockPanel Margin="0,16,0,0" LastChildFill="False" ToolTip.Tip="Sensöre gönderilecek komut ön eki (örn: OKU). Dakika değeriyle birleşerek final emri oluşturur.">

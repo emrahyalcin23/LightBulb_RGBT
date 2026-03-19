@@ -291,9 +291,25 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     private void ScheduleNextRead(TimeSpan? delay = null)
     {
-        var interval = delay ?? TimeSpan.FromMinutes(
-            Math.Max(1, _settingsService.UsbReadIntervalMinutes)
-        );
+        TimeSpan interval;
+        if (delay.HasValue)
+        {
+            interval = delay.Value;
+        }
+        else
+        {
+            var minutes = _settingsService.UsbReadIntervalMinutes;
+            if (minutes < 1.0)
+            {
+                // Sub-minute mode: fractional minutes → seconds
+                var secs = Math.Clamp((int)Math.Round(minutes * 60), 1, 59);
+                interval = TimeSpan.FromSeconds(secs);
+            }
+            else
+            {
+                interval = TimeSpan.FromMinutes(Math.Max(1, minutes));
+            }
+        }
 
         _readTimerRegistration?.Dispose();
 
@@ -371,8 +387,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         var prefix = string.IsNullOrWhiteSpace(_settingsService.UsbReadCommand)
             ? "OKU"
             : _settingsService.UsbReadCommand.Trim();
-        var interval = (int)Math.Max(1, _settingsService.UsbReadIntervalMinutes);
-        return $"{prefix}_{interval}";
+        var minutes = _settingsService.UsbReadIntervalMinutes;
+        if (minutes < 1.0)
+        {
+            // Sub-minute mode: OKU_S{seconds}
+            var secs = Math.Clamp((int)Math.Round(minutes * 60), 1, 59);
+            return $"{prefix}_S{secs}";
+        }
+        var intervalMin = (int)Math.Max(1, minutes);
+        return $"{prefix}_{intervalMin}";
     }
 
     private void PerformRead()

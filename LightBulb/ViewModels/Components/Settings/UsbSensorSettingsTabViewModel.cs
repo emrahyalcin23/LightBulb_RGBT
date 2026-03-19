@@ -163,13 +163,45 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         set => SettingsService.UsbBaudRate = value;
     }
 
-    public double ReadIntervalMinutes
+    /// <summary>
+    /// Unified slider position: 1-59 = saniye modu, 60-179 = dakika modu (1-120 dk).
+    /// Dahili depolama: saniye &lt; 1dk → UsbReadIntervalMinutes = secs/60.0
+    ///                  dakika       → UsbReadIntervalMinutes = minutes
+    /// </summary>
+    public int SliderPosition
     {
-        get => SettingsService.UsbReadIntervalMinutes;
+        get
+        {
+            var minutes = SettingsService.UsbReadIntervalMinutes;
+            if (minutes < 1.0)
+            {
+                // Saniye modu: kesirli dakikadan saniyeye çevir
+                var secs = (int)Math.Round(minutes * 60);
+                return Math.Clamp(secs, 1, 59);
+            }
+            // Dakika modu: 60-179 aralığına kaydır
+            var m = (int)Math.Round(minutes);
+            return Math.Clamp(m + 59, 60, 179);
+        }
         set
         {
-            SettingsService.UsbReadIntervalMinutes = Math.Clamp(value, 1, 1440);
+            if (value <= 59)
+                SettingsService.UsbReadIntervalMinutes = value / 60.0;   // saniye → kesirli dakika
+            else
+                SettingsService.UsbReadIntervalMinutes = value - 59;     // dakika modu
+
+            OnPropertyChanged(nameof(IntervalLabel));
             OnPropertyChanged(nameof(FinalCommand));
+        }
+    }
+
+    /// <summary>Slider'ın altında gösterilen birim etiketi, ör: "30 saniye" veya "15 dakika".</summary>
+    public string IntervalLabel
+    {
+        get
+        {
+            var pos = SliderPosition;
+            return pos <= 59 ? $"{pos} saniye" : $"{pos - 59} dakika";
         }
     }
 
@@ -183,9 +215,18 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         }
     }
 
-    /// <summary>Final command that will be sent to the sensor, e.g. "OKU_15".</summary>
-    public string FinalCommand =>
-        $"{(string.IsNullOrWhiteSpace(SettingsService.UsbReadCommand) ? "OKU" : SettingsService.UsbReadCommand.Trim())}_{(int)Math.Max(1, SettingsService.UsbReadIntervalMinutes)}";
+    /// <summary>Sensöre gönderilecek final emir, ör: "OKU_15" veya "OKU_S30".</summary>
+    public string FinalCommand
+    {
+        get
+        {
+            var pos = SliderPosition;
+            var cmd = string.IsNullOrWhiteSpace(SettingsService.UsbReadCommand)
+                ? "OKU"
+                : SettingsService.UsbReadCommand.Trim();
+            return pos <= 59 ? $"{cmd}_S{pos}" : $"{cmd}_{pos - 59}";
+        }
+    }
 
     // ── Connection test & port scan ───────────────────────────────────────────
 
