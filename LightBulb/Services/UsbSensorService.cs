@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Management;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -86,10 +88,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// </summary>
     public static string[] GetAvailablePortNames()
     {
-        var ports = new HashSet<string>(SerialPort.GetPortNames(), StringComparer.OrdinalIgnoreCase);
+        var ports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Also scan USB devices — some CDC drivers register PortName here but
-        // do not always update HARDWARE\DEVICEMAP\SERIALCOMM in time.
+        // Source 1: standard OS serial port list (HARDWARE\DEVICEMAP\SERIALCOMM)
+        foreach (var p in SerialPort.GetPortNames())
+            ports.Add(p);
+
+        // Source 2: USB device registry — catches CDC/VCP devices that lag in SERIALCOMM
         try
         {
             using var usbKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USB");
@@ -110,7 +115,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 }
             }
         }
-        catch { /* registry unavailable or permission denied — fall back to standard list */ }
+        catch { /* registry unavailable or permission denied */ }
+
+        // Source 3: WMI — most comprehensive; finds devices through USB-C hubs and docks
+        // that may not appear in the registry sources above.
+        foreach (var p in GetPortNamesViaWmi())
+            ports.Add(p);
 
         return [.. ports.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
     }
@@ -167,6 +177,41 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             }
         }
         catch { /* registry unavailable or permission denied */ }
+
+        return [.. ports.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>
+    /// Queries WMI (Win32_PnPEntity) for all COM ports currently visible to the OS.
+    /// This is the same data source that Windows Device Manager uses and is the most
+    /// comprehensive method: it finds CDC/VCP devices connected through USB hubs,
+    /// USB-C docks, and composite devices that may not appear in SerialPort.GetPortNames()
+    /// or the USB device registry.
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "System.Management is Windows-only and excluded from trim analysis")]
+    public static string[] GetPortNamesViaWmi()
+    {
+        var ports = new List<string>();
+        try
+        {
+            // Win32_PnPEntity returns every plug-and-play device; the LIKE filter
+            // keeps only entries whose friendly name contains "(COMx)".
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Name FROM Win32_PnPEntity WHERE Name LIKE '%(COM%'"
+            );
+            foreach (ManagementObject obj in searcher.Get())
+            {
+                var name = obj["Name"]?.ToString();
+                if (name is null)
+                    continue;
+
+                // Friendly name format: "USB Serial Device (COM5)"
+                var match = Regex.Match(name, @"\(COM(\d+)\)");
+                if (match.Success)
+                    ports.Add($"COM{match.Groups[1].Value}");
+            }
+        }
+        catch { /* WMI unavailable — fall back to registry methods */ }
 
         return [.. ports.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
     }
@@ -325,10 +370,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 // Registry scan: Pico (VID_2E8A) ports that are currently active.
                 var picoCandidates = GetPicoPortNamesFromRegistry();
 
-                // Candidate list: registry-identified ports first, then COM1-COM99.
-                // GetAvailablePortNames() is excluded intentionally — it returns Bluetooth,
-                // modems, etc., and each openable non-Pico port would waste time.
+                // Candidate list priority:
+                //  1. Registry-identified active Pico ports (instant, most likely hit)
+                //  2. WMI ports — Device Manager view, finds hub/USB-C connected devices
+                //     that SerialPort.GetPortNames() and the USB registry may miss
+                //  3. Brute-force COM1-COM99 as final safety net
                 var candidates = picoCandidates
+                    .Concat(GetPortNamesViaWmi())
                     .Concat(Enumerable.Range(1, 99).Select(i => $"COM{i}"))
                     .Distinct(StringComparer.OrdinalIgnoreCase);
 

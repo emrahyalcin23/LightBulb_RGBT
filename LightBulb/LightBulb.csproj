@@ -28,5 +28,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Onova" />
     <PackageReference Include="System.IO.Ports" />
+    <PackageReference Include="System.Management" />
   </ItemGroup>
 </Project>
