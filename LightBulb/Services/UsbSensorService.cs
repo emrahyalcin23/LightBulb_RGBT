@@ -22,8 +22,11 @@ namespace LightBulb.Services;
 /// </summary>
 public partial class UsbSensorService : ObservableObject, IDisposable
 {
-    // Robertson's CCT formula reference luminance (auto-scales to sensor range)
-    private const double ReferenceMax = 4000.0;
+    // Adaptive luminance reference: tracks the highest CIE-Y value seen so far.
+    // Starts at 1.0 so the very first reading is never divided by zero.
+    // Grows as brighter readings arrive; the brightest observed reading always
+    // maps to luminance = 1.0, and dimmer readings scale proportionally.
+    private double _peakRawY = 1.0;
 
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
@@ -859,13 +862,20 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>
     /// Computes CIE relative luminance from raw sensor values,
-    /// normalised to [0.1, 1.0] against a reference maximum.
+    /// normalised to [0.1, 1.0] using an adaptive peak reference.
+    /// The brightest reading seen in the current session maps to 1.0;
+    /// all other readings scale proportionally.
     /// </summary>
-    private static double ComputeLuminance(double r, double g, double b)
+    private double ComputeLuminance(double r, double g, double b)
     {
         // CIE Y weighting
         var rawY = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        return Math.Clamp(rawY / ReferenceMax, 0.1, 1.0);
+
+        // Expand peak reference whenever a brighter reading arrives.
+        if (rawY > _peakRawY)
+            _peakRawY = rawY;
+
+        return Math.Clamp(rawY / _peakRawY, 0.1, 1.0);
     }
 
     /// <summary>
