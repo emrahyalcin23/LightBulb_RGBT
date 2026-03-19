@@ -288,32 +288,43 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             string foundRaw = "";
 
             // Step 1: Registry scan for Raspberry Pi Pico (VID_2E8A) — instant, no serial I/O.
-            // These ports are tried first so the common case (device on a known port) is fast.
-            // We do NOT stop here: the registry may contain stale entries from a previous
-            // connection on a different USB socket, so the device might actually be on a
-            // different port. All candidates are checked in order until the device is found.
+            // These ports are tried first. A HashSet is used for O(1) lookup in the loop below.
             var picoCandidates = GetPicoPortNamesFromRegistry();
+            var picoCandidateSet = new HashSet<string>(picoCandidates, StringComparer.OrdinalIgnoreCase);
 
-            // Step 2: Build full candidate list — registry ports first (priority), then every
-            // other known COM port, then brute-force COM1-COM30 as final fallback.
-            // Distinct() removes duplicates so registry ports are not retried.
+            // Step 2: Build scan candidate list.
+            //   • Registry-identified Pico ports first (priority / fast path).
+            //   • Then brute-force COM1-COM99 to cover stale registry entries and higher port
+            //     numbers that Windows assigns when many virtual COM ports are installed.
+            //   GetAvailablePortNames() is intentionally excluded here: it returns every
+            //   known COM port (Bluetooth, modems, …) and each one that successfully opens
+            //   would incur the 1500 ms DTR-reset wait, making the scan disproportionately slow.
+            //   Non-existent COM numbers are skipped instantly via IOException, so the range
+            //   COM1-COM99 adds only milliseconds for typical systems.
             var candidates = picoCandidates
-                .Concat(GetAvailablePortNames())
-                .Concat(Enumerable.Range(1, 30).Select(i => $"COM{i}"))
+                .Concat(Enumerable.Range(1, 99).Select(i => $"COM{i}"))
                 .Distinct(StringComparer.OrdinalIgnoreCase);
 
             if (picoCandidates.Length > 0)
                 Dispatcher.UIThread.Post(() =>
                     ConnectionTestMessage =
-                        $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — tüm portlar taranıyor..."
+                        $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — port doğrulanıyor..."
                 );
 
             foreach (var portName in candidates)
             {
+                bool isPicoCandidate = picoCandidateSet.Contains(portName);
                 SerialPort? p = null;
                 try
                 {
-                    p = new SerialPort(portName, baud) { ReadTimeout = 3000, WriteTimeout = 1000 };
+                    p = new SerialPort(portName, baud)
+                    {
+                        // Registry-identified Pico ports may reset on port open (DTR toggle)
+                        // and need a longer read window. Unknown ports are queried quickly;
+                        // if they are Pico devices that don't auto-reset they respond at once.
+                        ReadTimeout = isPicoCandidate ? 3000 : 1000,
+                        WriteTimeout = 1000,
+                    };
                     p.Open();
                 }
                 catch (UnauthorizedAccessException)
@@ -331,8 +342,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 // Port opened — query device, then close regardless of outcome.
                 try
                 {
-                    // DTR-reset: wait for the device to boot after port open.
-                    System.Threading.Thread.Sleep(1500);
+                    // DTR-reset: Raspberry Pi Pico resets when the host opens the serial port
+                    // (DTR toggle). Only apply the settle delay for registry-identified ports
+                    // where we know a Pico was previously connected; all other ports are queried
+                    // immediately, since non-Pico devices respond without a boot delay.
+                    if (isPicoCandidate)
+                        System.Threading.Thread.Sleep(1500);
                     p.DiscardInBuffer();
 
                     p.WriteLine(KimsinCommand);
