@@ -42,6 +42,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private SerialPort? _port;
     private IDisposable? _readTimerRegistration;
     private bool _isDisposed;
+    // Serialises all blocking port I/O so PerformRead and RunTest never race.
+    private readonly SemaphoreSlim _portLock = new(1, 1);
 
     [ObservableProperty]
     public partial double LatestCct { get; private set; } = 6500;
@@ -377,6 +379,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         if (_port is not { IsOpen: true })
             return;
 
+        _portLock.Wait();
         try
         {
             _port.WriteLine(BuildReadCommand());
@@ -387,6 +390,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             // On error, mark as disconnected and let the next scheduled read try again.
             Dispatcher.UIThread.Post(() => IsConnected = false);
+        }
+        finally
+        {
+            _portLock.Release();
         }
     }
 
@@ -635,6 +642,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             _readTimerRegistration = null;
         }
 
+        // Wait for any in-progress PerformRead to finish before touching the port.
+        _portLock.Wait();
+
         try
         {
             var port = useExisting ? _port! : testPort!;
@@ -728,6 +738,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         finally
         {
+            _portLock.Release();
+
             if (!useExisting)
             {
                 try { testPort?.Close(); } catch { }
@@ -839,6 +851,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         _isDisposed = true;
         Stop();
+        _portLock.Dispose();
     }
 }
 
