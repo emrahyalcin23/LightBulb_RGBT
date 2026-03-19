@@ -628,6 +628,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             WriteTimeout = 1000,
         };
 
+        // Pause the background reading loop while the test occupies the port.
+        if (useExisting)
+        {
+            _readTimerRegistration?.Dispose();
+            _readTimerRegistration = null;
+        }
+
         try
         {
             var port = useExisting ? _port! : testPort!;
@@ -725,6 +732,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             {
                 try { testPort?.Close(); } catch { }
                 testPort?.Dispose();
+            }
+            else if (_port is { IsOpen: true } && _readTimerRegistration is null)
+            {
+                // Resume the background reading loop that was paused for the test.
+                ScheduleNextRead(delay: TimeSpan.FromSeconds(2));
             }
         }
     }
