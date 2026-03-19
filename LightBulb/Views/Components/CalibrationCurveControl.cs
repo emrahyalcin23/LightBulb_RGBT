@@ -118,7 +118,7 @@ public class CalibrationCurveControl : Control
         if (plotW <= 0 || plotH <= 0) return;
 
         var sorted  = (Points ?? []).OrderBy(p => p.RawY).ToList();
-        var xMax    = sorted.Count > 0 ? Math.Max(sorted[^1].RawY * 1.1, 100.0) : 100.0;
+        var xMax    = 255.0;
         var ch      = SelectedChannel;
 
         // Cache for mouse handlers.
