@@ -7,7 +7,6 @@ using System.IO.Ports;
 using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -44,7 +43,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private IDisposable? _readTimerRegistration;
     private bool _isDisposed;
     // Serialises all blocking port I/O so PerformRead and RunTest never race.
-    private readonly SemaphoreSlim _portLock = new(1, 1);
+    private readonly System.Threading.SemaphoreSlim _portLock = new(1, 1);
 
     [ObservableProperty]
     public partial double LatestCct { get; private set; } = 6500;
