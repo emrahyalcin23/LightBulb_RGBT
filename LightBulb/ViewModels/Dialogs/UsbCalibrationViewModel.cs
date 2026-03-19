@@ -111,7 +111,6 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
     public IRelayCommand<CalibrationPointViewModel> RemovePointCommand { get; }
     public IRelayCommand<CalibrationPointViewModel> CaptureCurrentCommand { get; }
     public IRelayCommand ResetToDefaultCommand { get; }
-    public IRelayCommand CloseCommand { get; }
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -148,8 +147,6 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         );
 
         ResetToDefaultCommand = new RelayCommand(ResetToDefault);
-
-        CloseCommand = new RelayCommand(() => Close(true));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
