@@ -29,8 +29,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private const string KimsinCommand = "KIMSIN";
     private const string PicoIdentity = "BENIM_OZEL_PICOM_V1";
 
-    // OKU = single instantaneous reading (OKU_N only when N>0, i.e. periodic interval)
-    private const string InstantReadCommand = "OKU";
+    // OKU_0 = single instantaneous reading (interval=0 means no periodic streaming)
+    private const string InstantReadCommand = "OKU_0";
 
     private static readonly Regex ReadingPattern = new(
         @"R:\s*(?<r>[\d.]+)[\s,]+G:\s*(?<g>[\d.]+)[\s,]+B:\s*(?<b>[\d.]+)",
@@ -581,8 +581,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     DetectedPicoPortNames = picoPortNames;
                     IsTestingConnection = false;
                     ConnectionTestMessage = $"✓ Sensör {foundPort} portunda bulundu";
-                    // Keep the port open so that TestConnection reuses it without reopening.
-                    Start();
                 });
             else
                 Dispatcher.UIThread.Post(() =>
