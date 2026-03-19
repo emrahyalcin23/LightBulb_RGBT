@@ -309,6 +309,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Returns true when the KIMSIN response identifies our PiColor firmware.
+    /// Two cases are accepted:
+    ///   1. Firmware implements KIMSIN and replies with PicoIdentity (ideal).
+    ///   2. Firmware does not implement KIMSIN and replies with its help/command
+    ///      list that mentions the known read commands (OKU + RAW).  This handles
+    ///      existing devices without requiring a firmware update.
+    /// </summary>
+    private static bool IsKnownFirmware(string response) =>
+        response.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase) ||
+        (response.Contains("OKU", StringComparison.OrdinalIgnoreCase) &&
+         response.Contains("RAW", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// Reads one response line from the serial port, handling \r\n, \n-only, and \r-only
     /// line terminators. SerialPort.ReadLine() only handles \n; firmware that terminates
     /// with bare \r would cause ReadLine() to hang until timeout.
@@ -503,7 +516,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
                         p.WriteLine(KimsinCommand);
                         var identity = ReadResponseLine(p).Trim();
-                        if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
+                        if (!IsKnownFirmware(identity))
                         {
                             triedPorts.Add((portName, $"✗ Yabancı cihaz: '{identity}'"));
                             continue;
@@ -617,13 +630,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             // Discard any buffered data before sending commands.
             port.DiscardInBuffer();
 
-            // Step 1: Verify device identity — must respond with PicoIdentity.
+            // Step 1: Verify device identity.
             port.WriteLine(KimsinCommand);
-            var identity = port.ReadLine().Trim();
-            if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
+            var identity = ReadResponseLine(port).Trim();
+            if (!IsKnownFirmware(identity))
             {
                 var badResult = new ConnectionTestResult(portName, baud, KimsinCommand, false, identity,
-                    $"Kimlik doğrulanamadı — beklenen: {PicoIdentity}, gelen: {identity}");
+                    $"Kimlik doğrulanamadı — beklenen: '{PicoIdentity}' veya firmware yardım mesajı, gelen: '{identity}'");
                 Dispatcher.UIThread.Post(() =>
                 {
                     IsConnected = false;
