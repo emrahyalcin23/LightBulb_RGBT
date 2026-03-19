@@ -97,6 +97,19 @@ public partial class DashboardViewModel : ViewModelBase
             )
         );
 
+        _eventRoot.Add(
+            // Invalidate gamma when USB sensor delivers new readings so that
+            // every change — including those below the significance threshold — is
+            // applied to the screen immediately.
+            usbSensorService.WatchProperties(
+                [
+                    o => o.LatestCct,
+                    o => o.LatestLuminance,
+                ],
+                _gammaService.InvalidateGamma
+            )
+        );
+
         _updateConfigurationTimer = new Timer(
             TimeSpan.FromMilliseconds(50),
             () => Dispatcher.UIThread.Post(UpdateConfiguration)
