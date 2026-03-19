@@ -250,7 +250,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             {
                 ReadTimeout = 2000,
                 WriteTimeout = 1000,
-                DtrEnable = false,
+                DtrEnable = true,  // Pico firmware ignores commands until DTR=HIGH
             };
             _port.Open();
             IsConnected = true;
@@ -581,6 +581,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     DetectedPicoPortNames = picoPortNames;
                     IsTestingConnection = false;
                     ConnectionTestMessage = $"✓ Sensör {foundPort} portunda bulundu";
+                    // Keep the port open so that TestConnection reuses it without reopening.
+                    Start();
                 });
             else
                 Dispatcher.UIThread.Post(() =>
@@ -634,7 +636,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             ReadTimeout = 3000,
             WriteTimeout = 1000,
-            DtrEnable = false,  // DTR=false prevents Pico/Arduino from auto-resetting on connect
+            DtrEnable = true,  // Pico firmware ignores commands until DTR=HIGH ("host connected")
         };
 
         // Pause the background reading loop while the test occupies the port.
@@ -661,8 +663,20 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             port.DiscardInBuffer();
 
             // Step 1: Verify device identity.
-            port.WriteLine(KimsinCommand);
-            var identity = ReadResponseLine(port).Trim();
+            // Retry up to 3 times: firmware may still be booting after DTR rising edge.
+            string identity = "";
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                if (attempt > 0)
+                {
+                    System.Threading.Thread.Sleep(1000);
+                    port.DiscardInBuffer();
+                }
+                port.WriteLine(KimsinCommand);
+                identity = ReadResponseLine(port).Trim();
+                if (IsKnownFirmware(identity) || !string.IsNullOrEmpty(identity))
+                    break;
+            }
             if (!IsKnownFirmware(identity))
             {
                 var badResult = new ConnectionTestResult(portName, baud, KimsinCommand, false, identity,
