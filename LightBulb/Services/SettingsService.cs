@@ -140,19 +140,6 @@ public partial class SettingsService()
     [JsonPropertyName("UsbReadCommand")]
     public partial string UsbReadCommand { get; set; } = "OKU";
 
-    // RGBL bias coefficients [-1.0, +1.0]
-    [ObservableProperty]
-    public partial double UsbRBias { get; set; } = 0;
-
-    [ObservableProperty]
-    public partial double UsbGBias { get; set; } = 0;
-
-    [ObservableProperty]
-    public partial double UsbBBias { get; set; } = 0;
-
-    [ObservableProperty]
-    public partial double UsbLBias { get; set; } = 0;
-
     // Calibration curve
     [ObservableProperty]
     public partial bool IsUsbCalibrationEnabled { get; set; } = false;

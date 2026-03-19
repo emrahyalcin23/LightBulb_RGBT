@@ -14,7 +14,7 @@ namespace LightBulb.ViewModels.Dialogs;
 
 /// <summary>
 /// ViewModel for a single row in the calibration points table.
-/// Notifies its parent whenever RawY or BrightnessPercent changes.
+/// Notifies its parent whenever any property changes.
 /// </summary>
 public partial class CalibrationPointViewModel : ObservableObject
 {
@@ -26,16 +26,43 @@ public partial class CalibrationPointViewModel : ObservableObject
     [ObservableProperty]
     public partial double BrightnessPercent { get; set; }
 
-    public CalibrationPointViewModel(double rawY, double brightnessPercent, Action onChanged)
+    [ObservableProperty]
+    public partial double RBias { get; set; }
+
+    [ObservableProperty]
+    public partial double GBias { get; set; }
+
+    [ObservableProperty]
+    public partial double BBias { get; set; }
+
+    [ObservableProperty]
+    public partial double LBias { get; set; }
+
+    public CalibrationPointViewModel(
+        double rawY,
+        double brightnessPercent,
+        double rBias,
+        double gBias,
+        double bBias,
+        double lBias,
+        Action onChanged
+    )
     {
         _onChanged = onChanged;
         RawY = rawY;
         BrightnessPercent = brightnessPercent;
+        RBias = rBias;
+        GBias = gBias;
+        BBias = bBias;
+        LBias = lBias;
     }
 
     partial void OnRawYChanged(double value) => _onChanged();
-
     partial void OnBrightnessPercentChanged(double value) => _onChanged();
+    partial void OnRBiasChanged(double value) => _onChanged();
+    partial void OnGBiasChanged(double value) => _onChanged();
+    partial void OnBBiasChanged(double value) => _onChanged();
+    partial void OnLBiasChanged(double value) => _onChanged();
 }
 
 /// <summary>
@@ -79,32 +106,6 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         set => _settingsService.IsUsbCalibrationEnabled = value;
     }
 
-    // ── RGBL bias (pass-through to SettingsService) ───────────────────────────
-
-    public double RBias
-    {
-        get => _settingsService.UsbRBias;
-        set => _settingsService.UsbRBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
-    public double GBias
-    {
-        get => _settingsService.UsbGBias;
-        set => _settingsService.UsbGBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
-    public double BBias
-    {
-        get => _settingsService.UsbBBias;
-        set => _settingsService.UsbBBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
-    public double LBias
-    {
-        get => _settingsService.UsbLBias;
-        set => _settingsService.UsbLBias = Math.Clamp(value, -1.0, 1.0);
-    }
-
     // ── Commands ──────────────────────────────────────────────────────────────
 
     public IRelayCommand AddPointCommand { get; }
@@ -130,7 +131,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
             _usbSensorService.WatchAllProperties(() => OnAllPropertiesChanged())
         );
 
-        // Mirror settings changes (IsCalibrationEnabled, RGBL biases) to the UI.
+        // Mirror settings changes (IsCalibrationEnabled) to the UI.
         _eventRoot.Add(
             _settingsService.WatchAllProperties(() => OnAllPropertiesChanged())
         );
@@ -159,25 +160,34 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         if (persisted is { Count: > 0 })
         {
             foreach (var p in persisted.OrderBy(p => p.RawY))
-                CalibrationPoints.Add(MakeRow(p.RawY, p.BrightnessPercent));
+                CalibrationPoints.Add(MakeRow(p.RawY, p.BrightnessPercent, p.RBias, p.GBias, p.BBias, p.LBias));
         }
         else
         {
             // Sensible defaults: darkest room → min brightness, reference bright → full.
-            CalibrationPoints.Add(MakeRow(1.0, 10.0));
-            CalibrationPoints.Add(MakeRow(100.0, 100.0));
+            CalibrationPoints.Add(MakeRow(1.0, 10.0, 0, 0, 0, 0));
+            CalibrationPoints.Add(MakeRow(100.0, 100.0, 0, 0, 0, 0));
             SyncToSettings();
         }
     }
 
-    private CalibrationPointViewModel MakeRow(double rawY, double pct) =>
-        new(rawY, pct, SyncToSettings);
+    private CalibrationPointViewModel MakeRow(
+        double rawY, double pct,
+        double rBias, double gBias, double bBias, double lBias
+    ) => new(rawY, pct, rBias, gBias, bBias, lBias, SyncToSettings);
 
     private void SyncToSettings()
     {
         _settingsService.UsbCalibrationPoints = CalibrationPoints
             .OrderBy(p => p.RawY)
-            .Select(p => new UsbCalibrationPoint(p.RawY, Math.Clamp(p.BrightnessPercent, 0, 100)))
+            .Select(p => new UsbCalibrationPoint(
+                p.RawY,
+                Math.Clamp(p.BrightnessPercent, 0, 100),
+                Math.Clamp(p.RBias, -1, 1),
+                Math.Clamp(p.GBias, -1, 1),
+                Math.Clamp(p.BBias, -1, 1),
+                Math.Clamp(p.LBias, -1, 1)
+            ))
             .ToList();
 
         OnPropertyChanged(nameof(CalibrationCurvePoints));
@@ -185,11 +195,10 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 
     private void AddPoint()
     {
-        // Place new point at the midpoint of the existing range, or just append.
         var maxRawY = CalibrationPoints.Count > 0
             ? CalibrationPoints.Max(p => p.RawY)
             : 100.0;
-        CalibrationPoints.Add(MakeRow(Math.Round(maxRawY * 1.5, 2), 100.0));
+        CalibrationPoints.Add(MakeRow(Math.Round(maxRawY * 1.5, 2), 100.0, 0, 0, 0, 0));
         SyncToSettings();
     }
 
@@ -202,8 +211,8 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
     private void ResetToDefault()
     {
         CalibrationPoints.Clear();
-        CalibrationPoints.Add(MakeRow(1.0, 10.0));
-        CalibrationPoints.Add(MakeRow(100.0, 100.0));
+        CalibrationPoints.Add(MakeRow(1.0, 10.0, 0, 0, 0, 0));
+        CalibrationPoints.Add(MakeRow(100.0, 100.0, 0, 0, 0, 0));
         SyncToSettings();
     }
 

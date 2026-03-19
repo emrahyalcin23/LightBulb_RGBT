@@ -59,6 +59,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double LatestRawY { get; private set; } = 0;
 
+    /// <summary>Per-point bias values interpolated at the current RawY.</summary>
+    [ObservableProperty]
+    public partial double LatestRBias { get; private set; } = 0;
+
+    [ObservableProperty]
+    public partial double LatestGBias { get; private set; } = 0;
+
+    [ObservableProperty]
+    public partial double LatestBBias { get; private set; } = 0;
+
+    [ObservableProperty]
+    public partial double LatestLBias { get; private set; } = 0;
+
     [ObservableProperty]
     public partial string LastRawReading { get; private set; } = "—";
 
@@ -832,12 +845,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         var rawText = $"R:{r:F2}  G:{g:F2}  B:{b:F2}";
         var timeText = DateTime.Now.ToString("HH:mm:ss");
 
+        // Interpolate per-point bias values at the current rawY.
+        var (rBias, gBias, bBias, lBias) = InterpolateBiases(rawY);
+
         // Update observable properties on the UI thread so bindings refresh correctly.
         Dispatcher.UIThread.Post(() =>
         {
             LatestCct = cct;
             LatestLuminance = luminance;
             LatestRawY = rawY;
+            LatestRBias = rBias;
+            LatestGBias = gBias;
+            LatestBBias = bBias;
+            LatestLBias = lBias;
             LastRawReading = rawText;
             LastReadTime = timeText;
             IsConnected = true;
@@ -919,6 +939,45 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
 
         return Math.Clamp(sorted[^1].BrightnessPercent / 100.0, 0.0, 1.0);
+    }
+
+    /// <summary>
+    /// Piecewise linear interpolation of R/G/B/L bias values over the calibration curve.
+    /// Returns (0, 0, 0, 0) when calibration is disabled or fewer than 2 points are defined.
+    /// </summary>
+    private (double R, double G, double B, double L) InterpolateBiases(double rawY)
+    {
+        if (!_settingsService.IsUsbCalibrationEnabled)
+            return (0, 0, 0, 0);
+
+        var points = _settingsService.UsbCalibrationPoints;
+        if (points is not { Count: >= 2 })
+            return (0, 0, 0, 0);
+
+        var sorted = points.OrderBy(p => p.RawY).ToList();
+
+        if (rawY <= sorted[0].RawY)
+            return (sorted[0].RBias, sorted[0].GBias, sorted[0].BBias, sorted[0].LBias);
+        if (rawY >= sorted[^1].RawY)
+            return (sorted[^1].RBias, sorted[^1].GBias, sorted[^1].BBias, sorted[^1].LBias);
+
+        for (var i = 0; i < sorted.Count - 1; i++)
+        {
+            var lo = sorted[i];
+            var hi = sorted[i + 1];
+            if (rawY < lo.RawY || rawY > hi.RawY)
+                continue;
+
+            var t = (rawY - lo.RawY) / (hi.RawY - lo.RawY);
+            return (
+                lo.RBias + t * (hi.RBias - lo.RBias),
+                lo.GBias + t * (hi.GBias - lo.GBias),
+                lo.BBias + t * (hi.BBias - lo.BBias),
+                lo.LBias + t * (hi.LBias - lo.LBias)
+            );
+        }
+
+        return (sorted[^1].RBias, sorted[^1].GBias, sorted[^1].BBias, sorted[^1].LBias);
     }
 
     /// <summary>

@@ -84,15 +84,9 @@ public partial class DashboardViewModel : ViewModelBase
         );
 
         _eventRoot.Add(
-            // Invalidate gamma immediately when USB bias or enable state changes
+            // Invalidate gamma immediately when USB sensor enable state changes
             settingsService.WatchProperties(
-                [
-                    o => o.IsUsbSensorEnabled,
-                    o => o.UsbRBias,
-                    o => o.UsbGBias,
-                    o => o.UsbBBias,
-                    o => o.UsbLBias,
-                ],
+                [o => o.IsUsbSensorEnabled],
                 _gammaService.InvalidateGamma
             )
         );
@@ -436,10 +430,10 @@ public partial class DashboardViewModel : ViewModelBase
         {
             _gammaService.SetGamma(
                 CurrentConfiguration,
-                _settingsService.UsbRBias,
-                _settingsService.UsbGBias,
-                _settingsService.UsbBBias,
-                _settingsService.UsbLBias
+                _usbSensorService.LatestRBias,
+                _usbSensorService.LatestGBias,
+                _usbSensorService.LatestBBias,
+                _usbSensorService.LatestLBias
             );
         }
         else

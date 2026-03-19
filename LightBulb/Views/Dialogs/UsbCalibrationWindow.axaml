@@ -18,118 +18,6 @@
                 FontWeight="Light"
                 Text="USB Sensör — Kalibrasyon &amp; Ayarlar" />
 
-            <!--  ══════════════════ RGBL BIAS ══════════════════  -->
-            <Border
-                Margin="0,0,0,20"
-                Padding="12"
-                Background="{DynamicResource MaterialCardBackgroundBrush}"
-                CornerRadius="6">
-                <StackPanel Orientation="Vertical" Spacing="0">
-
-                    <TextBlock
-                        Margin="0,0,0,12"
-                        FontWeight="SemiBold"
-                        Text="RGBL Kanal Ayarları" />
-                    <TextBlock
-                        Margin="0,0,0,14"
-                        FontSize="11"
-                        Opacity="0.6"
-                        Text="Her kanal için çıkış bias'ı (−1 = bastır, 0 = nötr, +1 = güçlendir). L, son parlaklığı belirler." />
-
-                    <!--  R  -->
-                    <DockPanel Margin="0,0,0,4" LastChildFill="False">
-                        <TextBlock
-                            Width="20"
-                            DockPanel.Dock="Left"
-                            VerticalAlignment="Center"
-                            FontWeight="Medium"
-                            Foreground="#EF5350"
-                            Text="R" />
-                        <TextBox
-                            Width="52"
-                            DockPanel.Dock="Right"
-                            Text="{Binding RBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                            Theme="{DynamicResource CompactTextBox}" />
-                    </DockPanel>
-                    <Slider
-                        Margin="0,0,0,10"
-                        LargeChange="0.2"
-                        Maximum="1"
-                        Minimum="-1"
-                        SmallChange="0.05"
-                        Value="{Binding RBias}" />
-
-                    <!--  G  -->
-                    <DockPanel Margin="0,0,0,4" LastChildFill="False">
-                        <TextBlock
-                            Width="20"
-                            DockPanel.Dock="Left"
-                            VerticalAlignment="Center"
-                            FontWeight="Medium"
-                            Foreground="#66BB6A"
-                            Text="G" />
-                        <TextBox
-                            Width="52"
-                            DockPanel.Dock="Right"
-                            Text="{Binding GBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                            Theme="{DynamicResource CompactTextBox}" />
-                    </DockPanel>
-                    <Slider
-                        Margin="0,0,0,10"
-                        LargeChange="0.2"
-                        Maximum="1"
-                        Minimum="-1"
-                        SmallChange="0.05"
-                        Value="{Binding GBias}" />
-
-                    <!--  B  -->
-                    <DockPanel Margin="0,0,0,4" LastChildFill="False">
-                        <TextBlock
-                            Width="20"
-                            DockPanel.Dock="Left"
-                            VerticalAlignment="Center"
-                            FontWeight="Medium"
-                            Foreground="#42A5F5"
-                            Text="B" />
-                        <TextBox
-                            Width="52"
-                            DockPanel.Dock="Right"
-                            Text="{Binding BBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                            Theme="{DynamicResource CompactTextBox}" />
-                    </DockPanel>
-                    <Slider
-                        Margin="0,0,0,10"
-                        LargeChange="0.2"
-                        Maximum="1"
-                        Minimum="-1"
-                        SmallChange="0.05"
-                        Value="{Binding BBias}" />
-
-                    <!--  L  -->
-                    <DockPanel Margin="0,0,0,4" LastChildFill="False">
-                        <TextBlock
-                            Width="20"
-                            DockPanel.Dock="Left"
-                            VerticalAlignment="Center"
-                            FontWeight="Medium"
-                            Text="L" />
-                        <TextBox
-                            Width="52"
-                            DockPanel.Dock="Right"
-                            Text="{Binding LBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                            Theme="{DynamicResource CompactTextBox}" />
-                    </DockPanel>
-                    <Slider
-                        Margin="0,0,0,0"
-                        LargeChange="0.2"
-                        Maximum="1"
-                        Minimum="-1"
-                        SmallChange="0.05"
-                        Value="{Binding LBias}" />
-
-                </StackPanel>
-            </Border>
-
             <!--  ══════════════════ KALİBRASYON EĞRİSİ ══════════════════  -->
             <Border
                 Margin="0,0,0,20"
@@ -157,7 +45,7 @@
                         Margin="0,0,0,12"
                         FontSize="11"
                         Opacity="0.6"
-                        Text="Sensör Y değeri (sol) ile hedef parlaklık %'si (sağ) arasında dönüşüm noktaları tanımlayın.&#10;Noktalar arasında doğrusal interpolasyon uygulanır." />
+                        Text="Her nokta için sensör Y değeri, hedef parlaklık ve o ortam için R/G/B/L renk ayarları tanımlayın.&#10;Noktalar arasında doğrusal interpolasyon uygulanır." />
 
                     <!--  Toolbar  -->
                     <StackPanel
@@ -196,42 +84,149 @@
                     <ItemsControl ItemsSource="{Binding CalibrationPoints}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="dialogs:CalibrationPointViewModel">
-                                <Grid
+                                <Border
                                     Margin="0,2,0,2"
-                                    ColumnDefinitions="*,*,Auto,Auto"
-                                    VerticalAlignment="Center">
-                                    <TextBox
-                                        Grid.Column="0"
-                                        Margin="0,0,4,0"
-                                        Text="{Binding RawY, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                                        Theme="{DynamicResource CompactTextBox}"
-                                        ToolTip.Tip="Sensörden gelen ham CIE-Y değeri" />
-                                    <TextBox
-                                        Grid.Column="1"
-                                        Margin="0,0,4,0"
-                                        Text="{Binding BrightnessPercent, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                                        Theme="{DynamicResource CompactTextBox}"
-                                        ToolTip.Tip="Bu Y değerinde uygulanacak ekran parlaklığı (0–100)" />
-                                    <Button
-                                        Grid.Column="2"
-                                        Margin="0,0,4,0"
-                                        Padding="6,2"
-                                        Command="{Binding $parent[UserControl].((dialogs:UsbCalibrationViewModel)DataContext).CaptureCurrentCommand}"
-                                        CommandParameter="{Binding}"
-                                        Content="Şimdi Al"
-                                        FontSize="11"
-                                        Theme="{DynamicResource MaterialOutlinedButton}"
-                                        ToolTip.Tip="Şu anki sensör Y değerini bu satıra yazar" />
-                                    <Button
-                                        Grid.Column="3"
-                                        Padding="6,2"
-                                        Command="{Binding $parent[UserControl].((dialogs:UsbCalibrationViewModel)DataContext).RemovePointCommand}"
-                                        CommandParameter="{Binding}"
-                                        Content="✕"
-                                        FontSize="11"
-                                        Theme="{DynamicResource MaterialOutlinedButton}"
-                                        ToolTip.Tip="Bu noktayı sil" />
-                                </Grid>
+                                    Padding="0,4"
+                                    BorderBrush="{DynamicResource MaterialDividerBrush}"
+                                    BorderThickness="0,0,0,1">
+                                    <StackPanel Orientation="Vertical" Spacing="4">
+
+                                        <!--  Row 1: Y, Brightness, buttons  -->
+                                        <Grid ColumnDefinitions="*,*,Auto,Auto" VerticalAlignment="Center">
+                                            <TextBox
+                                                Grid.Column="0"
+                                                Margin="0,0,4,0"
+                                                Text="{Binding RawY, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                                Theme="{DynamicResource CompactTextBox}"
+                                                ToolTip.Tip="Sensörden gelen ham CIE-Y değeri" />
+                                            <TextBox
+                                                Grid.Column="1"
+                                                Margin="0,0,4,0"
+                                                Text="{Binding BrightnessPercent, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                                Theme="{DynamicResource CompactTextBox}"
+                                                ToolTip.Tip="Bu Y değerinde uygulanacak ekran parlaklığı (0–100)" />
+                                            <Button
+                                                Grid.Column="2"
+                                                Margin="0,0,4,0"
+                                                Padding="6,2"
+                                                Command="{Binding $parent[UserControl].((dialogs:UsbCalibrationViewModel)DataContext).CaptureCurrentCommand}"
+                                                CommandParameter="{Binding}"
+                                                Content="Şimdi Al"
+                                                FontSize="11"
+                                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                                ToolTip.Tip="Şu anki sensör Y değerini bu satıra yazar" />
+                                            <Button
+                                                Grid.Column="3"
+                                                Padding="6,2"
+                                                Command="{Binding $parent[UserControl].((dialogs:UsbCalibrationViewModel)DataContext).RemovePointCommand}"
+                                                CommandParameter="{Binding}"
+                                                Content="✕"
+                                                FontSize="11"
+                                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                                ToolTip.Tip="Bu noktayı sil" />
+                                        </Grid>
+
+                                        <!--  Row 2: per-point R/G/B/L bias  -->
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,*,Auto,Auto,*,Auto,Auto,*,Auto" Margin="0,0,36,0">
+
+                                            <!--  R  -->
+                                            <TextBlock
+                                                Grid.Column="0"
+                                                Width="14"
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="#EF5350"
+                                                Text="R" />
+                                            <Slider
+                                                Grid.Column="1"
+                                                Margin="2,0"
+                                                LargeChange="0.2"
+                                                Maximum="1"
+                                                Minimum="-1"
+                                                SmallChange="0.05"
+                                                Value="{Binding RBias}" />
+                                            <TextBox
+                                                Grid.Column="2"
+                                                Width="42"
+                                                Margin="2,0,8,0"
+                                                Text="{Binding RBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                                Theme="{DynamicResource CompactTextBox}" />
+
+                                            <!--  G  -->
+                                            <TextBlock
+                                                Grid.Column="3"
+                                                Width="14"
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="#66BB6A"
+                                                Text="G" />
+                                            <Slider
+                                                Grid.Column="4"
+                                                Margin="2,0"
+                                                LargeChange="0.2"
+                                                Maximum="1"
+                                                Minimum="-1"
+                                                SmallChange="0.05"
+                                                Value="{Binding GBias}" />
+                                            <TextBox
+                                                Grid.Column="5"
+                                                Width="42"
+                                                Margin="2,0,8,0"
+                                                Text="{Binding GBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                                Theme="{DynamicResource CompactTextBox}" />
+
+                                            <!--  B  -->
+                                            <TextBlock
+                                                Grid.Column="6"
+                                                Width="14"
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="#42A5F5"
+                                                Text="B" />
+                                            <Slider
+                                                Grid.Column="7"
+                                                Margin="2,0"
+                                                LargeChange="0.2"
+                                                Maximum="1"
+                                                Minimum="-1"
+                                                SmallChange="0.05"
+                                                Value="{Binding BBias}" />
+                                            <TextBox
+                                                Grid.Column="8"
+                                                Width="42"
+                                                Margin="2,0,8,0"
+                                                Text="{Binding BBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                                Theme="{DynamicResource CompactTextBox}" />
+
+                                            <!--  L  -->
+                                            <TextBlock
+                                                Grid.Column="9"
+                                                Width="14"
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Text="L" />
+                                            <Slider
+                                                Grid.Column="10"
+                                                Margin="2,0"
+                                                LargeChange="0.2"
+                                                Maximum="1"
+                                                Minimum="-1"
+                                                SmallChange="0.05"
+                                                Value="{Binding LBias}" />
+                                            <TextBox
+                                                Grid.Column="11"
+                                                Width="42"
+                                                Margin="2,0,0,0"
+                                                Text="{Binding LBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                                Theme="{DynamicResource CompactTextBox}" />
+                                        </Grid>
+
+                                    </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
