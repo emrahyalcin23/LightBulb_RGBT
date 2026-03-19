@@ -309,6 +309,44 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Reads one response line from the serial port, handling \r\n, \n-only, and \r-only
+    /// line terminators. SerialPort.ReadLine() only handles \n; firmware that terminates
+    /// with bare \r would cause ReadLine() to hang until timeout.
+    /// </summary>
+    private static string ReadResponseLine(SerialPort port)
+    {
+        var sb = new System.Text.StringBuilder();
+        var deadline = Environment.TickCount64 + port.ReadTimeout;
+        while (Environment.TickCount64 < deadline)
+        {
+            int b;
+            try { b = port.ReadByte(); }
+            catch (TimeoutException) { break; }
+
+            var ch = (char)b;
+            if (ch == '\n')
+                break; // end of line (\r\n or bare \n)
+            if (ch == '\r')
+            {
+                // Peek: if next char is \n, consume it; then stop.
+                // If no \n follows within a short window, stop anyway.
+                try
+                {
+                    var saved = port.ReadTimeout;
+                    port.ReadTimeout = 50;
+                    try { var next = (char)port.ReadByte(); if (next != '\n') sb.Append(next); }
+                    catch (TimeoutException) { }
+                    port.ReadTimeout = saved;
+                }
+                catch { }
+                break;
+            }
+            sb.Append(ch);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Returns the current command string to send to the sensor (e.g. "OKU_15").
     /// </summary>
     private string BuildReadCommand()
@@ -429,12 +467,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                         {
                             ReadTimeout = 3000,
                             WriteTimeout = 1000,
+                            // Must be set explicitly — SerialPort default is false.
+                            // Many Pico firmwares ignore incoming data until DTR=HIGH
+                            // (signals "host terminal connected"). Without this the
+                            // firmware never responds and every port times out.
+                            DtrEnable = true,
                         };
                         p.Open();
-                        // DTR=true (default) signals to the firmware that a host is connected.
-                        // Many Pico firmwares won't respond to commands until DTR is HIGH.
-                        // After the DTR edge, give the firmware time to be ready — some
-                        // implementations do a soft-reset on first DTR that takes ~1 s.
+                        // After the DTR rising edge some firmwares do a soft-reset.
+                        // Priority ports (registry/WMI confirmed) get a longer settle wait.
                         System.Threading.Thread.Sleep(priorityPorts.Contains(portName) ? 1500 : 300);
                     }
                     catch (UnauthorizedAccessException)
@@ -461,15 +502,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                         p.DiscardInBuffer();
 
                         p.WriteLine(KimsinCommand);
-                        var identity = p.ReadLine().Trim();
+                        var identity = ReadResponseLine(p).Trim();
                         if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
                         {
-                            triedPorts.Add((portName, $"✗ Yabancı cihaz: {identity}"));
+                            triedPorts.Add((portName, $"✗ Yabancı cihaz: '{identity}'"));
                             continue;
                         }
 
                         p.WriteLine(InstantReadCommand);
-                        var raw = p.ReadLine().Trim();
+                        var raw = ReadResponseLine(p).Trim();
                         if (ReadingPattern.IsMatch(raw))
                         {
                             foundPort = portName;
