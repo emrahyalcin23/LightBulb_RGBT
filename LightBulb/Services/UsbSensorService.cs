@@ -319,7 +319,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private static bool IsKnownFirmware(string response) =>
         response.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase) ||
         (response.Contains("OKU", StringComparison.OrdinalIgnoreCase) &&
-         response.Contains("RAW", StringComparison.OrdinalIgnoreCase));
+         response.Contains("RAW", StringComparison.OrdinalIgnoreCase)) ||
+        ReadingPattern.IsMatch(response); // firmware responds to any command with sensor data
 
     /// <summary>
     /// Reads one response line from the serial port, handling \r\n, \n-only, and \r-only
@@ -522,8 +523,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                             continue;
                         }
 
-                        p.WriteLine(InstantReadCommand);
-                        var raw = ReadResponseLine(p).Trim();
+                        // If KIMSIN already returned sensor data, reuse it; otherwise request a reading.
+                        string raw;
+                        if (ReadingPattern.IsMatch(identity))
+                        {
+                            raw = identity;
+                        }
+                        else
+                        {
+                            p.WriteLine(InstantReadCommand);
+                            raw = ReadResponseLine(p).Trim();
+                        }
+
                         if (ReadingPattern.IsMatch(raw))
                         {
                             foundPort = portName;
@@ -647,8 +658,17 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             }
 
             // Step 2: Request an instant reading to confirm the sensor works.
-            port.WriteLine(InstantReadCommand);
-            var raw = port.ReadLine().Trim();
+            // If KIMSIN already returned sensor data, reuse it to avoid a second round-trip.
+            string raw;
+            if (ReadingPattern.IsMatch(identity))
+            {
+                raw = identity;
+            }
+            else
+            {
+                port.WriteLine(InstantReadCommand);
+                raw = ReadResponseLine(port).Trim();
+            }
             var ok = ReadingPattern.IsMatch(raw);
 
             var result = new ConnectionTestResult(portName, baud, InstantReadCommand, ok, raw,
