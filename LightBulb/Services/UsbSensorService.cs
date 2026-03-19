@@ -300,105 +300,115 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return Task.Run(() =>
         {
             var baud = _settingsService.UsbBaudRate;
-            var triedPorts = new List<(string Port, string Outcome)>();
             string? foundPort = null;
             string foundRaw = "";
 
-            // Step 1: Registry scan for Raspberry Pi Pico (VID_2E8A) — instant, no serial I/O.
-            // These ports are tried first. A HashSet is used for O(1) lookup in the loop below.
-            var picoCandidates = GetPicoPortNamesFromRegistry();
-            var picoCandidateSet = new HashSet<string>(picoCandidates, StringComparer.OrdinalIgnoreCase);
+            // Scan may need to run twice: the first attempt can miss a Pico that is
+            // mid-reset after another application (Arduino IDE, terminal) just closed
+            // its connection. DTR going low causes the Pico to re-enumerate on USB,
+            // which takes ~1.5 s. We try once immediately, then wait and retry once.
+            const int MaxAttempts = 2;
+            List<(string Port, string Outcome)>? lastTriedPorts = null;
 
-            // Step 2: Build scan candidate list.
-            //   • Registry-identified Pico ports first (priority / fast path).
-            //   • Then brute-force COM1-COM99 to cover stale registry entries and higher port
-            //     numbers that Windows assigns when many virtual COM ports are installed.
-            //   GetAvailablePortNames() is intentionally excluded here: it returns every
-            //   known COM port (Bluetooth, modems, …) and each one that successfully opens
-            //   would incur the 1500 ms DTR-reset wait, making the scan disproportionately slow.
-            //   Non-existent COM numbers are skipped instantly via IOException, so the range
-            //   COM1-COM99 adds only milliseconds for typical systems.
-            var candidates = picoCandidates
-                .Concat(Enumerable.Range(1, 99).Select(i => $"COM{i}"))
-                .Distinct(StringComparer.OrdinalIgnoreCase);
-
-            if (picoCandidates.Length > 0)
-                Dispatcher.UIThread.Post(() =>
-                    ConnectionTestMessage =
-                        $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — port doğrulanıyor..."
-                );
-
-            foreach (var portName in candidates)
+            for (int attempt = 1; attempt <= MaxAttempts && foundPort is null; attempt++)
             {
-                bool isPicoCandidate = picoCandidateSet.Contains(portName);
-                SerialPort? p = null;
-                try
+                if (attempt == 2)
                 {
-                    p = new SerialPort(portName, baud)
-                    {
-                        // Registry-identified Pico ports may reset on port open (DTR toggle)
-                        // and need a longer read window. Unknown ports are queried quickly;
-                        // if they are Pico devices that don't auto-reset they respond at once.
-                        ReadTimeout = isPicoCandidate ? 3000 : 1000,
-                        WriteTimeout = 1000,
-                    };
-                    p.Open();
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    triedPorts.Add((portName, "✗ Port meşgul — Arduino IDE veya başka bir uygulama bu portu açık tutuyor"));
-                    p?.Dispose();
-                    continue;
-                }
-                catch (IOException)
-                {
-                    p?.Dispose();
-                    continue; // Port does not exist — skip silently
+                    Dispatcher.UIThread.Post(() =>
+                        ConnectionTestMessage = "Bulunamadı — cihaz yeniden başlıyor olabilir, 3 sn sonra tekrar deneniyor..."
+                    );
+                    System.Threading.Thread.Sleep(3000);
                 }
 
-                // Port opened — query device, then close regardless of outcome.
-                try
-                {
-                    // DTR-reset: Raspberry Pi Pico resets when the host opens the serial port
-                    // (DTR toggle). Only apply the settle delay for registry-identified ports
-                    // where we know a Pico was previously connected; all other ports are queried
-                    // immediately, since non-Pico devices respond without a boot delay.
-                    if (isPicoCandidate)
-                        System.Threading.Thread.Sleep(1500);
-                    p.DiscardInBuffer();
+                var triedPorts = new List<(string Port, string Outcome)>();
 
-                    p.WriteLine(KimsinCommand);
-                    var identity = p.ReadLine().Trim();
-                    if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
+                // Registry scan: Pico (VID_2E8A) ports that are currently active.
+                var picoCandidates = GetPicoPortNamesFromRegistry();
+
+                // Candidate list: registry-identified ports first, then COM1-COM99.
+                // GetAvailablePortNames() is excluded intentionally — it returns Bluetooth,
+                // modems, etc., and each openable non-Pico port would waste time.
+                var candidates = picoCandidates
+                    .Concat(Enumerable.Range(1, 99).Select(i => $"COM{i}"))
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                if (attempt == 1 && picoCandidates.Length > 0)
+                    Dispatcher.UIThread.Post(() =>
+                        ConnectionTestMessage =
+                            $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — port doğrulanıyor..."
+                    );
+
+                foreach (var portName in candidates)
+                {
+                    SerialPort? p = null;
+                    try
                     {
-                        triedPorts.Add((portName, $"✗ Yabancı cihaz: {identity}"));
+                        p = new SerialPort(portName, baud)
+                        {
+                            ReadTimeout = 2000,
+                            WriteTimeout = 1000,
+                            // DtrEnable=false: opening the port must NOT send a DTR pulse.
+                            // DTR low → Pico resets and re-enumerates (~1.5 s unavailable).
+                            // With DTR disabled the already-running firmware stays alive and
+                            // responds to KIMSIN immediately — no settle wait required.
+                            DtrEnable = false,
+                        };
+                        p.Open();
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        triedPorts.Add((portName, "✗ Port meşgul — Arduino IDE veya başka bir uygulama bu portu açık tutuyor"));
+                        p?.Dispose();
                         continue;
                     }
-
-                    p.WriteLine(InstantReadCommand);
-                    var raw = p.ReadLine().Trim();
-                    if (ReadingPattern.IsMatch(raw))
+                    catch (IOException)
                     {
-                        foundPort = portName;
-                        foundRaw = raw;
-                        triedPorts.Add((portName, $"✓ PiColor bulundu — Yanıt: {raw}"));
-                        break;
+                        p?.Dispose();
+                        continue; // Port does not exist — skip silently
                     }
-                    triedPorts.Add((portName, $"✗ Kimlik doğrulandı ama sensör yanıtı geçersiz: {raw}"));
+
+                    // Port opened — query device, then close regardless of outcome.
+                    try
+                    {
+                        p.DiscardInBuffer();
+
+                        p.WriteLine(KimsinCommand);
+                        var identity = p.ReadLine().Trim();
+                        if (!identity.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase))
+                        {
+                            triedPorts.Add((portName, $"✗ Yabancı cihaz: {identity}"));
+                            continue;
+                        }
+
+                        p.WriteLine(InstantReadCommand);
+                        var raw = p.ReadLine().Trim();
+                        if (ReadingPattern.IsMatch(raw))
+                        {
+                            foundPort = portName;
+                            foundRaw = raw;
+                            triedPorts.Add((portName, $"✓ PiColor bulundu — Yanıt: {raw}"));
+                            break;
+                        }
+                        triedPorts.Add((portName, $"✗ Kimlik doğrulandı ama sensör yanıtı geçersiz: {raw}"));
+                    }
+                    catch (TimeoutException)
+                    {
+                        triedPorts.Add((portName, "✗ Zaman aşımı"));
+                    }
+                    finally
+                    {
+                        p.Close();
+                        p.Dispose();
+                    }
                 }
-                catch (TimeoutException)
-                {
-                    triedPorts.Add((portName, "✗ Zaman aşımı"));
-                }
-                finally
-                {
-                    p.Close();
-                    p.Dispose();
-                }
+
+                lastTriedPorts = triedPorts;
             }
 
+            var triedPortsFinal = lastTriedPorts ?? [];
+
             // Collect all ports that positively identified as PiColor (✓ prefix).
-            var picoPortNames = triedPorts
+            var picoPortNames = triedPortsFinal
                 .Where(t => t.Outcome.StartsWith("✓"))
                 .Select(t => t.Port)
                 .ToArray();
@@ -420,7 +430,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     ConnectionTestMessage = "✗ Sensör hiçbir portta bulunamadı";
                 });
 
-            return new PortScanResult($"{KimsinCommand} → {InstantReadCommand}", baud, triedPorts, foundPort, foundRaw);
+            return new PortScanResult($"{KimsinCommand} → {InstantReadCommand}", baud, triedPortsFinal, foundPort, foundRaw);
         });
     }
 
