@@ -252,8 +252,8 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         }
         else
         {
-            CalibrationPoints.Add(MakeRow(1.0,   10.0,  0, 0, 0, 0));
-            CalibrationPoints.Add(MakeRow(100.0, 100.0, 0, 0, 0, 0));
+            CalibrationPoints.Add(MakeRow(5.0,   10.0,  0, 0, 0, 0));
+            CalibrationPoints.Add(MakeRow(230.0, 100.0, 0, 0, 0, 0));
             SyncToSettings();
         }
     }
@@ -296,8 +296,8 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
     private void ResetToDefault()
     {
         CalibrationPoints.Clear();
-        CalibrationPoints.Add(MakeRow(1.0,   10.0,  0, 0, 0, 0));
-        CalibrationPoints.Add(MakeRow(100.0, 100.0, 0, 0, 0, 0));
+        CalibrationPoints.Add(MakeRow(5.0,   10.0,  0, 0, 0, 0));
+        CalibrationPoints.Add(MakeRow(230.0, 100.0, 0, 0, 0, 0));
         SyncToSettings();
     }
 

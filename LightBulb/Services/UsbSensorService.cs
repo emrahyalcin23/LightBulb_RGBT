@@ -27,7 +27,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     // Starts at 1.0 so the very first reading is never divided by zero.
     // Grows as brighter readings arrive; the brightest observed reading always
     // maps to luminance = 1.0, and dimmer readings scale proportionally.
-    private double _peakRawY = 1.0;
+    // Initialised to 255 (= max CIE-Y when R=G=B=255) so the first reading
+    // never incorrectly maps to 100 % brightness before the true peak is known.
+    private double _peakRawY = 255.0;
 
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
