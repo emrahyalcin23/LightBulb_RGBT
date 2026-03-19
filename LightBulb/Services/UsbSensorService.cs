@@ -427,11 +427,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     {
                         p = new SerialPort(portName, baud)
                         {
-                            ReadTimeout = 2000,
+                            ReadTimeout = 3000,
                             WriteTimeout = 1000,
-                            DtrEnable = false,
                         };
                         p.Open();
+                        // DTR=true (default) signals to the firmware that a host is connected.
+                        // Many Pico firmwares won't respond to commands until DTR is HIGH.
+                        // After the DTR edge, give the firmware time to be ready — some
+                        // implementations do a soft-reset on first DTR that takes ~1 s.
+                        System.Threading.Thread.Sleep(priorityPorts.Contains(portName) ? 1500 : 300);
                     }
                     catch (UnauthorizedAccessException)
                     {
