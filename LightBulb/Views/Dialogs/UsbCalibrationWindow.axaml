@@ -32,24 +32,24 @@
                             DockPanel.Dock="Left"
                             VerticalAlignment="Center"
                             FontWeight="SemiBold"
-                            Text="Parlaklık Kalibrasyon Eğrisi" />
+                            Text="Parlaklık &amp; Renk Kalibrasyon Eğrileri" />
                         <ToggleSwitch
                             DockPanel.Dock="Right"
                             IsChecked="{Binding IsCalibrationEnabled}"
                             OffContent="Kapalı"
                             OnContent="Etkin"
-                            ToolTip.Tip="Kalibrasyon eğrisini etkinleştirir; devre dışıyken adaptif tepe ölçekleme kullanılır" />
+                            ToolTip.Tip="Kalibrasyon eğrilerini etkinleştirir" />
                     </DockPanel>
 
                     <TextBlock
-                        Margin="0,0,0,12"
+                        Margin="0,0,0,10"
                         FontSize="11"
                         Opacity="0.6"
-                        Text="Her nokta için sensör Y değeri, hedef parlaklık ve o ortam için R/G/B/L renk ayarları tanımlayın.&#10;Noktalar arasında doğrusal interpolasyon uygulanır." />
+                        Text="Her nokta için sensör Y değeri ve her kanal (Parlaklık, R, G, B, L) değerlerini tanımlayın.&#10;Noktalar arasında lineer interpolasyon uygulanır. Sol tık = nokta ekle/sürükle, Sağ tık = sil." />
 
                     <!--  Toolbar  -->
                     <StackPanel
-                        Margin="0,0,0,10"
+                        Margin="0,0,0,8"
                         HorizontalAlignment="Left"
                         Orientation="Horizontal"
                         Spacing="8">
@@ -78,6 +78,13 @@
                             FontWeight="SemiBold"
                             Opacity="0.7"
                             Text="Parlaklık (%)" />
+                        <TextBlock
+                            Grid.Column="2"
+                            Margin="4,0,42,0"
+                            FontSize="11"
+                            FontWeight="SemiBold"
+                            Opacity="0.7"
+                            Text="R / G / B / L" />
                     </Grid>
 
                     <!--  Points rows  -->
@@ -85,11 +92,11 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="dialogs:CalibrationPointViewModel">
                                 <Border
-                                    Margin="0,2,0,2"
+                                    Margin="0,1,0,1"
                                     Padding="0,4"
                                     BorderBrush="{DynamicResource MaterialDividerBrush}"
                                     BorderThickness="0,0,0,1">
-                                    <StackPanel Orientation="Vertical" Spacing="4">
+                                    <StackPanel Orientation="Vertical" Spacing="3">
 
                                         <!--  Row 1: Y, Brightness, buttons  -->
                                         <Grid ColumnDefinitions="*,*,Auto,Auto" VerticalAlignment="Center">
@@ -126,103 +133,68 @@
                                                 ToolTip.Tip="Bu noktayı sil" />
                                         </Grid>
 
-                                        <!--  Row 2: per-point R/G/B/L bias  -->
-                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,*,Auto,Auto,*,Auto,Auto,*,Auto" Margin="0,0,36,0">
-
-                                            <!--  R  -->
+                                        <!--  Row 2: compact R/G/B/L numeric inputs (Option B fallback)  -->
+                                        <Grid
+                                            Margin="0,0,36,0"
+                                            ColumnDefinitions="Auto,64,Auto,64,Auto,64,Auto,64">
                                             <TextBlock
                                                 Grid.Column="0"
-                                                Width="14"
+                                                Width="18"
                                                 VerticalAlignment="Center"
-                                                FontSize="11"
+                                                FontSize="10"
                                                 FontWeight="SemiBold"
                                                 Foreground="#EF5350"
                                                 Text="R" />
-                                            <Slider
-                                                Grid.Column="1"
-                                                Margin="2,0"
-                                                LargeChange="0.2"
-                                                Maximum="1"
-                                                Minimum="-1"
-                                                SmallChange="0.05"
-                                                Value="{Binding RBias}" />
                                             <TextBox
-                                                Grid.Column="2"
-                                                Width="42"
-                                                Margin="2,0,8,0"
+                                                Grid.Column="1"
+                                                Margin="0,0,6,0"
                                                 Text="{Binding RBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                                                Theme="{DynamicResource CompactTextBox}" />
+                                                Theme="{DynamicResource CompactTextBox}"
+                                                ToolTip.Tip="R kanalı bias (−1 … +1)" />
 
-                                            <!--  G  -->
                                             <TextBlock
-                                                Grid.Column="3"
-                                                Width="14"
+                                                Grid.Column="2"
+                                                Width="18"
                                                 VerticalAlignment="Center"
-                                                FontSize="11"
+                                                FontSize="10"
                                                 FontWeight="SemiBold"
                                                 Foreground="#66BB6A"
                                                 Text="G" />
-                                            <Slider
-                                                Grid.Column="4"
-                                                Margin="2,0"
-                                                LargeChange="0.2"
-                                                Maximum="1"
-                                                Minimum="-1"
-                                                SmallChange="0.05"
-                                                Value="{Binding GBias}" />
                                             <TextBox
-                                                Grid.Column="5"
-                                                Width="42"
-                                                Margin="2,0,8,0"
+                                                Grid.Column="3"
+                                                Margin="0,0,6,0"
                                                 Text="{Binding GBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                                                Theme="{DynamicResource CompactTextBox}" />
+                                                Theme="{DynamicResource CompactTextBox}"
+                                                ToolTip.Tip="G kanalı bias (−1 … +1)" />
 
-                                            <!--  B  -->
                                             <TextBlock
-                                                Grid.Column="6"
-                                                Width="14"
+                                                Grid.Column="4"
+                                                Width="18"
                                                 VerticalAlignment="Center"
-                                                FontSize="11"
+                                                FontSize="10"
                                                 FontWeight="SemiBold"
                                                 Foreground="#42A5F5"
                                                 Text="B" />
-                                            <Slider
-                                                Grid.Column="7"
-                                                Margin="2,0"
-                                                LargeChange="0.2"
-                                                Maximum="1"
-                                                Minimum="-1"
-                                                SmallChange="0.05"
-                                                Value="{Binding BBias}" />
                                             <TextBox
-                                                Grid.Column="8"
-                                                Width="42"
-                                                Margin="2,0,8,0"
+                                                Grid.Column="5"
+                                                Margin="0,0,6,0"
                                                 Text="{Binding BBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                                                Theme="{DynamicResource CompactTextBox}" />
+                                                Theme="{DynamicResource CompactTextBox}"
+                                                ToolTip.Tip="B kanalı bias (−1 … +1)" />
 
-                                            <!--  L  -->
                                             <TextBlock
-                                                Grid.Column="9"
-                                                Width="14"
+                                                Grid.Column="6"
+                                                Width="18"
                                                 VerticalAlignment="Center"
-                                                FontSize="11"
+                                                FontSize="10"
                                                 FontWeight="SemiBold"
+                                                Opacity="0.8"
                                                 Text="L" />
-                                            <Slider
-                                                Grid.Column="10"
-                                                Margin="2,0"
-                                                LargeChange="0.2"
-                                                Maximum="1"
-                                                Minimum="-1"
-                                                SmallChange="0.05"
-                                                Value="{Binding LBias}" />
                                             <TextBox
-                                                Grid.Column="11"
-                                                Width="42"
-                                                Margin="2,0,0,0"
+                                                Grid.Column="7"
                                                 Text="{Binding LBias, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                                                Theme="{DynamicResource CompactTextBox}" />
+                                                Theme="{DynamicResource CompactTextBox}"
+                                                ToolTip.Tip="L (parlaklık) bias (−1 … +1)" />
                                         </Grid>
 
                                     </StackPanel>
@@ -231,21 +203,68 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <!--  Calibration curve  -->
-                    <Border
-                        Margin="0,14,0,6"
-                        BorderBrush="{DynamicResource MaterialDividerBrush}"
-                        BorderThickness="1"
-                        CornerRadius="4">
-                        <components:CalibrationCurveControl
-                            Height="200"
-                            LiveRawY="{Binding LatestRawY}"
-                            Points="{Binding CalibrationCurvePoints}" />
-                    </Border>
+                    <!--  Channel selector + graph  -->
+                    <StackPanel Margin="0,12,0,0" Orientation="Vertical" Spacing="6">
+
+                        <!--  Channel toggle row  -->
+                        <StackPanel HorizontalAlignment="Left" Orientation="Horizontal" Spacing="4">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Opacity="0.6"
+                                Text="Kanal:" />
+                            <ToggleButton
+                                IsChecked="{Binding IsChannelBrightness}"
+                                FontSize="11"
+                                Padding="8,3"
+                                Content="Parlaklık"
+                                ToolTip.Tip="Parlaklık eğrisini düzenle (0–100 %)" />
+                            <ToggleButton
+                                IsChecked="{Binding IsChannelR}"
+                                FontSize="11"
+                                Padding="8,3"
+                                Foreground="#EF5350"
+                                Content="R"
+                                ToolTip.Tip="Kırmızı kanal bias eğrisini düzenle (−1 … +1)" />
+                            <ToggleButton
+                                IsChecked="{Binding IsChannelG}"
+                                FontSize="11"
+                                Padding="8,3"
+                                Foreground="#66BB6A"
+                                Content="G"
+                                ToolTip.Tip="Yeşil kanal bias eğrisini düzenle (−1 … +1)" />
+                            <ToggleButton
+                                IsChecked="{Binding IsChannelB}"
+                                FontSize="11"
+                                Padding="8,3"
+                                Foreground="#42A5F5"
+                                Content="B"
+                                ToolTip.Tip="Mavi kanal bias eğrisini düzenle (−1 … +1)" />
+                            <ToggleButton
+                                IsChecked="{Binding IsChannelL}"
+                                FontSize="11"
+                                Padding="8,3"
+                                Content="L"
+                                ToolTip.Tip="Parlaklık (L) bias eğrisini düzenle (−1 … +1)" />
+                        </StackPanel>
+
+                        <!--  Interactive calibration curve  -->
+                        <Border
+                            BorderBrush="{DynamicResource MaterialDividerBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <components:CalibrationCurveControl
+                                x:Name="CurveControl"
+                                Height="220"
+                                LiveRawY="{Binding LatestRawY}"
+                                Points="{Binding CalibrationCurvePoints}"
+                                SelectedChannel="{Binding SelectedChannel}" />
+                        </Border>
+                    </StackPanel>
 
                     <!--  Live reading strip  -->
                     <Border
-                        Margin="0,6,0,0"
+                        Margin="0,8,0,0"
                         Padding="8,6"
                         Background="{DynamicResource MaterialCardBackgroundBrush}"
                         CornerRadius="4">
@@ -275,7 +294,7 @@
                 </StackPanel>
             </Border>
 
-            <!--  Close button — uses inherited DialogViewModelBase.CloseCommand(bool?) -->
+            <!--  Close button  -->
             <Button
                 HorizontalAlignment="Right"
                 Command="{Binding CloseCommand}"

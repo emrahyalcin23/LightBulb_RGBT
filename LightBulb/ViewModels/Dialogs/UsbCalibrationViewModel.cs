@@ -57,46 +57,73 @@ public partial class CalibrationPointViewModel : ObservableObject
         LBias = lBias;
     }
 
-    partial void OnRawYChanged(double value) => _onChanged();
+    partial void OnRawYChanged(double value)             => _onChanged();
     partial void OnBrightnessPercentChanged(double value) => _onChanged();
-    partial void OnRBiasChanged(double value) => _onChanged();
-    partial void OnGBiasChanged(double value) => _onChanged();
-    partial void OnBBiasChanged(double value) => _onChanged();
-    partial void OnLBiasChanged(double value) => _onChanged();
+    partial void OnRBiasChanged(double value)             => _onChanged();
+    partial void OnGBiasChanged(double value)             => _onChanged();
+    partial void OnBBiasChanged(double value)             => _onChanged();
+    partial void OnLBiasChanged(double value)             => _onChanged();
 }
 
 /// <summary>
-/// ViewModel for the USB calibration &amp; RGBL settings window.
+/// ViewModel for the USB calibration window.
 /// </summary>
 public partial class UsbCalibrationViewModel : DialogViewModelBase
 {
-    private readonly SettingsService _settingsService;
-    private readonly UsbSensorService _usbSensorService;
+    private readonly SettingsService   _settingsService;
+    private readonly UsbSensorService  _usbSensorService;
     private readonly DisposableCollector _eventRoot = new();
 
     // ── Calibration points ────────────────────────────────────────────────────
 
     public ObservableCollection<CalibrationPointViewModel> CalibrationPoints { get; } = new();
 
-    // ── Calibration curve points (for the graph binding) ─────────────────────
-
-    /// <summary>
-    /// Points currently stored in SettingsService — bound to CalibrationCurveControl.
-    /// Updated via SyncToSettings() after every edit.
-    /// </summary>
+    /// <summary>Bound to CalibrationCurveControl.Points. Updated via SyncToSettings().</summary>
     public IReadOnlyList<UsbCalibrationPoint>? CalibrationCurvePoints =>
         _settingsService.UsbCalibrationPoints;
 
+    // ── Active channel (which curve is shown / editable in the graph) ─────────
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsChannelBrightness))]
+    [NotifyPropertyChangedFor(nameof(IsChannelR))]
+    [NotifyPropertyChangedFor(nameof(IsChannelG))]
+    [NotifyPropertyChangedFor(nameof(IsChannelB))]
+    [NotifyPropertyChangedFor(nameof(IsChannelL))]
+    public partial CalibrationChannel SelectedChannel { get; set; } = CalibrationChannel.Brightness;
+
+    public bool IsChannelBrightness
+    {
+        get => SelectedChannel == CalibrationChannel.Brightness;
+        set { if (value) SelectedChannel = CalibrationChannel.Brightness; }
+    }
+    public bool IsChannelR
+    {
+        get => SelectedChannel == CalibrationChannel.R;
+        set { if (value) SelectedChannel = CalibrationChannel.R; }
+    }
+    public bool IsChannelG
+    {
+        get => SelectedChannel == CalibrationChannel.G;
+        set { if (value) SelectedChannel = CalibrationChannel.G; }
+    }
+    public bool IsChannelB
+    {
+        get => SelectedChannel == CalibrationChannel.B;
+        set { if (value) SelectedChannel = CalibrationChannel.B; }
+    }
+    public bool IsChannelL
+    {
+        get => SelectedChannel == CalibrationChannel.L;
+        set { if (value) SelectedChannel = CalibrationChannel.L; }
+    }
+
     // ── Live sensor pass-through ──────────────────────────────────────────────
 
-    public string LastRawReading => _usbSensorService.LastRawReading;
-    public double LatestRawY => _usbSensorService.LatestRawY;
+    public string LastRawReading  => _usbSensorService.LastRawReading;
+    public double LatestRawY      => _usbSensorService.LatestRawY;
     public double LatestLuminance => _usbSensorService.LatestLuminance;
-    public string LatestCctText => $"{_usbSensorService.LatestCct:F0} K";
-    public string LiveIntensityText =>
-        _usbSensorService.LatestRawY > 0
-            ? $"Y = {_usbSensorService.LatestRawY:F1}"
-            : "—";
+    public string LatestCctText   => $"{_usbSensorService.LatestCct:F0} K";
 
     // ── Calibration enabled toggle ────────────────────────────────────────────
 
@@ -108,8 +135,8 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 
     // ── Commands ──────────────────────────────────────────────────────────────
 
-    public IRelayCommand AddPointCommand { get; }
-    public IRelayCommand<CalibrationPointViewModel> RemovePointCommand { get; }
+    public IRelayCommand AddPointCommand   { get; }
+    public IRelayCommand<CalibrationPointViewModel> RemovePointCommand  { get; }
     public IRelayCommand<CalibrationPointViewModel> CaptureCurrentCommand { get; }
     public IRelayCommand ResetToDefaultCommand { get; }
 
@@ -120,21 +147,13 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         UsbSensorService usbSensorService
     )
     {
-        _settingsService = settingsService;
+        _settingsService  = settingsService;
         _usbSensorService = usbSensorService;
 
-        // Load persisted calibration points into the observable collection.
         LoadPointsFromSettings();
 
-        // Mirror sensor property changes to the UI.
-        _eventRoot.Add(
-            _usbSensorService.WatchAllProperties(() => OnAllPropertiesChanged())
-        );
-
-        // Mirror settings changes (IsCalibrationEnabled) to the UI.
-        _eventRoot.Add(
-            _settingsService.WatchAllProperties(() => OnAllPropertiesChanged())
-        );
+        _eventRoot.Add(_usbSensorService.WatchAllProperties(() => OnAllPropertiesChanged()));
+        _eventRoot.Add(_settingsService.WatchAllProperties(() => OnAllPropertiesChanged()));
 
         AddPointCommand = new RelayCommand(AddPoint);
 
@@ -144,18 +163,87 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 
         CaptureCurrentCommand = new RelayCommand<CalibrationPointViewModel>(
             pt => { if (pt is not null) pt.RawY = Math.Round(_usbSensorService.LatestRawY, 2); },
-            _ => _usbSensorService.LatestRawY > 0
+            _  => _usbSensorService.LatestRawY > 0
         );
 
         ResetToDefaultCommand = new RelayCommand(ResetToDefault);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Graph event handlers (called from code-behind) ────────────────────────
+
+    /// <summary>
+    /// User left-clicked on empty graph space.
+    /// Creates a new point at (rawY, channelValue) for the active channel;
+    /// other channels are interpolated from the existing curve.
+    /// </summary>
+    public void AddPointFromGraph(double rawY, double channelValue)
+    {
+        rawY = Math.Round(rawY, 2);
+
+        // If a point already exists at this X (within 0.5 units) just update its value.
+        var existing = CalibrationPoints
+            .OrderBy(p => Math.Abs(p.RawY - rawY))
+            .FirstOrDefault();
+
+        if (existing != null && Math.Abs(existing.RawY - rawY) < 0.5)
+        {
+            SetChannelValue(existing, channelValue);
+            return; // _onChanged already called SyncToSettings
+        }
+
+        // New point: interpolate all other channels from the existing curve.
+        var brightness = SelectedChannel == CalibrationChannel.Brightness
+            ? channelValue
+            : InterpolateChannelAt(rawY, CalibrationChannel.Brightness);
+
+        var rBias = SelectedChannel == CalibrationChannel.R
+            ? channelValue
+            : InterpolateChannelAt(rawY, CalibrationChannel.R);
+
+        var gBias = SelectedChannel == CalibrationChannel.G
+            ? channelValue
+            : InterpolateChannelAt(rawY, CalibrationChannel.G);
+
+        var bBias = SelectedChannel == CalibrationChannel.B
+            ? channelValue
+            : InterpolateChannelAt(rawY, CalibrationChannel.B);
+
+        var lBias = SelectedChannel == CalibrationChannel.L
+            ? channelValue
+            : InterpolateChannelAt(rawY, CalibrationChannel.L);
+
+        CalibrationPoints.Add(MakeRow(rawY, brightness, rBias, gBias, bBias, lBias));
+        SyncToSettings();
+    }
+
+    /// <summary>
+    /// User right-clicked on a point. Removes the point whose RawY is closest to rawY.
+    /// </summary>
+    public void RemovePointFromGraph(double rawY)
+    {
+        var pt = CalibrationPoints.OrderBy(p => Math.Abs(p.RawY - rawY)).FirstOrDefault();
+        if (pt is not null) RemovePoint(pt);
+    }
+
+    /// <summary>
+    /// User dragged a point. Updates the point that previously had oldRawY.
+    /// </summary>
+    public void MovePointFromGraph(double oldRawY, double newRawY, double channelValue)
+    {
+        var pt = CalibrationPoints.OrderBy(p => Math.Abs(p.RawY - oldRawY)).FirstOrDefault();
+        if (pt is null) return;
+
+        // Update RawY and the active channel value.
+        // Suppress double-SyncToSettings: change RawY first (triggers sync), then value.
+        pt.RawY = Math.Round(newRawY, 2);
+        SetChannelValue(pt, channelValue);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     private void LoadPointsFromSettings()
     {
         CalibrationPoints.Clear();
-
         var persisted = _settingsService.UsbCalibrationPoints;
         if (persisted is { Count: > 0 })
         {
@@ -164,8 +252,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         }
         else
         {
-            // Sensible defaults: darkest room → min brightness, reference bright → full.
-            CalibrationPoints.Add(MakeRow(1.0, 10.0, 0, 0, 0, 0));
+            CalibrationPoints.Add(MakeRow(1.0,   10.0,  0, 0, 0, 0));
             CalibrationPoints.Add(MakeRow(100.0, 100.0, 0, 0, 0, 0));
             SyncToSettings();
         }
@@ -195,9 +282,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 
     private void AddPoint()
     {
-        var maxRawY = CalibrationPoints.Count > 0
-            ? CalibrationPoints.Max(p => p.RawY)
-            : 100.0;
+        var maxRawY = CalibrationPoints.Count > 0 ? CalibrationPoints.Max(p => p.RawY) : 100.0;
         CalibrationPoints.Add(MakeRow(Math.Round(maxRawY * 1.5, 2), 100.0, 0, 0, 0, 0));
         SyncToSettings();
     }
@@ -211,16 +296,63 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
     private void ResetToDefault()
     {
         CalibrationPoints.Clear();
-        CalibrationPoints.Add(MakeRow(1.0, 10.0, 0, 0, 0, 0));
+        CalibrationPoints.Add(MakeRow(1.0,   10.0,  0, 0, 0, 0));
         CalibrationPoints.Add(MakeRow(100.0, 100.0, 0, 0, 0, 0));
         SyncToSettings();
     }
 
+    private void SetChannelValue(CalibrationPointViewModel pt, double value)
+    {
+        switch (SelectedChannel)
+        {
+            case CalibrationChannel.Brightness: pt.BrightnessPercent = Math.Round(value, 1); break;
+            case CalibrationChannel.R:          pt.RBias = Math.Round(value, 3); break;
+            case CalibrationChannel.G:          pt.GBias = Math.Round(value, 3); break;
+            case CalibrationChannel.B:          pt.BBias = Math.Round(value, 3); break;
+            case CalibrationChannel.L:          pt.LBias = Math.Round(value, 3); break;
+        }
+    }
+
+    /// <summary>
+    /// Interpolates a channel value at rawY from the existing calibration points.
+    /// Falls back to sensible defaults when no points exist yet.
+    /// </summary>
+    private double InterpolateChannelAt(double rawY, CalibrationChannel ch)
+    {
+        var sorted = CalibrationPoints.OrderBy(p => p.RawY).ToList();
+        if (sorted.Count == 0)
+            return ch == CalibrationChannel.Brightness ? 50.0 : 0.0;
+        if (sorted.Count == 1)
+            return GetChannelValue(sorted[0], ch);
+
+        if (rawY <= sorted[0].RawY)   return GetChannelValue(sorted[0],  ch);
+        if (rawY >= sorted[^1].RawY)  return GetChannelValue(sorted[^1], ch);
+
+        for (var i = 0; i < sorted.Count - 1; i++)
+        {
+            var lo = sorted[i];
+            var hi = sorted[i + 1];
+            if (rawY < lo.RawY || rawY > hi.RawY) continue;
+            var t = (rawY - lo.RawY) / (hi.RawY - lo.RawY);
+            return GetChannelValue(lo, ch) + t * (GetChannelValue(hi, ch) - GetChannelValue(lo, ch));
+        }
+
+        return GetChannelValue(sorted[^1], ch);
+    }
+
+    private static double GetChannelValue(CalibrationPointViewModel pt, CalibrationChannel ch) => ch switch
+    {
+        CalibrationChannel.Brightness => pt.BrightnessPercent,
+        CalibrationChannel.R          => pt.RBias,
+        CalibrationChannel.G          => pt.GBias,
+        CalibrationChannel.B          => pt.BBias,
+        CalibrationChannel.L          => pt.LBias,
+        _                             => 0,
+    };
+
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-            _eventRoot.Dispose();
-
+        if (disposing) _eventRoot.Dispose();
         base.Dispose(disposing);
     }
 }
