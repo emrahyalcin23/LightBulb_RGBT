@@ -191,11 +191,28 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "System.Management is Windows-only and excluded from trim analysis")]
     public static string[] GetPortNamesViaWmi()
     {
-        var ports = new List<string>();
+        var ports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Query 1 — Win32_SerialPort: the most direct source for serial COM ports.
+        // Returns DeviceID = "COM3", "COM5", etc. for everything Windows classifies
+        // as a serial port, including USB CDC/VCP devices.
         try
         {
-            // Win32_PnPEntity returns every plug-and-play device; the LIKE filter
-            // keeps only entries whose friendly name contains "(COMx)".
+            using var searcher = new ManagementObjectSearcher("SELECT DeviceID FROM Win32_SerialPort");
+            foreach (ManagementObject obj in searcher.Get())
+            {
+                var deviceId = obj["DeviceID"]?.ToString();
+                if (!string.IsNullOrEmpty(deviceId))
+                    ports.Add(deviceId);
+            }
+        }
+        catch { }
+
+        // Query 2 — Win32_PnPEntity: broader net that catches CDC devices whose
+        // driver does not register in Win32_SerialPort (e.g. some composite USB
+        // devices or non-standard CDC implementations). Friendly name contains "(COMx)".
+        try
+        {
             using var searcher = new ManagementObjectSearcher(
                 "SELECT Name FROM Win32_PnPEntity WHERE Name LIKE '%(COM%'"
             );
@@ -204,14 +221,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 var name = obj["Name"]?.ToString();
                 if (name is null)
                     continue;
-
-                // Friendly name format: "USB Serial Device (COM5)"
                 var match = Regex.Match(name, @"\(COM(\d+)\)");
                 if (match.Success)
                     ports.Add($"COM{match.Groups[1].Value}");
             }
         }
-        catch { /* WMI unavailable — fall back to registry methods */ }
+        catch { }
 
         return [.. ports.OrderBy(p => p, StringComparer.OrdinalIgnoreCase)];
     }
@@ -370,13 +385,32 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 // Registry scan: Pico (VID_2E8A) ports that are currently active.
                 var picoCandidates = GetPicoPortNamesFromRegistry();
 
+                // WMI scan: Device Manager view — most comprehensive source.
+                var wmiPorts = GetPortNamesViaWmi();
+
+                // "Priority" ports are those positively identified by registry or WMI.
+                // If these fail to open we report it explicitly; it means the device was
+                // seen by the OS but is momentarily unavailable (e.g. re-enumerating).
+                var priorityPorts = new HashSet<string>(
+                    picoCandidates.Concat(wmiPorts),
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+                // Diagnostic header: show what each discovery source found.
+                var regInfo = picoCandidates.Length > 0
+                    ? string.Join(", ", picoCandidates)
+                    : "—";
+                var wmiInfo = wmiPorts.Length > 0
+                    ? string.Join(", ", wmiPorts)
+                    : "—";
+                triedPorts.Add(("[ Keşif ]", $"Registry(VID_2E8A): {regInfo} | WMI: {wmiInfo}"));
+
                 // Candidate list priority:
                 //  1. Registry-identified active Pico ports (instant, most likely hit)
                 //  2. WMI ports — Device Manager view, finds hub/USB-C connected devices
-                //     that SerialPort.GetPortNames() and the USB registry may miss
                 //  3. Brute-force COM1-COM99 as final safety net
                 var candidates = picoCandidates
-                    .Concat(GetPortNamesViaWmi())
+                    .Concat(wmiPorts)
                     .Concat(Enumerable.Range(1, 99).Select(i => $"COM{i}"))
                     .Distinct(StringComparer.OrdinalIgnoreCase);
 
@@ -395,10 +429,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                         {
                             ReadTimeout = 2000,
                             WriteTimeout = 1000,
-                            // DtrEnable=false: opening the port must NOT send a DTR pulse.
-                            // DTR low → Pico resets and re-enumerates (~1.5 s unavailable).
-                            // With DTR disabled the already-running firmware stays alive and
-                            // responds to KIMSIN immediately — no settle wait required.
                             DtrEnable = false,
                         };
                         p.Open();
@@ -411,8 +441,14 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                     }
                     catch (IOException)
                     {
+                        // Priority ports (WMI/registry identified) failing to open is
+                        // diagnostic information — the OS knows the device but it is
+                        // temporarily unavailable (mid-reset / re-enumeration).
+                        // Brute-force ports are silently skipped to keep output clean.
+                        if (priorityPorts.Contains(portName))
+                            triedPorts.Add((portName, "✗ Port açılamadı — cihaz yeniden başlatılıyor ya da sürücü henüz hazır değil"));
                         p?.Dispose();
-                        continue; // Port does not exist — skip silently
+                        continue;
                     }
 
                     // Port opened — query device, then close regardless of outcome.
