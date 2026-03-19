@@ -287,31 +287,26 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             string? foundPort = null;
             string foundRaw = "";
 
-            // Step 1: Look for Raspberry Pi Pico devices (VID_2E8A) in the USB registry.
-            // This is instant and avoids the slow 1500 ms DTR-reset sleep on every port.
+            // Step 1: Registry scan for Raspberry Pi Pico (VID_2E8A) — instant, no serial I/O.
+            // These ports are tried first so the common case (device on a known port) is fast.
+            // We do NOT stop here: the registry may contain stale entries from a previous
+            // connection on a different USB socket, so the device might actually be on a
+            // different port. All candidates are checked in order until the device is found.
             var picoCandidates = GetPicoPortNamesFromRegistry();
 
-            // Step 2: Build the candidate list.
-            //   • Registry found Pico ports → only check those (fast path).
-            //   • No registry hits → fall back to all known COM ports.
-            //   • No known ports either → brute-force COM1-COM30 as last resort.
-            IEnumerable<string> candidates;
+            // Step 2: Build full candidate list — registry ports first (priority), then every
+            // other known COM port, then brute-force COM1-COM30 as final fallback.
+            // Distinct() removes duplicates so registry ports are not retried.
+            var candidates = picoCandidates
+                .Concat(GetAvailablePortNames())
+                .Concat(Enumerable.Range(1, 30).Select(i => $"COM{i}"))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
             if (picoCandidates.Length > 0)
-            {
-                candidates = picoCandidates;
                 Dispatcher.UIThread.Post(() =>
                     ConnectionTestMessage =
-                        $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — doğrulanıyor..."
+                        $"Registry'de Pico bulundu ({string.Join(", ", picoCandidates)}) — tüm portlar taranıyor..."
                 );
-            }
-            else
-            {
-                var knownPorts = GetAvailablePortNames();
-                candidates =
-                    knownPorts.Length > 0
-                        ? knownPorts
-                        : Enumerable.Range(1, 30).Select(i => $"COM{i}");
-            }
 
             foreach (var portName in candidates)
             {
