@@ -65,6 +65,11 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     {
         var result = await _usbSensorService.TestConnectionAsync();
 
+        // await garantisi: arka plan thread'i tamamlanmış, testPort kapatılmış.
+        // Şimdi Start() güvenle aynı portu açabilir; ReadNow hemen çalışır.
+        if (result.Success && !_usbSensorService.IsConnected)
+            _usbSensorService.Start();
+
         var sb = new StringBuilder();
         sb.AppendLine($"Port      :  {result.PortName}");
         sb.AppendLine($"Baud Rate :  {result.BaudRate}");

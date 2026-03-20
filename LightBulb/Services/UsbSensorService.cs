@@ -760,10 +760,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 IsConnected = ok;
                 IsTestingConnection = false;
                 ConnectionTestMessage = ok ? "✓ Bağlantı başarılı" : "✗ Geçersiz yanıt formatı";
-                // Test geçici bir port açıp kapatıyor; başarılı olursa Start() ile
-                // kalıcı port açılır, böylece ReadNow hemen çalışır.
-                if (ok && !useExisting)
-                    Start();
             });
 
             return result;
