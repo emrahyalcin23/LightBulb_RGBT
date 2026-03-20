@@ -7,11 +7,19 @@ namespace LightBulb.Views.Dialogs;
 
 public partial class UsbCalibrationWindow : UserControl
 {
+    private bool _eventsSubscribed;
+
     public UsbCalibrationWindow()
     {
         AvaloniaXamlLoader.Load(this);
+    }
 
-        // Wire up graph interaction events → ViewModel after the AXAML tree is built.
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+
+        if (_eventsSubscribed) return;
+
         var curve = this.FindControl<CalibrationCurveControl>("CurveControl");
         if (curve is null) return;
 
@@ -32,5 +40,7 @@ public partial class UsbCalibrationWindow : UserControl
             if (DataContext is UsbCalibrationViewModel vm)
                 vm.MovePointFromGraph(oldRawY, newRawY, value);
         };
+
+        _eventsSubscribed = true;
     }
 }

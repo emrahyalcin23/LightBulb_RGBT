@@ -179,6 +179,10 @@ public class App : Application, IDisposable
 
         // Load settings
         _settingsService.Load();
+
+        // Auto-start USB sensor if it was enabled in the previous session.
+        if (_settingsService.IsUsbSensorEnabled)
+            _services.GetRequiredService<UsbSensorService>().Start();
     }
 
     internal Window? ShowMainWindow()

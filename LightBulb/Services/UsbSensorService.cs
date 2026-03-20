@@ -308,8 +308,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             _port = null;
         }
 
-        // Update connected state on the UI thread (Stop may be called from UI thread directly)
-        Dispatcher.UIThread.Post(() => IsConnected = false);
+        // When called from the UI thread (e.g. Start() calls Stop() first) set the property
+        // synchronously so a later queued Post cannot overwrite it after Start() sets true.
+        if (Dispatcher.UIThread.CheckAccess())
+            IsConnected = false;
+        else
+            Dispatcher.UIThread.Post(() => IsConnected = false);
     }
 
     private void ScheduleNextRead(TimeSpan? delay = null)
@@ -756,6 +760,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 IsConnected = ok;
                 IsTestingConnection = false;
                 ConnectionTestMessage = ok ? "✓ Bağlantı başarılı" : "✗ Geçersiz yanıt formatı";
+                // Test geçici bir port açıp kapatıyor; başarılı olursa Start() ile
+                // kalıcı port açılır, böylece ReadNow hemen çalışır.
+                if (ok && !useExisting)
+                    Start();
             });
 
             return result;
