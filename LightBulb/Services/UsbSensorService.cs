@@ -434,7 +434,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         try
         {
             _port.WriteLine(BuildReadCommand());
-            var response = _port.ReadLine();
+            var response = ReadResponseLine(_port).Trim();
             ParseAndDispatch(response);
         }
         catch

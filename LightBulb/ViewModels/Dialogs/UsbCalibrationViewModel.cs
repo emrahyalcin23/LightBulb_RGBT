@@ -18,7 +18,9 @@ namespace LightBulb.ViewModels.Dialogs;
 /// </summary>
 public partial class CalibrationPointViewModel : ObservableObject
 {
-    private readonly Action _onChanged;
+    // Nullable: kurucuda property'ler atanana kadar null tutulur,
+    // böylece setter'lar init sırasında SyncToSettings'i ateşlemez.
+    private Action? _onChanged;
 
     [ObservableProperty]
     public partial double RawY { get; set; }
@@ -48,21 +50,23 @@ public partial class CalibrationPointViewModel : ObservableObject
         Action onChanged
     )
     {
-        _onChanged = onChanged;
+        // Önce tüm alanlar atanır; _onChanged null olduğu için setter'lar SyncToSettings'i tetiklemez.
         RawY = rawY;
         BrightnessPercent = brightnessPercent;
         RBias = rBias;
         GBias = gBias;
         BBias = bBias;
         LBias = lBias;
+        // Başlatma bittikten sonra callback aktifleştirilir.
+        _onChanged = onChanged;
     }
 
-    partial void OnRawYChanged(double value)             => _onChanged();
-    partial void OnBrightnessPercentChanged(double value) => _onChanged();
-    partial void OnRBiasChanged(double value)             => _onChanged();
-    partial void OnGBiasChanged(double value)             => _onChanged();
-    partial void OnBBiasChanged(double value)             => _onChanged();
-    partial void OnLBiasChanged(double value)             => _onChanged();
+    partial void OnRawYChanged(double value)              => _onChanged?.Invoke();
+    partial void OnBrightnessPercentChanged(double value) => _onChanged?.Invoke();
+    partial void OnRBiasChanged(double value)             => _onChanged?.Invoke();
+    partial void OnGBiasChanged(double value)             => _onChanged?.Invoke();
+    partial void OnBBiasChanged(double value)             => _onChanged?.Invoke();
+    partial void OnLBiasChanged(double value)             => _onChanged?.Invoke();
 }
 
 /// <summary>
@@ -276,8 +280,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
                 Math.Clamp(p.LBias, -1, 1)
             ))
             .ToList();
-
-        OnPropertyChanged(nameof(CalibrationCurvePoints));
+        // CalibrationCurvePoints WatchAllProperties zinciriyle zaten bildiriliyor; çift çağrı kaldırıldı.
     }
 
     private void AddPoint()
