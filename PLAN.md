@@ -44,7 +44,16 @@ Orijinal `RGBL_curve_d2_oda_7.html`'de çalışan özellikler `RGBL_curve_editor
 
 ---
 
-### ⏳ GÖREV 6b — D3 Grafik Render Sorunu
+### ✅ GÖREV 5a — Veri Köprüsü (HTML Tarafı)
+
+- **localStorage kayıt/yükleme:** `saveToLocalStorage()` / `loadFromLocalStorage()` — düğüm verileri her değişiklikte `localStorage['rgbl_calibration']`'e yazılır, sayfa açılışında yüklenir
+- **JSON dışa aktarma:** `exportJSON()` — `rgbl_calibration.json` dosyasını Blob + anchor click ile indirir
+- **"⬇ Kaydet JSON" butonu** `RGBL_curve_editor.html` header'ına eklendi
+- **Tetikleyiciler:** `addNode`, `deleteNode`, drag `end`, reset handler
+
+---
+
+### ✅ GÖREV 6b — D3 Grafik Render Sorunu
 
 Kod bölümleme sonrası D3 eğri grafikleri ekranda görünmüyor. Olası nedenler:
 

@@ -23,9 +23,49 @@ function defaultNodes() {
     };
 }
 
-let nodes         = defaultNodes();
+let nodes         = loadFromLocalStorage() || defaultNodes();
 let activeChannel = 'L';
 let currentAmbient = 50;
+
+// ── localStorage kalıcılık ──
+const LS_KEY = 'rgbl_calibration';
+
+function saveToLocalStorage() {
+    const data = {};
+    Object.keys(nodes).forEach(ch => {
+        data[ch] = nodes[ch].map(n => ({ x: n.x, y: n.y, fixed: n.fixed }));
+    });
+    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadFromLocalStorage() {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        const result = {};
+        ['R', 'G', 'B', 'L'].forEach(ch => {
+            if (data[ch] && Array.isArray(data[ch])) {
+                result[ch] = data[ch].map(n => mkNode(n.x, n.y, !!n.fixed));
+            }
+        });
+        if (['R', 'G', 'B', 'L'].every(ch => result[ch] && result[ch].length >= 2)) return result;
+    } catch(e) {}
+    return null;
+}
+
+function exportJSON() {
+    const data = { channels: {} };
+    Object.keys(nodes).forEach(ch => {
+        data.channels[ch] = [...nodes[ch]].sort((a, b) => a.x - b.x)
+            .map(n => ({ x: Math.round(n.x * 10) / 10, y: Math.round(n.y * 10) / 10, fixed: n.fixed }));
+    });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'rgbl_calibration.json'; a.click();
+    URL.revokeObjectURL(url);
+}
 
 // ── Değer gösterge chip'leri ──
 const dispAmb = document.getElementById('disp-amb');
@@ -48,9 +88,13 @@ document.querySelectorAll('input[name="simMode"]').forEach(r => {
     r.addEventListener('change', () => triggerUpdate(currentAmbient));
 });
 
+// ── JSON Dışa Aktar ──
+document.getElementById('export-btn').addEventListener('click', () => exportJSON());
+
 // ── Sıfırla ──
 document.getElementById('reset-btn').addEventListener('click', () => {
     nodes = defaultNodes();
+    saveToLocalStorage();
     renderAll();
     triggerUpdate(currentAmbient);
 });
@@ -239,6 +283,7 @@ function renderAll() {
                     })
                     .on('end', function (event, d) {
                         d3.select(this).attr('cursor', d._dragFixed ? 'ns-resize' : 'grab');
+                        saveToLocalStorage();
                     })
             );
 
@@ -258,6 +303,7 @@ function renderAll() {
 function addNode(ch, x, y) {
     if (nodes[ch].some(n => Math.abs(n.x - x) < 2.5)) return;
     nodes[ch].push(mkNode(x, y));
+    saveToLocalStorage();
     renderAll();
     triggerUpdate(currentAmbient);
 }
@@ -265,6 +311,7 @@ function addNode(ch, x, y) {
 function deleteNode(ch, d) {
     if (d.fixed) return;
     nodes[ch] = nodes[ch].filter(n => n !== d);
+    saveToLocalStorage();
     renderAll();
     triggerUpdate(currentAmbient);
 }
