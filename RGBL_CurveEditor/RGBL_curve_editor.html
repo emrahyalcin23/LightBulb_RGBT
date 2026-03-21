@@ -341,6 +341,7 @@ html, body {
         var msgs = [];
         // D3 yüklendi mi?
         msgs.push('d3=' + (typeof d3 !== 'undefined' ? '✓' + d3.version : '✗ YOK'));
+        msgs.push('es=' + (window._es !== undefined ? window._es : '✗ editor yüklenmedi'));
         // wrap boyutu
         var wrap = document.getElementById('d3-wrap');
         if (wrap) {

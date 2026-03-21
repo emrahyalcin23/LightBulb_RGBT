@@ -2,6 +2,7 @@
 //  D3-EDITOR.JS — RGBL Eğri Editörü
 //  Gereksinim: sim-engine.js önceden yüklenmiş olmalı.
 // ═══════════════════════════════════════════════════════════════════
+window._es = 1; // adım 1: script başladı
 
 const CHANNELS = {
     R: { color: '#f87171', dashed: false, width: 2   },
@@ -64,6 +65,7 @@ function exportJSON() {
     URL.revokeObjectURL(url);
 }
 
+window._es = 2; // adım 2: fonksiyon tanımları OK
 // ── State ──
 let nodes          = loadFromLocalStorage() || defaultNodes();
 let activeChannel  = 'L';
@@ -76,6 +78,7 @@ const dispG   = document.getElementById('disp-g');
 const dispB   = document.getElementById('disp-b');
 const dispL   = document.getElementById('disp-l');
 
+window._es = 3; // adım 3: state & disp OK
 // ── Kanal butonları ──
 // Aktif kanal değişince renderAll() çağrılır; böylece eğri/düğüm vurgusu güncellenir.
 document.querySelectorAll('.ch-btn').forEach(btn => {
@@ -103,13 +106,16 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     triggerUpdate(currentAmbient);
 });
 
+window._es = 4; // adım 4: event listener'lar OK
 // ═══════════════════════════════════════════════════════════════════
 //  D3 KURULUMU
 // ═══════════════════════════════════════════════════════════════════
 
 const margin = { top: 28, right: 20, bottom: 44, left: 50 };
 const wrap   = document.getElementById('d3-wrap');
+window._es = 5; // adım 5: wrap alındı
 const d3svg  = d3.select('#d3-wrap').append('svg');
+window._es = 6; // adım 6: SVG oluşturuldu
 const g      = d3svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
 let W, H, xSc, ySc;
