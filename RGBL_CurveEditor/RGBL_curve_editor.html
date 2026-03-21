@@ -21,7 +21,7 @@ html, body {
     height: 100vh;
 }
 
-/* ── LEFT PANEL ── */
+/* ── SOL PANEL ── */
 #editor-panel {
     flex: 0 0 46%;
     display: flex;
@@ -95,7 +95,7 @@ html, body {
 .val-chip .lbl { font-size: 9px; color: #3a5a88; text-transform: uppercase; letter-spacing: 0.08em; }
 .val-chip .num { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; margin-top: 1px; }
 
-/* ── RIGHT PANEL ── */
+/* ── SAĞ PANEL ── */
 #sim-panel {
     flex: 1;
     display: flex;
@@ -103,10 +103,45 @@ html, body {
     align-items: center;
     justify-content: center;
     padding: 16px;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
 }
 
+#sim-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 640px;
+}
+
+/* Mod seçici */
+#mode-bar {
+    display: flex;
+    gap: 4px;
+}
+#mode-bar label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    color: #4a6080;
+    background: #0e1628;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#mode-bar label:has(input:checked) {
+    color: #c8d8f0;
+    background: #131c2f;
+    border-color: rgba(255,255,255,0.2);
+}
+#mode-bar input[type="radio"] { display: none; }
+
+/* Simülasyon konteyneri */
 .simulation-container {
     width: 100%;
     max-width: 640px;
@@ -119,6 +154,26 @@ html, body {
 }
 .simulation-container svg { width: 100%; height: 100%; display: block; }
 
+/* Bilgi paneli */
+#info-panel {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 640px;
+}
+.info-item {
+    flex: 1;
+    background: #0e1628;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #4a6080;
+    text-align: center;
+}
+.info-item span { font-weight: 700; color: #c8d8f0; font-variant-numeric: tabular-nums; }
+
+/* Durum çubuğu */
 #status-bar {
     font-size: 12px;
     color: #3a5a88;
@@ -127,20 +182,21 @@ html, body {
     background: #0e1628;
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.07);
-    min-width: 280px;
+    width: 100%;
+    max-width: 640px;
 }
 #sim-status { color: #c8d8f0; font-weight: 600; }
 
-/* D3 axis/grid styles */
+/* D3 eksen stilleri */
 .axis-label { pointer-events: none; }
-.crosshair { pointer-events: none; }
+.crosshair  { pointer-events: none; }
 </style>
 </head>
 <body>
 
 <div id="app">
 
-  <!-- ══════════ LEFT: D3 CURVE EDITOR ══════════ -->
+  <!-- ══════════ SOL: D3 EĞRİ EDİTÖRÜ ══════════ -->
   <div id="editor-panel">
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <span class="panel-title">RGBL Eğri Editörü</span>
@@ -171,9 +227,16 @@ html, body {
     </div>
   </div>
 
-  <!-- ══════════ RIGHT: SIMULATION ROOM ══════════ -->
+  <!-- ══════════ SAĞ: SİMÜLASYON ODASI ══════════ -->
   <div id="sim-panel">
-    <span class="panel-title">Simülasyon Odası</span>
+
+    <div id="sim-header">
+      <span class="panel-title">Simülasyon Odası</span>
+      <div id="mode-bar">
+        <label><input type="radio" name="simMode" value="sensor" checked> 🌙 Sensör Modu</label>
+        <label><input type="radio" name="simMode" value="time">   🌞 24 Saat Döngüsü</label>
+      </div>
+    </div>
 
     <div class="simulation-container">
       <svg id="sim-svg" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg">
@@ -185,508 +248,79 @@ html, body {
           </radialGradient>
         </defs>
 
-        <!-- wall (with window cutout) -->
+        <!-- duvar (pencere kesimi) -->
         <path fill="#eef2f7" fill-rule="evenodd"
               d="M0,0 L900,0 L900,560 L0,560 Z M70,70 L330,70 L330,390 L70,390 Z"/>
 
-        <!-- sky -->
+        <!-- gökyüzü -->
         <rect id="simSky" x="70" y="70" width="260" height="320" rx="8" fill="#0b1021"
               style="transition:fill 0.35s ease;"/>
 
-        <!-- stars -->
+        <!-- yıldızlar -->
         <g id="starsGroup"></g>
 
-        <!-- halos -->
+        <!-- haleler -->
         <circle id="sunHalo"  cx="200" cy="200" r="52" opacity="0"
                 fill="url(#sunGrad)"  style="filter:blur(14px);mix-blend-mode:screen;"/>
         <circle id="moonHalo" cx="200" cy="200" r="46" opacity="0"
                 fill="rgba(220,240,255,0.8)" style="filter:blur(18px);mix-blend-mode:soft-light;"/>
 
-        <!-- sun / moon -->
+        <!-- güneş / ay -->
         <circle id="celestial" cx="200" cy="200" r="30" fill="#ccd9ff"
                 style="transition:fill 0.2s,r 0.2s;"/>
 
-        <!-- window frame -->
+        <!-- pencere çerçevesi -->
         <rect fill="#4a5b6e" stroke="#1e2a36" stroke-width="1.2" x="60"  y="60"  width="280" height="12" rx="4"/>
         <rect fill="#4a5b6e" stroke="#1e2a36" stroke-width="1.2" x="60"  y="390" width="280" height="12" rx="4"/>
         <rect fill="#4a5b6e" stroke="#1e2a36" stroke-width="1.2" x="60"  y="60"  width="12"  height="342" rx="3"/>
         <rect fill="#4a5b6e" stroke="#1e2a36" stroke-width="1.2" x="328" y="60"  width="12"  height="342" rx="3"/>
         <rect fill="#4a5b6e" stroke="#1e2a36" stroke-width="1.2" x="188" y="60"  width="12"  height="342" rx="3"/>
 
-        <!-- desk -->
+        <!-- masa -->
         <rect fill="#7f5e3b" x="0" y="460" width="900" height="100" rx="8"/>
 
-        <!-- plant -->
+        <!-- bitki -->
         <path fill="#c97e3a" d="M780,460 L820,460 L810,410 L790,410 Z"/>
         <circle fill="#4caf50" cx="800" cy="395" r="18"/>
         <circle fill="#4caf50" cx="782" cy="375" r="14"/>
         <circle fill="#4caf50" cx="818" cy="380" r="15"/>
 
-        <!-- monitor -->
+        <!-- monitör -->
         <path fill="#3a4a5c" d="M530,350 L570,350 L580,460 L520,460 Z"/>
         <rect fill="#3a4a5c" x="470" y="450" width="160" height="12" rx="5"/>
         <rect fill="#11161f" x="380" y="190" width="340" height="210" rx="12"/>
         <rect id="monitorScreen" x="392" y="202" width="316" height="186" rx="6"
               fill="rgb(30,30,60)" style="transition:fill 0.1s;"/>
 
-        <!-- room shadow overlay -->
+        <!-- oda karartma katmanı -->
         <path id="roomOverlay" fill="#000" fill-rule="evenodd" opacity="0.75" pointer-events="none"
               style="transition:opacity 0.25s ease;"
               d="M0,0 L900,0 L900,560 L0,560 Z M70,70 L330,70 L330,390 L70,390 Z"/>
 
-        <!-- screen glow -->
+        <!-- ekran parlaması -->
         <ellipse id="screenGlow" cx="550" cy="295" rx="210" ry="140"
                  fill="rgb(30,30,60)" opacity="0.15"
                  style="filter:blur(38px);pointer-events:none;transition:all 0.12s;"/>
       </svg>
     </div>
 
+    <!-- Bilgi paneli: Ortam + RGBL değerleri -->
+    <div id="info-panel">
+      <div class="info-item">🔅 Ortam: <span id="valX">—</span></div>
+      <div class="info-item">🖥️ RGBL: <span id="valY">—</span></div>
+    </div>
+
     <div id="status-bar">✨ Durum: <span id="sim-status">—</span></div>
+
   </div>
 
 </div><!-- #app -->
 
-<script>
-// ═══════════════════════════════════════════════════════════════════
-//  SIMULATION ENGINE
-// ═══════════════════════════════════════════════════════════════════
-const simEl = {
-    sky:           document.getElementById('simSky'),
-    celestial:     document.getElementById('celestial'),
-    sunHalo:       document.getElementById('sunHalo'),
-    moonHalo:      document.getElementById('moonHalo'),
-    starsGroup:    document.getElementById('starsGroup'),
-    monitorScreen: document.getElementById('monitorScreen'),
-    screenGlow:    document.getElementById('screenGlow'),
-    roomOverlay:   document.getElementById('roomOverlay'),
-    status:        document.getElementById('sim-status'),
-};
+<!-- Simülasyon motoru (updateEnvironment ve yardımcı fonksiyonlar) -->
+<script src="sim-engine.js"></script>
 
-// Generate stars
-(function () {
-    for (let i = 0; i < 160; i++) {
-        const s = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        s.setAttribute('cx', 70 + Math.random() * 260);
-        s.setAttribute('cy', 70 + Math.random() * 320);
-        s.setAttribute('r',  1 + Math.random() * 2.2);
-        s.style.fill = '#fff9e0';
-        s.style.opacity = '0';
-        s.style.transition = 'opacity 0.4s ease-out';
-        simEl.starsGroup.appendChild(s);
-    }
-})();
+<!-- D3 eğri editörü (triggerUpdate, renderAll, düğüm yönetimi) -->
+<script src="d3-editor.js"></script>
 
-let _starOpacity = 0;
-setInterval(() => {
-    const stars = simEl.starsGroup.querySelectorAll('circle');
-    if (_starOpacity > 0.05) {
-        stars.forEach(s => {
-            s.style.opacity = Math.min(0.95, _starOpacity * (0.7 + Math.random() * 0.6));
-        });
-    } else {
-        stars.forEach(s => { s.style.opacity = '0'; });
-    }
-}, 700);
-
-function getSkyColor(ratio) {
-    const dark   = { r: 11,  g: 20,  b: 40  };
-    const bright = { r: 192, g: 224, b: 255 };
-    const t = Math.pow(Math.sin(ratio * Math.PI / 2), 1.2);
-    return `rgb(${Math.floor(dark.r + (bright.r - dark.r) * t)},` +
-               `${Math.floor(dark.g + (bright.g - dark.g) * t)},` +
-               `${Math.floor(dark.b + (bright.b - dark.b) * t)})`;
-}
-
-/**
- * updateEnvironment — D3 editöründen çağrılır.
- * @param {number} ambientLight  0-100
- * @param {number} finalR        0-100  (Curve_R * L/100)
- * @param {number} finalG        0-100
- * @param {number} finalB        0-100
- * @param {number} finalL        0-100  (master luminance)
- */
-function updateEnvironment(ambientLight, finalR, finalG, finalB, finalL) {
-    const ratio = Math.max(0, Math.min(1, ambientLight / 100));
-
-    // Sky
-    simEl.sky.style.fill = getSkyColor(ratio);
-
-    // Room brightness (shadow overlay)
-    const roomBright = 0.1 + Math.pow(ratio, 1.2) * 0.85;
-    simEl.roomOverlay.style.opacity = Math.max(0, 1 - roomBright);
-
-    // Celestial body
-    const celestialY = 360 - 265 * ratio;
-    const celestialX = 200 - 110 * Math.cos(Math.PI * ratio);
-    const isDay = ratio > 0.4;
-
-    simEl.celestial.setAttribute('cx', celestialX);
-    simEl.celestial.setAttribute('cy', celestialY);
-    simEl.celestial.setAttribute('r',  isDay ? 40 : 30);
-
-    if (isDay) {
-        const warm = Math.min(1, (ratio - 0.4) / 0.6);
-        simEl.celestial.style.fill = `rgb(255,${Math.floor(170 + warm * 85)},${Math.floor(80 + warm * 120)})`;
-        simEl.sunHalo.setAttribute('cx', celestialX);
-        simEl.sunHalo.setAttribute('cy', celestialY);
-        simEl.sunHalo.setAttribute('opacity', 0.6);
-        simEl.moonHalo.setAttribute('opacity', 0);
-    } else {
-        simEl.celestial.style.fill = '#ccd9ff';
-        simEl.moonHalo.setAttribute('cx', celestialX);
-        simEl.moonHalo.setAttribute('cy', celestialY);
-        simEl.moonHalo.setAttribute('opacity', 0.6);
-        simEl.sunHalo.setAttribute('opacity', 0);
-    }
-
-    // Stars
-    const nightFactor = Math.pow(Math.max(0, 1 - ratio * 1.3), 1.5);
-    _starOpacity = Math.min(0.96, nightFactor * 0.9);
-
-    // Screen colour (0-100 → 0-255)
-    const sR = Math.round(finalR * 2.55);
-    const sG = Math.round(finalG * 2.55);
-    const sB = Math.round(finalB * 2.55);
-    const scr = `rgb(${sR},${sG},${sB})`;
-    simEl.monitorScreen.style.fill = scr;
-    simEl.screenGlow.style.fill    = scr;
-    simEl.screenGlow.style.opacity = (finalL / 100) * 0.65;
-
-    // Status label
-    let label;
-    if (ratio > 0.9)      label = '🔆 Çok Aydınlık';
-    else if (ratio > 0.7) label = '☀️ Aydınlık';
-    else if (ratio > 0.5) label = '🌤️ Normal';
-    else if (ratio > 0.3) label = '🌅 Loş';
-    else if (ratio > 0.1) label = '🌆 Alacakaranlık';
-    else                  label = '🌙 Karanlık';
-    simEl.status.textContent = label;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  D3 CURVE EDITOR
-// ═══════════════════════════════════════════════════════════════════
-
-const CHANNELS = {
-    R: { color: '#f87171', dashed: false, width: 2 },
-    G: { color: '#4ade80', dashed: false, width: 2 },
-    B: { color: '#60a5fa', dashed: false, width: 2 },
-    L: { color: '#e2e8f0', dashed: true,  width: 3.5 },
-};
-
-// Stable node IDs
-let _nid = 0;
-function mkNode(x, y, fixed = false) {
-    return { id: ++_nid, x, y, fixed };
-}
-
-function defaultNodes() {
-    return {
-        R: [mkNode(0, 20, true), mkNode(100, 88, true)],
-        G: [mkNode(0, 15, true), mkNode(100, 82, true)],
-        B: [mkNode(0, 28, true), mkNode(100, 68, true)],
-        L: [mkNode(0, 10, true), mkNode(50, 55), mkNode(100, 95, true)],
-    };
-}
-
-let nodes = defaultNodes();
-let activeChannel = 'L';
-let currentAmbient = 50;
-
-// Value display chips
-const dispAmb = document.getElementById('disp-amb');
-const dispR   = document.getElementById('disp-r');
-const dispG   = document.getElementById('disp-g');
-const dispB   = document.getElementById('disp-b');
-const dispL   = document.getElementById('disp-l');
-
-// Channel buttons
-document.querySelectorAll('.ch-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        activeChannel = btn.dataset.ch;
-        document.querySelectorAll('.ch-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-    });
-});
-
-// Reset
-document.getElementById('reset-btn').addEventListener('click', () => {
-    nodes = defaultNodes();
-    renderAll();
-    triggerUpdate(currentAmbient);
-});
-
-// ── D3 setup ──
-const margin = { top: 28, right: 20, bottom: 44, left: 50 };
-const wrap   = document.getElementById('d3-wrap');
-const d3svg  = d3.select('#d3-wrap').append('svg');
-const g      = d3svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-let W, H, xSc, ySc;
-
-// Layer order: grid → curves → nodes → overlay (pointer capture)
-const gridLayer    = g.append('g').attr('class', 'grid-layer');
-const curveLayer   = g.append('g').attr('class', 'curve-layer');
-const nodeLayer    = g.append('g').attr('class', 'node-layer');
-const crossLayer   = g.append('g').attr('class', 'crosshair').attr('pointer-events', 'none');
-const overlayLayer = g.append('g').attr('class', 'overlay-layer');
-
-// Crosshair elements
-const xhLine = crossLayer.append('line')
-    .attr('stroke', 'rgba(255,255,255,0.22)')
-    .attr('stroke-width', 1)
-    .attr('stroke-dasharray', '4,3')
-    .style('display', 'none');
-
-const xhDots = {};
-Object.keys(CHANNELS).forEach(ch => {
-    xhDots[ch] = crossLayer.append('circle')
-        .attr('r', 4.5)
-        .attr('fill', CHANNELS[ch].color)
-        .attr('stroke', '#080c18').attr('stroke-width', 1.5)
-        .style('display', 'none');
-});
-
-// Transparent background rect for empty-space clicks + mousemove
-const bgRect = overlayLayer.append('rect')
-    .attr('fill', 'transparent')
-    .attr('cursor', 'crosshair');
-
-function resize() {
-    const r = wrap.getBoundingClientRect();
-    W = r.width  - margin.left - margin.right;
-    H = r.height - margin.top  - margin.bottom;
-    d3svg.attr('width', r.width).attr('height', r.height);
-    xSc = d3.scaleLinear().domain([0, 100]).range([0, W]);
-    ySc = d3.scaleLinear().domain([0, 100]).range([H, 0]);
-    bgRect.attr('width', W).attr('height', H);
-    buildAxes();
-    renderAll();
-}
-
-function buildAxes() {
-    gridLayer.selectAll('*').remove();
-    g.selectAll('.ax-x,.ax-y,.ax-lbl').remove();
-
-    // Grid
-    gridLayer.append('g')
-        .call(d3.axisBottom(xSc).tickSize(-H).tickValues(d3.range(0, 101, 10)).tickFormat(''))
-        .attr('transform', `translate(0,${H})`)
-        .call(gg => { gg.select('.domain').remove(); gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.055)'); });
-
-    gridLayer.append('g')
-        .call(d3.axisLeft(ySc).tickSize(-W).tickValues(d3.range(0, 101, 10)).tickFormat(''))
-        .call(gg => { gg.select('.domain').remove(); gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.055)'); });
-
-    // Axes
-    g.append('g').attr('class', 'ax-x')
-        .attr('transform', `translate(0,${H})`)
-        .call(d3.axisBottom(xSc).tickValues(d3.range(0, 101, 20)))
-        .call(gg => {
-            gg.select('.domain').attr('stroke', 'rgba(255,255,255,0.18)');
-            gg.selectAll('text').attr('fill', '#4a6080').attr('font-size', '10px');
-            gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.12)');
-        });
-
-    g.append('g').attr('class', 'ax-y')
-        .call(d3.axisLeft(ySc).tickValues(d3.range(0, 101, 20)))
-        .call(gg => {
-            gg.select('.domain').attr('stroke', 'rgba(255,255,255,0.18)');
-            gg.selectAll('text').attr('fill', '#4a6080').attr('font-size', '10px');
-            gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.12)');
-        });
-
-    g.append('text').attr('class', 'ax-lbl')
-        .attr('x', W / 2).attr('y', H + 36)
-        .attr('text-anchor', 'middle').attr('fill', '#3a5a88').attr('font-size', '10px')
-        .text('Ortam Işığı (0 – 100)');
-
-    g.append('text').attr('class', 'ax-lbl')
-        .attr('transform', 'rotate(-90)')
-        .attr('x', -H / 2).attr('y', -38)
-        .attr('text-anchor', 'middle').attr('fill', '#3a5a88').attr('font-size', '10px')
-        .text('Çıkış (0 – 100)');
-}
-
-// ── Line generator (Catmull-Rom, alpha=0 → uniform, matches sample math) ──
-const lineGen = d3.line()
-    .x(d => xSc(d.x))
-    .y(d => ySc(d.y))
-    .curve(d3.curveCatmullRom.alpha(0));
-
-const curvePaths = {}; // ch → d3 selection
-
-function renderAll() {
-    // Render L last so it's on top of R/G/B
-    const order = ['R', 'G', 'B', 'L'];
-
-    order.forEach(ch => {
-        const cfg = CHANNELS[ch];
-        const pts = [...nodes[ch]].sort((a, b) => a.x - b.x);
-
-        // --- Curve path ---
-        if (!curvePaths[ch]) {
-            curvePaths[ch] = curveLayer.append('path')
-                .attr('class', `curve-${ch}`)
-                .attr('fill', 'none')
-                .attr('stroke', cfg.color)
-                .attr('stroke-width', cfg.width)
-                .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
-                .attr('stroke-linecap', 'round')
-                .attr('opacity', 0.85)
-                .style('cursor', 'pointer')
-                .on('click', function (event) {
-                    if (event.shiftKey) return;
-                    const [mx] = d3.pointer(event, g.node());
-                    const dx = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
-                    const dy = sampleAtX(ch, dx);
-                    addNode(ch, dx, dy);
-                    // Switch active channel to clicked curve
-                    activeChannel = ch;
-                    document.querySelectorAll('.ch-btn').forEach(b => {
-                        b.classList.toggle('active', b.dataset.ch === ch);
-                    });
-                    event.stopPropagation();
-                });
-        }
-        curvePaths[ch].datum(pts).attr('d', lineGen(pts));
-
-        // --- Nodes ---
-        const sel = nodeLayer.selectAll(`.nd-${ch}`)
-            .data(nodes[ch], d => d.id);
-
-        sel.enter().append('circle')
-            .attr('class', `nd-${ch}`)
-            .attr('r', 7)
-            .attr('fill', cfg.color)
-            .attr('stroke', '#080c18')
-            .attr('stroke-width', 2)
-            .attr('cursor', d => d.fixed ? 'ns-resize' : 'grab')
-            .on('contextmenu', (event, d) => { event.preventDefault(); deleteNode(ch, d); })
-            .on('click', (event, d) => { if (event.shiftKey) { deleteNode(ch, d); event.stopPropagation(); } })
-            .call(
-                d3.drag()
-                    .on('start', function (event, d) {
-                        d._dragFixed = d.fixed;
-                        d3.select(this).attr('cursor', 'grabbing').raise();
-                    })
-                    .on('drag', function (event, d) {
-                        const [mx, my] = d3.pointer(event, g.node());
-                        if (!d._dragFixed) {
-                            d.x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
-                        }
-                        d.y = Math.max(0, Math.min(100, ySc.invert(my)));
-                        renderAll();
-                        triggerUpdate(currentAmbient);
-                    })
-                    .on('end', function (event, d) {
-                        d3.select(this).attr('cursor', d._dragFixed ? 'ns-resize' : 'grab');
-                    })
-            )
-            .merge(sel)
-            .attr('cx', d => xSc(d.x))
-            .attr('cy', d => ySc(d.y));
-
-        sel.exit().remove();
-    });
-}
-
-// ── Node operations ──
-function addNode(ch, x, y) {
-    // Guard: no existing node too close in x
-    if (nodes[ch].some(n => Math.abs(n.x - x) < 2.5)) return;
-    nodes[ch].push(mkNode(x, y));
-    renderAll();
-    triggerUpdate(currentAmbient);
-}
-
-function deleteNode(ch, d) {
-    if (d.fixed) return;
-    nodes[ch] = nodes[ch].filter(n => n !== d);
-    renderAll();
-    triggerUpdate(currentAmbient);
-}
-
-// ── Sample a curve's Y value at data-space X ──
-// Uses SVG getPointAtLength binary search on the rendered path — exact match to visual.
-function sampleAtX(ch, x) {
-    const pathEl = curvePaths[ch] ? curvePaths[ch].node() : null;
-    if (!pathEl) return 50;
-    const total = pathEl.getTotalLength();
-    if (total === 0) return 50;
-
-    const targetX = xSc(x); // SVG coordinate of desired x
-    let lo = 0, hi = total;
-
-    for (let i = 0; i < 52; i++) {
-        const mid = (lo + hi) / 2;
-        if (pathEl.getPointAtLength(mid).x < targetX) lo = mid;
-        else hi = mid;
-    }
-
-    const pt = pathEl.getPointAtLength((lo + hi) / 2);
-    return Math.max(0, Math.min(100, ySc.invert(pt.y)));
-}
-
-// ── Compute RGBL at ambient x, update everything ──
-function triggerUpdate(x) {
-    currentAmbient = Math.max(0, Math.min(100, x));
-
-    const cR = sampleAtX('R', currentAmbient);
-    const cG = sampleAtX('G', currentAmbient);
-    const cB = sampleAtX('B', currentAmbient);
-    const cL = sampleAtX('L', currentAmbient);
-
-    // L is a multiplier for RGB channels
-    const fR = cR * (cL / 100);
-    const fG = cG * (cL / 100);
-    const fB = cB * (cL / 100);
-
-    dispAmb.textContent = Math.round(currentAmbient);
-    dispR.textContent   = Math.round(fR);
-    dispG.textContent   = Math.round(fG);
-    dispB.textContent   = Math.round(fB);
-    dispL.textContent   = Math.round(cL);
-
-    updateEnvironment(currentAmbient, fR, fG, fB, cL);
-}
-
-// ── Overlay interactions ──
-bgRect
-    .on('mousemove', function (event) {
-        const [mx] = d3.pointer(event, g.node());
-        const x = Math.max(0, Math.min(100, xSc.invert(mx)));
-
-        // Crosshair
-        xhLine.style('display', null).attr('x1', mx).attr('y1', 0).attr('x2', mx).attr('y2', H);
-        Object.keys(CHANNELS).forEach(ch => {
-            const y = sampleAtX(ch, x);
-            xhDots[ch].style('display', null).attr('cx', mx).attr('cy', ySc(y));
-        });
-
-        triggerUpdate(x);
-    })
-    .on('mouseleave', function () {
-        xhLine.style('display', 'none');
-        Object.values(xhDots).forEach(d => d.style('display', 'none'));
-    })
-    .on('click', function (event) {
-        if (event.shiftKey) return;
-        const [mx, my] = d3.pointer(event, g.node());
-        const x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
-        const y = Math.max(0,   Math.min(100,  ySc.invert(my)));
-        addNode(activeChannel, x, y);
-    });
-
-// ── Resize observer ──
-new ResizeObserver(() => resize()).observe(wrap);
-
-// ── Boot ──
-// Defer to next frame so wrap has layout dimensions
-requestAnimationFrame(() => {
-    resize();
-    triggerUpdate(50);
-});
-</script>
 </body>
 </html>
