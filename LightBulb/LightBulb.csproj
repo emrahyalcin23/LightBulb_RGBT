@@ -10,6 +10,9 @@
     <AvaloniaResource Include="..\favicon.ico" Link="favicon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="..\RGBL_CurveEditor\RGBL_curve_editor.html" CopyToOutputDirectory="PreserveNewest" Link="RGBL_curve_editor.html" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\LightBulb.Core\LightBulb.Core.csproj" />
     <ProjectReference Include="..\LightBulb.PlatformInterop\LightBulb.PlatformInterop.csproj" />
   </ItemGroup>

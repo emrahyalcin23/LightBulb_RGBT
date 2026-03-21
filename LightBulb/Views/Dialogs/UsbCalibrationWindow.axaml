@@ -294,16 +294,24 @@
                 </StackPanel>
             </Border>
 
-            <!--  Close button  -->
-            <Button
-                HorizontalAlignment="Right"
-                Command="{Binding CloseCommand}"
-                Content="Kapat"
-                Theme="{DynamicResource MaterialOutlinedButton}">
-                <Button.CommandParameter>
-                    <x:Boolean>True</x:Boolean>
-                </Button.CommandParameter>
-            </Button>
+            <!--  Bottom action row  -->
+            <DockPanel LastChildFill="False">
+                <Button
+                    DockPanel.Dock="Left"
+                    Command="{Binding OpenSimulationCommand}"
+                    Content="🎛️ RGBL Simülasyon Aracını Aç"
+                    Theme="{DynamicResource MaterialOutlinedButton}"
+                    ToolTip.Tip="RGBL Eğri Editörü + Simülasyon Odasını tarayıcıda açar" />
+                <Button
+                    DockPanel.Dock="Right"
+                    Command="{Binding CloseCommand}"
+                    Content="Kapat"
+                    Theme="{DynamicResource MaterialOutlinedButton}">
+                    <Button.CommandParameter>
+                        <x:Boolean>True</x:Boolean>
+                    </Button.CommandParameter>
+                </Button>
+            </DockPanel>
 
         </StackPanel>
     </ScrollViewer>

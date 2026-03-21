@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -143,6 +145,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
     public IRelayCommand<CalibrationPointViewModel> RemovePointCommand  { get; }
     public IRelayCommand<CalibrationPointViewModel> CaptureCurrentCommand { get; }
     public IRelayCommand ResetToDefaultCommand { get; }
+    public IRelayCommand OpenSimulationCommand { get; }
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
@@ -171,6 +174,12 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
         );
 
         ResetToDefaultCommand = new RelayCommand(ResetToDefault);
+
+        OpenSimulationCommand = new RelayCommand(() =>
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "RGBL_curve_editor.html");
+            Process.StartShellExecute(path);
+        });
     }
 
     // ── Graph event handlers (called from code-behind) ────────────────────────
