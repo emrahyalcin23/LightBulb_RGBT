@@ -14,68 +14,72 @@ RGBL_CurveEditor/
 
 ## Temel Kural
 > `RGBL_curve_editor.html`, `RGBL_curve_d2_oda_7.html`'deki **tüm orijinal yapıyı** koruyacak.
-> Sadece aşağıdaki 3 değişiklik yapılacak, **başka hiçbir şey değiştirilmeyecek.**
 
 ---
 
 ## Yapılacaklar
 
 ### ✅ Tamamlanan
+
 - Dosyalar `RGBL_CurveEditor/` klasörüne taşındı
 - `RGBL_curve_d2_oda_7.svg` → `RGBL_curve_d2_oda_7.html` olarak yeniden adlandırıldı
 - `PROMPT.md` oluşturuldu (prompt harfi harfine)
-
-### ⏳ DEĞİŞİKLİK 1 — Düzen: İki Panel
-Orijinal tek panel layout → iki sütunlu layout:
-- **Sol panel (yeni):** D3.js RGBL Eğri Editörü
-- **Sağ panel (orijinal):** Mevcut `simulation-container` + `dashboard` aynen korunacak
-- `body` layout: dikey ortalı → `display:flex; flex-direction:row`
-- `simulation-container` ve `dashboard` genişlikleri: sabit px → `width:100%; max-width:Xpx` (responsive, içerik aynı)
-
-### ⏳ DEĞİŞİKLİK 2 — `updateEnvironment()` imzası güncelleme
-**Orijinal:** `updateEnvironment(xRaw, yRaw)` — 2 parametre, 0-255 aralığında
-
-**Yeni:** `updateEnvironment(ambientLight, finalR, finalG, finalB, finalL)` — 5 parametre, 0-100 aralığında
-
-Detaylar:
-- `t_param` / `sensorRatio`: `xRaw / 255` → `ambientLight / 100`
-- Sabit oran RGBL hesabı (`R=y*1.0`, `G=y*0.92`, `B=y*1.05`) **kaldırılacak**
-- Ekran rengi: `rgb(yRaw, yRaw*0.92, yRaw*1.05)` → `rgb(finalR*2.55, finalG*2.55, finalB*2.55)`
-- Ekran glow opaklığı: `(yRaw/255)*0.65` → `(finalL/100)*0.65`
-- `elX.innerText`: artık doğrudan `Math.round(ambientLight)` (zaten 0-100)
-- `elY.innerText`: `R:finalR G:finalG B:finalB L:finalL`
-- `currentX_raw`, `currentY_raw` → `currentAmbient` (0-100)
-- `changeMode()`: `updateEnvironment(currentX_raw, currentY_raw)` → `triggerUpdate(currentAmbient)`
-- `mousemove` listener: **kaldırılacak** (kontrolü D3'e devrettik)
-- Sky/celestial/room/yıldız mantığı: **aynen korunacak**
-
-### ⏳ DEĞİŞİKLİK 3 — D3.js Sol Panel Ekleme
-Prompt teknik gereksinimleri:
-- X ekseni: Ortam Işığı (0-100), Y ekseni: Çıkış (0-100)
-- 4 kanal: R (kırmızı), G (yeşil), B (mavi), L (beyaz, kalın, dashed)
-- Eğri tipi: `d3.curveCatmullRom`
-- Boş yere tıklama → aktif kanala düğüm ekleme
-- Eğriye tıklama → o kanala düğüm ekleme
-- Düğüm sürükleme (x+y serbestçe, 0-100 sınırlı)
-- Sağ tık / Shift+Tık → düğüm silme
-- x=0 ve x=100 düğümleri korumalı (silinemez, x ekseni kilitli)
-- Hover (farenin grafik üzerindeki x konumu) → `updateEnvironment()` anlık tetiklenir
-- `Final_R = Curve_R * (Curve_L / 100)` matematiği
-- D3.js CDN üzerinden dahil edilecek
-- Dark mode tasarım
+- DEĞİŞİKLİK 1 — İki Panel Düzeni (D3 sol panel + simülasyon sağ panel)
+- DEĞİŞİKLİK 2 — `updateEnvironment()` imzası güncellendi (5 parametre, 0-100)
+- DEĞİŞİKLİK 3 — D3.js RGBL Eğri Editörü sol panele eklendi
+- Kalibrasyon penceresine "RGBL Simülasyon Aracını Aç" butonu eklendi (tarayıcıda açma)
 
 ---
 
-## Korunacak Orijinal Yapı (DEĞİŞTİRİLMEYECEK)
-- Tüm CSS class'ları ve CSS variables (`--sky-color`, `--room-brightness`, `--screen-color`, vs.)
-- SVG elemanları ve class isimleri (`.sky`, `.celestial-body`, `.sun-halo`, `.moon-halo`, vs.)
-- `getSkyColorByTime()` ve `getSkyColorBySensor()` fonksiyonları
-- `getCelestialY()`, `getCelestialYSensor()`, `getRoomBrightnessByTime()`, `getRoomBrightnessBySensor()`
-- `smoothStep()` fonksiyonu
-- 24 Saat Döngüsü / Sensör Modu radio toggle
-- Dashboard (info panel, status row, toggle-group)
-- Yıldız `setInterval` animasyonu
-- `generateStars()` fonksiyonu
+### ⏳ GÖREV 4 — Eski HTML'den Yeni HTML'e Geçişteki Eksiklikler
+
+Orijinal `RGBL_curve_d2_oda_7.html`'de çalışan aşağıdaki özellikler `RGBL_curve_editor.html`'e ya hiç taşınmadı ya da kırık durumda:
+
+- **24 Saatlik Gösterim:** Mod radio toggle ("24 Saat Döngüsü" vs "Sensör Modu") seçimi + saat bazlı animasyon akışı
+- **Diğer Dashboard Bilgileri:** `info-panel` içindeki ekran durumu, sensör değeri, zaman göstergeleri — güncel parametrelerle (`ambientLight`, `finalR/G/B/L`) doğru çalışması sağlanacak
+- **Simülasyon Tutarsızlıkları:** Eski HTML'deki sky rengi, celestial body pozisyonu, room brightness hesaplamalarının yeni parametre seti ile uyumu kontrol edilecek
+
+---
+
+### ⏳ GÖREV 5 — Eski Avalonia Kalibrasyon Yapısı Kaldırılacak
+
+HTML ekranı, C# uygulamasının kalibrasyon arayüzünün **tamamen yerini** alacak. Eski yapı silinecek.
+
+#### 5a — Veri Köprüsü (ÖNCELİKLİ)
+
+Eski kalibrasyon verisi `SettingsService.UsbCalibrationPoints` (JSON) üzerinde tutuluyor ve `UsbSensorService` tarafından piecewise linear interpolation ile uygulanıyor. HTML bunu değiştirebilmek için:
+
+- **HTML → Export:** Kullanıcı eğrileri düzenleyip "Kaydet" butonuna bastığında, düğüm verisi bir JSON dosyasına yazılacak (örn. `rgbl_calibration.json`, uygulama dizininde)
+- **C# → Import:** `UsbSensorService` bu JSON dosyasını okuyacak, `UsbCalibrationPoints` benzeri veri yapısına dönüştürecek
+- **localStorage:** HTML, düğüm verilerini `localStorage`'a da kayıt edecek (sayfa kapanıp açıldığında kaybolmasın)
+- **Dosya yolu:** `AppContext.BaseDirectory/rgbl_calibration.json` (build'e Content olarak eklenmiş)
+
+#### 5b — Kaldırılacak / Değiştirilecek Dosyalar
+
+Eski Avalonia kalibrasyon yapısına ait tüm dosyalar:
+
+| Dosya | Yapılacak |
+|-------|-----------|
+| `LightBulb/Models/UsbCalibrationPoint.cs` | Silinecek (yerini JSON model alacak) |
+| `LightBulb/Views/Components/CalibrationCurveControl.cs` | Silinecek (custom Avalonia çizim kontrolü) |
+| `LightBulb/Views/Dialogs/UsbCalibrationWindow.axaml` | Silinecek → sadece "HTML aracını aç" butonu kalacak |
+| `LightBulb/Views/Dialogs/UsbCalibrationWindow.axaml.cs` | Silinecek |
+| `LightBulb/ViewModels/Dialogs/UsbCalibrationViewModel.cs` | Büyük ölçüde sadeleştirilecek (sadece `OpenSimulationCommand` kalacak) |
+| `LightBulb/ViewModels/Components/Settings/UsbSensorSettingsTabViewModel.cs` | Kalibrasyon açma çağrısı gözden geçirilecek |
+| `LightBulb/Services/SettingsService.cs` | `UsbCalibrationPoints` kaldırılacak, `rgbl_calibration.json` okuma eklenecek |
+| `LightBulb/Services/UsbSensorService.cs` | Piecewise interpolation JSON'dan okunacak şekilde güncellencek |
+| `LightBulb/Framework/ViewModelManager.cs` | `UsbCalibrationViewModel` kaydı gözden geçirilecek |
+| `LightBulb/Framework/ViewManager.cs` | `UsbCalibrationWindow` kaydı gözden geçirilecek |
+
+---
+
+### ⏳ GÖREV 6 — HTML Düğüm / Sürükleme Hata Düzeltmeleri
+
+D3.js eğri editöründe tespit edilen bug'lar:
+
+- **Düğüm ekleme hatası:** Boş alana / eğriye tıklayınca düğüm eklenmiyor veya yanlış konuma ekleniyor
+- **Düğüm çıkarma hatası:** Sağ tık / Shift+Tık ile silme çalışmıyor veya silinmemesi gereken düğümleri (x=0, x=100) siliyor
+- **Sürükleme hatası:** Düğüm sürüklenirken koordinat kayması, sınır dışına çıkma, veya x=0/x=100 kilitlemesinin bozulması
 
 ---
 
