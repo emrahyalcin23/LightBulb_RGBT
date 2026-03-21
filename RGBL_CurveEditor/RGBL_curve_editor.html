@@ -325,5 +325,45 @@ html, body {
 <!-- D3 eğri editörü (triggerUpdate, renderAll, düğüm yönetimi) -->
 <script src="d3-editor.js"></script>
 
+<!-- Tanılama: yükleme sorunlarını ekranda göster -->
+<script>
+(function() {
+    var diag = document.createElement('div');
+    diag.id = 'diag-bar';
+    diag.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a0000;color:#ff9999;font-size:11px;padding:4px 10px;z-index:9999;font-family:monospace;';
+    document.body.appendChild(diag);
+
+    function check() {
+        var msgs = [];
+        // D3 yüklendi mi?
+        msgs.push('d3=' + (typeof d3 !== 'undefined' ? '✓' + d3.version : '✗ YOK'));
+        // wrap boyutu
+        var wrap = document.getElementById('d3-wrap');
+        if (wrap) {
+            var r = wrap.getBoundingClientRect();
+            msgs.push('wrap=' + Math.round(r.width) + '×' + Math.round(r.height));
+        } else {
+            msgs.push('wrap=✗ BULUNAMADI');
+        }
+        // SVG var mı?
+        var svg = document.querySelector('#d3-wrap svg');
+        msgs.push('svg=' + (svg ? svg.getAttribute('width') + '×' + svg.getAttribute('height') : '✗ YOK'));
+        // nodes sayısı
+        try { msgs.push('nodes=R' + nodes.R.length + '/G' + nodes.G.length + '/B' + nodes.B.length + '/L' + nodes.L.length); } catch(e) { msgs.push('nodes=✗'); }
+        // xSc
+        try { msgs.push('xSc=' + (typeof xSc === 'function' ? '✓' : '✗')); } catch(e) { msgs.push('xSc=✗'); }
+
+        diag.textContent = '🔍 ' + msgs.join('  |  ');
+
+        // Sorun yoksa 3 saniye sonra gizle
+        if (msgs.every(m => !m.includes('✗'))) {
+            setTimeout(function() { diag.style.display = 'none'; }, 3000);
+        }
+    }
+    setTimeout(check, 500);
+    setTimeout(check, 1500);
+})();
+</script>
+
 </body>
 </html>
