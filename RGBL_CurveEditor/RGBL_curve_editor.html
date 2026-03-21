@@ -323,11 +323,23 @@ html, body {
 
 </div><!-- #app -->
 
+<!-- Hata yakalayıcı (scriptlerden ÖNCE) -->
+<script>
+window._jsErrors = [];
+window.onerror = function(msg, src, line, col) {
+    window._jsErrors.push((src||'?').split('/').pop() + ':' + line + ' ' + msg.substring(0,60));
+};
+window._editorLoaded = false;
+window._editorError  = null;
+</script>
+
 <!-- Simülasyon motoru (updateEnvironment ve yardımcı fonksiyonlar) -->
 <script src="sim-engine.js"></script>
 
 <!-- D3 eğri editörü (triggerUpdate, renderAll, düğüm yönetimi) -->
-<script src="d3-editor.js"></script>
+<script src="d3-editor.js"
+        onerror="window._editorError='LOAD_FAIL'">
+</script>
 
 <!-- Tanılama: yükleme sorunlarını ekranda göster -->
 <script>
@@ -342,6 +354,9 @@ html, body {
         // D3 yüklendi mi?
         msgs.push('d3=' + (typeof d3 !== 'undefined' ? '✓' + d3.version : '✗ YOK'));
         msgs.push('es=' + (window._es !== undefined ? window._es : '✗ editor yüklenmedi'));
+        // Yükleme/syntax hatası
+        if (window._editorError) msgs.push('edErr=' + window._editorError);
+        if (window._jsErrors && window._jsErrors.length) msgs.push('jsErr=' + window._jsErrors.join(' | '));
         // wrap boyutu
         var wrap = document.getElementById('d3-wrap');
         if (wrap) {
