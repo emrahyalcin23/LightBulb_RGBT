@@ -7,7 +7,9 @@
 ```
 RGBL_CurveEditor/
   ├── RGBL_curve_d2_oda_7.html   ← Kullanıcının orijinal çalışan kodu (referans/kaynak)
-  └── RGBL_curve_editor.html     ← Nihai ürün
+  ├── RGBL_curve_editor.html     ← Nihai ürün (ana giriş noktası)
+  ├── sim-engine.js              ← Simülasyon motoru (updateEnvironment, gökyüzü, oda)
+  └── d3-editor.js               ← D3 eğri editörü (düğüm, sürükleme, eğri render)
 ```
 
 ---
@@ -28,16 +30,38 @@ RGBL_CurveEditor/
 - DEĞİŞİKLİK 2 — `updateEnvironment()` imzası güncellendi (5 parametre, 0-100)
 - DEĞİŞİKLİK 3 — D3.js RGBL Eğri Editörü sol panele eklendi
 - Kalibrasyon penceresine "RGBL Simülasyon Aracını Aç" butonu eklendi (tarayıcıda açma)
+- Kod çok dosyalı yapıya bölündü: `sim-engine.js` + `d3-editor.js` + `RGBL_curve_editor.html`
 
 ---
 
-### ⏳ GÖREV 4 — Eski HTML'den Yeni HTML'e Geçişteki Eksiklikler
+### ✅ GÖREV 4 — Eski HTML'den Yeni HTML'e Geçişteki Eksiklikler
 
-Orijinal `RGBL_curve_d2_oda_7.html`'de çalışan aşağıdaki özellikler `RGBL_curve_editor.html`'e ya hiç taşınmadı ya da kırık durumda:
+Orijinal `RGBL_curve_d2_oda_7.html`'de çalışan özellikler `RGBL_curve_editor.html`'e taşındı:
 
-- **24 Saatlik Gösterim:** Mod radio toggle ("24 Saat Döngüsü" vs "Sensör Modu") seçimi + saat bazlı animasyon akışı
-- **Diğer Dashboard Bilgileri:** `info-panel` içindeki ekran durumu, sensör değeri, zaman göstergeleri — güncel parametrelerle (`ambientLight`, `finalR/G/B/L`) doğru çalışması sağlanacak
-- **Simülasyon Tutarsızlıkları:** Eski HTML'deki sky rengi, celestial body pozisyonu, room brightness hesaplamalarının yeni parametre seti ile uyumu kontrol edilecek
+- **24 Saatlik Gösterim:** `sim-engine.js`'e eklendi — mod radio toggle (24 Saat / Sensör), `getSkyColorByTime()`, `smoothStep()`, `getRoomBrightnessByTime()`, saat bazlı celestial animasyon
+- **Dashboard Bilgileri:** Sağ panele mod toggle + `info-panel` (#valX, #valY) eklendi; `updateEnvironment()` her iki modu destekliyor
+- **Simülasyon Tutarsızlıkları:** Gökyüzü rengi, celestial body, room brightness hesapları yeni parametre seti (0-100) ile uyumlu hale getirildi
+
+---
+
+### ⏳ GÖREV 6b — D3 Grafik Render Sorunu
+
+Kod bölümleme sonrası D3 eğri grafikleri ekranda görünmüyor. Olası nedenler:
+
+- **Katman sırası:** `overlayLayer` (bgRect) eğri/düğüm katmanlarının ALTINA alındı (kritik fix ✅). Buna rağmen görünürlük sorunu devam ediyor.
+- **Drag koordinat birimi:** `event.x/y` → `d3.pointer(event, g.node())` olarak geri alındı ✅
+- **Mousemove:** `bgRect.on('mousemove')` → `g.on('mousemove')` olarak taşındı ✅
+- **Kalan sorun:** Grafiklerin (eğriler + grid + düğümler) ekranda görünmemesi — araştırılıp düzeltilecek
+
+---
+
+### ⏳ GÖREV 6 — Orijinal HTML Düğüm / Sürükleme Hata Düzeltmeleri
+
+D3.js eğri editöründe tespit edilen bug'lar:
+
+- **Düğüm ekleme hatası:** Boş alana / eğriye tıklayınca düğüm eklenmiyor veya yanlış konuma ekleniyor
+- **Düğüm çıkarma hatası:** Sağ tık / Shift+Tık ile silme çalışmıyor veya silinmemesi gereken düğümleri (x=0, x=100) siliyor
+- **Sürükleme hatası:** Düğüm sürüklenirken koordinat kayması, sınır dışına çıkma, veya x=0/x=100 kilitlemesinin bozulması
 
 ---
 
@@ -73,17 +97,8 @@ Eski Avalonia kalibrasyon yapısına ait tüm dosyalar:
 
 ---
 
-### ⏳ GÖREV 6 — HTML Düğüm / Sürükleme Hata Düzeltmeleri
-
-D3.js eğri editöründe tespit edilen bug'lar:
-
-- **Düğüm ekleme hatası:** Boş alana / eğriye tıklayınca düğüm eklenmiyor veya yanlış konuma ekleniyor
-- **Düğüm çıkarma hatası:** Sağ tık / Shift+Tık ile silme çalışmıyor veya silinmemesi gereken düğümleri (x=0, x=100) siliyor
-- **Sürükleme hatası:** Düğüm sürüklenirken koordinat kayması, sınır dışına çıkma, veya x=0/x=100 kilitlemesinin bozulması
-
----
-
 ## Notlar
 - Branch: `claude/dal-06-light-sensor-control-oo4Qw`
 - Başka branch'e push YASAK
 - Orijinal dosya (`RGBL_curve_d2_oda_7.html`) referans olarak korunacak, silinmeyecek
+- JS dosyaları (`sim-engine.js`, `d3-editor.js`) HTML ile aynı dizinde olmalı
