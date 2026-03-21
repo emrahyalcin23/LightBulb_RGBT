@@ -4,9 +4,9 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const CHANNELS = {
-    R: { color: '#f87171', dashed: false, width: 2 },
-    G: { color: '#4ade80', dashed: false, width: 2 },
-    B: { color: '#60a5fa', dashed: false, width: 2 },
+    R: { color: '#f87171', dashed: false, width: 2   },
+    G: { color: '#4ade80', dashed: false, width: 2   },
+    B: { color: '#60a5fa', dashed: false, width: 2   },
     L: { color: '#e2e8f0', dashed: true,  width: 3.5 },
 };
 
@@ -23,11 +23,8 @@ function defaultNodes() {
     };
 }
 
-let nodes         = loadFromLocalStorage() || defaultNodes();
-let activeChannel = 'L';
-let currentAmbient = 50;
-
 // ── localStorage kalıcılık ──
+// LS_KEY'i nodes'tan ÖNCE tanımla (temporal dead zone sorunu önlenir)
 const LS_KEY = 'rgbl_calibration';
 
 function saveToLocalStorage() {
@@ -67,6 +64,11 @@ function exportJSON() {
     URL.revokeObjectURL(url);
 }
 
+// ── State ──
+let nodes          = loadFromLocalStorage() || defaultNodes();
+let activeChannel  = 'L';
+let currentAmbient = 50;
+
 // ── Değer gösterge chip'leri ──
 const dispAmb = document.getElementById('disp-amb');
 const dispR   = document.getElementById('disp-r');
@@ -75,11 +77,13 @@ const dispB   = document.getElementById('disp-b');
 const dispL   = document.getElementById('disp-l');
 
 // ── Kanal butonları ──
+// Aktif kanal değişince renderAll() çağrılır; böylece eğri/düğüm vurgusu güncellenir.
 document.querySelectorAll('.ch-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         activeChannel = btn.dataset.ch;
         document.querySelectorAll('.ch-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        renderAll();          // ← aktif kanalı vurgulamak için şart
     });
 });
 
@@ -111,11 +115,11 @@ const g      = d3svg.append('g').attr('transform', `translate(${margin.left},${m
 let W, H, xSc, ySc;
 
 // ── KATMAN SIRASI (kritik — bgRect eğri/düğümlerin ALTINDA olmalı) ──
-const gridLayer  = g.append('g').attr('class', 'grid-layer');
+const gridLayer    = g.append('g').attr('class', 'grid-layer');
 
 // overlayLayer (bgRect) önce ekleniyor → eğri ve düğümler üstte kalıyor
 const overlayLayer = g.append('g').attr('class', 'overlay-layer');
-const bgRect = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
+const bgRect       = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
 
 const curveLayer = g.append('g').attr('class', 'curve-layer');
 const nodeLayer  = g.append('g').attr('class', 'node-layer');
@@ -208,9 +212,13 @@ const lineGen = d3.line()
 const curvePaths = {}; // ch → d3 selection
 
 function renderAll() {
+    // Ölçekler henüz hazır değilse çizme (resize() öncesi çağrı koruması)
+    if (!xSc || !ySc) return;
+
     ['R', 'G', 'B', 'L'].forEach(ch => {
-        const cfg = CHANNELS[ch];
-        const pts = [...nodes[ch]].sort((a, b) => a.x - b.x);
+        const cfg    = CHANNELS[ch];
+        const isActive = ch === activeChannel;
+        const pts    = [...nodes[ch]].sort((a, b) => a.x - b.x);
 
         // ── Eğri ──
         if (!curvePaths[ch]) {
@@ -221,23 +229,29 @@ function renderAll() {
                 .attr('stroke-width', cfg.width)
                 .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
                 .attr('stroke-linecap', 'round')
-                .attr('opacity', 0.85)
                 .style('cursor', 'pointer')
                 // Eğriye tıklama → o kanala düğüm ekle
-                // NOT: bgRect artık ALTINDA olduğu için bu handler'a event ulaşır
                 .on('click', function (event) {
                     if (event.shiftKey) return;
                     const [mx] = d3.pointer(event, g.node());
                     const dx   = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
                     const dy   = sampleAtX(ch, dx);
                     addNode(ch, dx, dy);
+                    // Tıklanan eğrinin kanalını aktif yap
                     activeChannel = ch;
                     document.querySelectorAll('.ch-btn').forEach(b => {
                         b.classList.toggle('active', b.dataset.ch === ch);
                     });
+                    renderAll();
                 });
         }
-        curvePaths[ch].datum(pts).attr('d', lineGen(pts));
+
+        // Aktif kanal: tam görünür, pasif: soluk
+        curvePaths[ch]
+            .datum(pts)
+            .attr('d', lineGen(pts))
+            .attr('opacity', isActive ? 0.92 : 0.18)
+            .attr('stroke-width', isActive ? cfg.width + (ch === 'L' ? 0.5 : 0.5) : cfg.width);
 
         // ── Düğümler (D3 enter-update-exit) ──
         const sel = nodeLayer.selectAll(`.nd-${ch}`)
@@ -249,16 +263,16 @@ function renderAll() {
             .attr('fill', cfg.color)
             .attr('stroke', '#080c18')
             .attr('stroke-width', 2)
-            .attr('cursor', d => d.fixed ? 'ns-resize' : 'grab')
             // Sağ tık → sil
             .on('contextmenu', (event, d) => {
                 event.preventDefault();
+                event.stopPropagation();
                 deleteNode(ch, d);
             })
             // Shift+Tık → sil
             .on('click', (event, d) => {
                 if (event.shiftKey) {
-                    event.stopPropagation(); // bgRect'e ulaşmasın
+                    event.stopPropagation();
                     deleteNode(ch, d);
                 }
             })
@@ -267,11 +281,16 @@ function renderAll() {
                     .on('start', function (event, d) {
                         d._dragFixed = d.fixed;
                         d3.select(this).attr('cursor', 'grabbing').raise();
+                        // Sürüklenen kanalı aktif yap
+                        if (activeChannel !== ch) {
+                            activeChannel = ch;
+                            document.querySelectorAll('.ch-btn').forEach(b => {
+                                b.classList.toggle('active', b.dataset.ch === ch);
+                            });
+                        }
                     })
-                    // d3.pointer(event, g.node()) — drag event'inden sourceEvent çıkarıp
-                    // g'nin koordinat uzayına göre piksel konumu hesaplar.
-                    // event.x/event.y KULLANILMAZ: D3 drag event.x = subject.x(data) + delta_px
-                    // yani data birimi ile piksel birimi karışır, koordinat bozulur.
+                    // d3.pointer(event, g.node()) — drag event.x/event.y KULLANILMAZ:
+                    // D3 drag event.x = subject.x(data-space) + delta_px → birim karışması.
                     .on('drag', function (event, d) {
                         const [mx, my] = d3.pointer(event, g.node());
                         if (!d._dragFixed) {
@@ -287,10 +306,14 @@ function renderAll() {
                     })
             );
 
-        // Hem yeni hem var olan düğümlerin konumunu güncelle
+        // Hem yeni hem var olan düğümlerin konumu ve görünümü
         entered.merge(sel)
             .attr('cx', d => xSc(d.x))
-            .attr('cy', d => ySc(d.y));
+            .attr('cy', d => ySc(d.y))
+            // Aktif kanalda: normal düğümler; pasif kanalda: gizli
+            .style('display', isActive ? null : 'none')
+            .attr('cursor', d => d.fixed ? 'ns-resize' : 'grab')
+            .attr('pointer-events', isActive ? null : 'none');
 
         sel.exit().remove();
     });
@@ -360,7 +383,7 @@ function triggerUpdate(x) {
 //  FARE ETKILEŞIMI
 // ═══════════════════════════════════════════════════════════════════
 
-// FIX: Mousemove g'ye bağlandı (bgRect yerine).
+// Mousemove g'ye bağlandı (bgRect yerine).
 // Böylece cursor eğri veya düğüm üzerindeyken de crosshair güncellenir.
 g.on('mousemove', function (event) {
     if (!xSc || !ySc) return;
@@ -385,7 +408,7 @@ g.on('mousemove', function (event) {
 });
 
 // Boş alana tıklama → aktif kanala düğüm ekle
-// (bgRect artık ALTINDA olduğu için sadece eğri/düğüm olmayan alanlarda tetiklenir)
+// (bgRect ALTINDA olduğu için sadece eğri/düğüm olmayan alanlarda tetiklenir)
 bgRect.on('click', function (event) {
     if (event.shiftKey) return;
     const [mx, my] = d3.pointer(event, g.node());
