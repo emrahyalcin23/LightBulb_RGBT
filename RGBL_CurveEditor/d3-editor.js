@@ -224,13 +224,16 @@ function renderAll() {
                         d._dragFixed = d.fixed;
                         d3.select(this).attr('cursor', 'grabbing').raise();
                     })
-                    // FIX: d3.pointer(dragEvent) yerine event.x / event.y kullan
-                    // (drag event'in koordinatları zaten g'nin koordinat uzayındadır)
+                    // d3.pointer(event, g.node()) — drag event'inden sourceEvent çıkarıp
+                    // g'nin koordinat uzayına göre piksel konumu hesaplar.
+                    // event.x/event.y KULLANILMAZ: D3 drag event.x = subject.x(data) + delta_px
+                    // yani data birimi ile piksel birimi karışır, koordinat bozulur.
                     .on('drag', function (event, d) {
+                        const [mx, my] = d3.pointer(event, g.node());
                         if (!d._dragFixed) {
-                            d.x = Math.max(0.5, Math.min(99.5, xSc.invert(event.x)));
+                            d.x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
                         }
-                        d.y = Math.max(0, Math.min(100, ySc.invert(event.y)));
+                        d.y = Math.max(0, Math.min(100, ySc.invert(my)));
                         renderAll();
                         triggerUpdate(currentAmbient);
                     })
