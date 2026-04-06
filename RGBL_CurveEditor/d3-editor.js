@@ -132,8 +132,9 @@ const overlayLayer = g.append('g').attr('class', 'overlay-layer');
 const bgRect       = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
 
 const curveLayer     = g.append('g').attr('class', 'curve-layer');
-const timeCurveLayer = g.append('g').attr('class', 'time-curve-layer');
-const nodeLayer      = g.append('g').attr('class', 'node-layer');
+const timeCurveLayer     = g.append('g').attr('class', 'time-curve-layer');
+const projectedNodeLayer = g.append('g').attr('class', 'proj-node-layer');
+const nodeLayer          = g.append('g').attr('class', 'node-layer');
 const crossLayer = g.append('g').attr('class', 'crosshair').attr('pointer-events', 'none');
 
 // ── Crosshair elemanları ──
@@ -344,8 +345,14 @@ function renderAll() {
             curvePaths[ch].attr('opacity', isTimeMode ? 0 : (ch === activeChannel ? 0.92 : 0.18));
         }
     });
+    if (isTimeMode) nodeLayer.selectAll('circle').style('display', 'none');
     timeCurveLayer.style('display', isTimeMode ? null : 'none');
-    if (isTimeMode) renderTimeCurves();
+    if (isTimeMode) {
+        renderTimeCurves();
+        drawProjectedNodes();
+    } else {
+        projectedNodeLayer.selectAll('*').remove();
+    }
 }
 
 // ── Saatlik modda türetilmiş Gaussian eğrilerini çizer ──
@@ -374,6 +381,38 @@ function renderTimeCurves() {
             .attr('stroke-width', isActive ? cfg.width + 0.5 : cfg.width)
             .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
             .attr('opacity', isActive ? 0.92 : 0.18);
+    });
+}
+
+// ── Saatlik modda kontrol düğümlerini Gaussian eğrisi üzerine yansıtır ──
+// Her düğüm (ax, ay) → timeToAmbient(t)=ax denklemini çöz → t=50±dt
+function drawProjectedNodes() {
+    projectedNodeLayer.selectAll('*').remove();
+    const ch    = activeChannel;
+    const cfg   = CHANNELS[ch];
+    const sigma = 12.5;
+
+    nodes[ch].forEach(nd => {
+        const val = (nd.x - 3) / 97;              // timeToAmbient tersine çevir
+        if (val <= 0 || val > 1) return;           // çözüm yok (gece minimum)
+
+        const dt    = sigma * Math.sqrt(-2 * Math.log(Math.min(val, 1)));
+        const times = dt < 0.5 ? [50] : [50 - dt, 50 + dt];
+
+        times.forEach(t => {
+            if (t < 0 || t > 100) return;
+            const y = sampleAtX(ch, nd.x);         // ≈ nd.y (Catmull-Rom noktadan geçer)
+
+            projectedNodeLayer.append('circle')
+                .attr('cx', xSc(t))
+                .attr('cy', ySc(y))
+                .attr('r', 6)
+                .attr('fill', 'none')
+                .attr('stroke', cfg.color)
+                .attr('stroke-width', 2)
+                .attr('opacity', 0.7)
+                .attr('pointer-events', 'none');
+        });
     });
 }
 
