@@ -329,16 +329,671 @@ window._jsErrors = [];
 window.onerror = function(msg, src, line, col) {
     window._jsErrors.push((src||'?').split('/').pop() + ':' + line + ' ' + msg.substring(0,60));
 };
-window._editorLoaded = false;
-window._editorError  = null;
 </script>
 
-<!-- Simülasyon motoru (updateEnvironment ve yardımcı fonksiyonlar) -->
-<script src="sim-engine.js"></script>
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SIM-ENGINE — inline gömüldü (harici dosya yükleme sorunu önlenir) -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  SIM-ENGINE.JS — Simülasyon Motoru
+//  updateEnvironment() dışarıdan (d3-editor.js) çağrılır.
+// ═══════════════════════════════════════════════════════════════════
 
-<!-- D3 eğri editörü (triggerUpdate, renderAll, düğüm yönetimi) -->
-<script src="d3-editor.js"
-        onerror="window._editorError='LOAD_FAIL'">
+const simEl = {
+    sky:           document.getElementById('simSky'),
+    celestial:     document.getElementById('celestial'),
+    sunHalo:       document.getElementById('sunHalo'),
+    moonHalo:      document.getElementById('moonHalo'),
+    starsGroup:    document.getElementById('starsGroup'),
+    monitorScreen: document.getElementById('monitorScreen'),
+    screenGlow:    document.getElementById('screenGlow'),
+    roomOverlay:   document.getElementById('roomOverlay'),
+    status:        document.getElementById('sim-status'),
+    valX:          document.getElementById('valX'),
+    valY:          document.getElementById('valY'),
+};
+
+// ── Yıldız oluşturma ──
+(function () {
+    for (let i = 0; i < 160; i++) {
+        const s = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        s.setAttribute('cx', 70 + Math.random() * 260);
+        s.setAttribute('cy', 70 + Math.random() * 320);
+        s.setAttribute('r',  1 + Math.random() * 2.2);
+        s.style.fill       = '#fff9e0';
+        s.style.opacity    = '0';
+        s.style.transition = 'opacity 0.4s ease-out';
+        simEl.starsGroup.appendChild(s);
+    }
+})();
+
+let _starOpacity = 0;
+
+setInterval(() => {
+    const stars = simEl.starsGroup.querySelectorAll('circle');
+    if (_starOpacity > 0.05) {
+        stars.forEach(s => {
+            s.style.opacity = Math.min(0.95, _starOpacity * (0.7 + Math.random() * 0.6));
+        });
+    } else {
+        stars.forEach(s => { s.style.opacity = '0'; });
+    }
+}, 700);
+
+// ── Yardımcı fonksiyonlar ──
+
+function smoothStep(t) { return t * t * (3 - 2 * t); }
+
+/**
+ * 24 Saat gökyüzü rengi — t: 0 (gece yarısı) → 1 (24 saat sonra gece yarısı)
+ */
+function getSkyColorByTime(t) {
+    const night1  = { r: 2,   g: 6,   b: 23  };
+    const predawn = { r: 15,  g: 30,  b: 60  };
+    const morning = { r: 80,  g: 140, b: 210 };
+    const day     = { r: 110, g: 195, b: 232 };
+    const dusk    = { r: 180, g: 95,  b: 43  };
+    const night2  = { r: 8,   g: 12,  b: 38  };
+    let r, g, b;
+    if (t < 0.2) {
+        const p = smoothStep(t / 0.2);
+        r = night1.r + (predawn.r - night1.r) * p;
+        g = night1.g + (predawn.g - night1.g) * p;
+        b = night1.b + (predawn.b - night1.b) * p;
+    } else if (t < 0.35) {
+        const p = smoothStep((t - 0.2) / 0.15);
+        r = predawn.r + (morning.r - predawn.r) * p;
+        g = predawn.g + (morning.g - predawn.g) * p;
+        b = predawn.b + (morning.b - predawn.b) * p;
+    } else if (t < 0.65) {
+        const p = (t - 0.35) / 0.3;
+        const intensity = 1 - Math.abs(p - 0.5) * 0.3;
+        r = Math.min(245, day.r * (0.9 + intensity * 0.2));
+        g = Math.min(235, day.g * (0.9 + intensity * 0.2));
+        b = Math.min(250, day.b * (1 + intensity * 0.1));
+    } else if (t < 0.8) {
+        const p = smoothStep((t - 0.65) / 0.15);
+        r = day.r + (dusk.r - day.r) * p;
+        g = day.g + (dusk.g - day.g) * p;
+        b = day.b + (dusk.b - day.b) * p;
+    } else {
+        const p = smoothStep((t - 0.8) / 0.2);
+        r = dusk.r + (night2.r - dusk.r) * p;
+        g = dusk.g + (night2.g - dusk.g) * p;
+        b = dusk.b + (night2.b - dusk.b) * p;
+    }
+    return `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+}
+
+/**
+ * Sensör gökyüzü rengi — ratio: 0-1
+ */
+function getSkyColorBySensor(ratio) {
+    const dark   = { r: 11,  g: 20,  b: 40  };
+    const bright = { r: 192, g: 224, b: 255 };
+    const t = Math.pow(Math.sin(ratio * Math.PI / 2), 1.2);
+    return `rgb(${Math.floor(dark.r + (bright.r - dark.r) * t)},` +
+               `${Math.floor(dark.g + (bright.g - dark.g) * t)},` +
+               `${Math.floor(dark.b + (bright.b - dark.b) * t)})`;
+}
+
+function getCelestialY_time(t)   { return 360 - 265 * Math.sin(Math.PI * t); }
+function getCelestialY_sensor(r) { return 360 - 265 * r; }
+function getRoomBrightnessByTime(t)   { return 0.12 + Math.sin(Math.PI * t) * 0.78; }
+function getRoomBrightnessBySensor(r) { return 0.1  + Math.pow(r, 1.2) * 0.85; }
+
+/**
+ * updateEnvironment — d3-editor.js tarafından çağrılır.
+ * @param {number} ambientLight  0-100  (sensör değeri veya zaman ekseni)
+ * @param {number} finalR        0-100  (R × L/100)
+ * @param {number} finalG        0-100
+ * @param {number} finalB        0-100
+ * @param {number} finalL        0-100  (master luminance)
+ */
+function updateEnvironment(ambientLight, finalR, finalG, finalB, finalL) {
+    const mode  = document.querySelector('input[name="simMode"]:checked').value;
+    const ratio = Math.max(0, Math.min(1, ambientLight / 100));
+
+    let skyColor, roomBright, celestialY, celestialX, celestialColor, timeLabel;
+    let isDayMode;
+
+    if (mode === 'time') {
+        // 0-100 → 0h-24h
+        const t       = ratio;
+        const hourVal = t * 24;
+        const hh      = Math.floor(hourVal).toString().padStart(2, '0');
+        const mm      = Math.floor((hourVal % 1) * 60).toString().padStart(2, '0');
+        const prefix  = `${hh}:${mm} — `;
+
+        if      (hourVal < 4)    timeLabel = prefix + '🌌 Gece Yarısı';
+        else if (hourVal < 6)    timeLabel = prefix + '🌠 Sabaha Karşı';
+        else if (hourVal < 9)    timeLabel = prefix + '🌄 Sabah';
+        else if (hourVal < 11.5) timeLabel = prefix + '🌤️ Kuşluk';
+        else if (hourVal < 13.5) timeLabel = prefix + '🔆 Tam Öğlen';
+        else if (hourVal < 16.5) timeLabel = prefix + '☀️ Öğleden Sonra';
+        else if (hourVal < 19)   timeLabel = prefix + '🌅 Akşamüstü';
+        else if (hourVal < 21)   timeLabel = prefix + '🌆 Gün Batımı';
+        else                     timeLabel = prefix + '🌙 Gece';
+
+        skyColor   = getSkyColorByTime(t);
+        roomBright = getRoomBrightnessByTime(t);
+        celestialY = getCelestialY_time(t);
+        celestialX = 200 - 110 * Math.cos(Math.PI * t);
+        isDayMode  = Math.sin(Math.PI * t) > 0.1;
+
+        if (isDayMode) {
+            const er = t < 0.5 ? 0 : smoothStep((t - 0.5) / 0.5);
+            celestialColor = `rgb(255,${Math.floor(230 - 60 * er)},${Math.floor(150 - 50 * er)})`;
+        } else {
+            celestialColor = 'rgb(230,240,255)';
+        }
+
+        _starOpacity = Math.min(0.96, Math.pow(Math.max(0, 1 - Math.sin(Math.PI * t) * 1.4), 1.5) * 0.9);
+
+        if (simEl.valX) simEl.valX.textContent = `${hh}:${mm}`;
+    } else {
+        // Sensör modu
+        if      (ratio > 0.9) timeLabel = '🔆 Çok Aydınlık';
+        else if (ratio > 0.7) timeLabel = '☀️ Aydınlık';
+        else if (ratio > 0.5) timeLabel = '🌤️ Normal';
+        else if (ratio > 0.3) timeLabel = '🌅 Loş';
+        else if (ratio > 0.1) timeLabel = '🌆 Alacakaranlık';
+        else                  timeLabel = '🌙 Karanlık';
+
+        skyColor   = getSkyColorBySensor(ratio);
+        roomBright = getRoomBrightnessBySensor(ratio);
+        celestialY = getCelestialY_sensor(ratio);
+        celestialX = 200 - 110 * Math.cos(Math.PI * ratio);
+        isDayMode  = ratio > 0.4;
+
+        if (isDayMode) {
+            const warm = Math.min(1, (ratio - 0.4) / 0.6);
+            celestialColor = `rgb(255,${Math.floor(170 + warm * 85)},${Math.floor(80 + warm * 120)})`;
+        } else {
+            celestialColor = '#ccd9ff';
+        }
+
+        _starOpacity = Math.min(0.96, Math.pow(Math.max(0, 1 - ratio * 1.3), 1.5) * 0.9);
+
+        if (simEl.valX) simEl.valX.textContent = Math.round(ambientLight);
+    }
+
+    // ── Gökyüzü ──
+    simEl.sky.style.fill = skyColor;
+
+    // ── Oda karartma ──
+    simEl.roomOverlay.style.opacity = Math.max(0, 1 - roomBright);
+
+    // ── Gök cismi ──
+    simEl.celestial.setAttribute('cx', celestialX);
+    simEl.celestial.setAttribute('cy', celestialY);
+    simEl.celestial.setAttribute('r',  isDayMode ? 40 : 30);
+    simEl.celestial.style.fill = celestialColor;
+
+    simEl.sunHalo.setAttribute('cx', celestialX);
+    simEl.sunHalo.setAttribute('cy', celestialY);
+    simEl.sunHalo.setAttribute('opacity', isDayMode ? 0.6 : 0);
+
+    simEl.moonHalo.setAttribute('cx', celestialX);
+    simEl.moonHalo.setAttribute('cy', celestialY);
+    simEl.moonHalo.setAttribute('opacity', isDayMode ? 0 : 0.6);
+
+    // ── Ekran rengi ──
+    const sR = Math.round(finalR * 2.55);
+    const sG = Math.round(finalG * 2.55);
+    const sB = Math.round(finalB * 2.55);
+    const scr = `rgb(${sR},${sG},${sB})`;
+    simEl.monitorScreen.style.fill = scr;
+    simEl.screenGlow.style.fill    = scr;
+    simEl.screenGlow.style.opacity = (finalL / 100) * 0.65;
+
+    // ── Durum etiketleri ──
+    if (simEl.status) simEl.status.textContent = timeLabel;
+    if (simEl.valY)   simEl.valY.textContent   =
+        `R:${Math.round(finalR)} G:${Math.round(finalG)} B:${Math.round(finalB)} L:${Math.round(finalL)}`;
+}
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- D3-EDITOR — inline gömüldü (harici dosya yükleme sorunu önlenir)  -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  D3-EDITOR.JS — RGBL Eğri Editörü
+//  Gereksinim: sim-engine.js önceden yüklenmiş olmalı.
+// ═══════════════════════════════════════════════════════════════════
+window._es = 1; // adım 1: script başladı
+
+const CHANNELS = {
+    R: { color: '#f87171', dashed: false, width: 2   },
+    G: { color: '#4ade80', dashed: false, width: 2   },
+    B: { color: '#60a5fa', dashed: false, width: 2   },
+    L: { color: '#e2e8f0', dashed: true,  width: 3.5 },
+};
+
+// ── Düğüm yönetimi ──
+let _nid = 0;
+function mkNode(x, y, fixed = false) { return { id: ++_nid, x, y, fixed }; }
+
+function defaultNodes() {
+    return {
+        R: [mkNode(0, 20, true), mkNode(100, 88, true)],
+        G: [mkNode(0, 15, true), mkNode(100, 82, true)],
+        B: [mkNode(0, 28, true), mkNode(100, 68, true)],
+        L: [mkNode(0, 10, true), mkNode(50, 55), mkNode(100, 95, true)],
+    };
+}
+
+// ── localStorage kalıcılık ──
+// LS_KEY'i nodes'tan ÖNCE tanımla (temporal dead zone sorunu önlenir)
+const LS_KEY = 'rgbl_calibration';
+
+function saveToLocalStorage() {
+    const data = {};
+    Object.keys(nodes).forEach(ch => {
+        data[ch] = nodes[ch].map(n => ({ x: n.x, y: n.y, fixed: n.fixed }));
+    });
+    try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadFromLocalStorage() {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        const result = {};
+        ['R', 'G', 'B', 'L'].forEach(ch => {
+            if (data[ch] && Array.isArray(data[ch])) {
+                result[ch] = data[ch].map(n => mkNode(n.x, n.y, !!n.fixed));
+            }
+        });
+        if (['R', 'G', 'B', 'L'].every(ch => result[ch] && result[ch].length >= 2)) return result;
+    } catch(e) {}
+    return null;
+}
+
+function exportJSON() {
+    const data = { channels: {} };
+    Object.keys(nodes).forEach(ch => {
+        data.channels[ch] = [...nodes[ch]].sort((a, b) => a.x - b.x)
+            .map(n => ({ x: Math.round(n.x * 10) / 10, y: Math.round(n.y * 10) / 10, fixed: n.fixed }));
+    });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'rgbl_calibration.json'; a.click();
+    URL.revokeObjectURL(url);
+}
+
+window._es = 2; // adım 2: fonksiyon tanımları OK
+// ── State ──
+let nodes          = loadFromLocalStorage() || defaultNodes();
+let activeChannel  = 'L';
+let currentAmbient = 50;
+
+// ── Değer gösterge chip'leri ──
+const dispAmb = document.getElementById('disp-amb');
+const dispR   = document.getElementById('disp-r');
+const dispG   = document.getElementById('disp-g');
+const dispB   = document.getElementById('disp-b');
+const dispL   = document.getElementById('disp-l');
+
+window._es = 3; // adım 3: state & disp OK
+// ── Kanal butonları ──
+// Aktif kanal değişince renderAll() çağrılır; böylece eğri/düğüm vurgusu güncellenir.
+document.querySelectorAll('.ch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        activeChannel = btn.dataset.ch;
+        document.querySelectorAll('.ch-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderAll();          // ← aktif kanalı vurgulamak için şart
+    });
+});
+
+// ── Mod değişimi (radio) ──
+document.querySelectorAll('input[name="simMode"]').forEach(r => {
+    r.addEventListener('change', () => triggerUpdate(currentAmbient));
+});
+
+// ── JSON Dışa Aktar ──
+document.getElementById('export-btn').addEventListener('click', () => exportJSON());
+
+// ── Sıfırla ──
+document.getElementById('reset-btn').addEventListener('click', () => {
+    nodes = defaultNodes();
+    saveToLocalStorage();
+    renderAll();
+    triggerUpdate(currentAmbient);
+});
+
+window._es = 4; // adım 4: event listener'lar OK
+// ═══════════════════════════════════════════════════════════════════
+//  D3 KURULUMU
+// ═══════════════════════════════════════════════════════════════════
+
+const margin = { top: 28, right: 20, bottom: 44, left: 50 };
+const wrap   = document.getElementById('d3-wrap');
+window._es = 5; // adım 5: wrap alındı
+const d3svg  = d3.select('#d3-wrap').append('svg');
+window._es = 6; // adım 6: SVG oluşturuldu
+const g      = d3svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+let W, H, xSc, ySc;
+
+// ── KATMAN SIRASI (kritik — bgRect eğri/düğümlerin ALTINDA olmalı) ──
+const gridLayer    = g.append('g').attr('class', 'grid-layer');
+
+// overlayLayer (bgRect) önce ekleniyor → eğri ve düğümler üstte kalıyor
+const overlayLayer = g.append('g').attr('class', 'overlay-layer');
+const bgRect       = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
+
+const curveLayer = g.append('g').attr('class', 'curve-layer');
+const nodeLayer  = g.append('g').attr('class', 'node-layer');
+const crossLayer = g.append('g').attr('class', 'crosshair').attr('pointer-events', 'none');
+
+// ── Crosshair elemanları ──
+const xhLine = crossLayer.append('line')
+    .attr('stroke', 'rgba(255,255,255,0.22)')
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '4,3')
+    .style('display', 'none');
+
+const xhDots = {};
+Object.keys(CHANNELS).forEach(ch => {
+    xhDots[ch] = crossLayer.append('circle')
+        .attr('r', 4.5)
+        .attr('fill', CHANNELS[ch].color)
+        .attr('stroke', '#080c18').attr('stroke-width', 1.5)
+        .style('display', 'none');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  BOYUTLANDIRMA & EKSENLER
+// ═══════════════════════════════════════════════════════════════════
+
+function resize() {
+    const r = wrap.getBoundingClientRect();
+    W = r.width  - margin.left - margin.right;
+    H = r.height - margin.top  - margin.bottom;
+    if (W <= 0 || H <= 0) return;
+    d3svg.attr('width', r.width).attr('height', r.height);
+    xSc = d3.scaleLinear().domain([0, 100]).range([0, W]);
+    ySc = d3.scaleLinear().domain([0, 100]).range([H, 0]);
+    bgRect.attr('width', W).attr('height', H);
+    buildAxes();
+    renderAll();
+}
+
+function buildAxes() {
+    gridLayer.selectAll('*').remove();
+    g.selectAll('.ax-x,.ax-y,.ax-lbl').remove();
+
+    gridLayer.append('g')
+        .call(d3.axisBottom(xSc).tickSize(-H).tickValues(d3.range(0, 101, 10)).tickFormat(''))
+        .attr('transform', `translate(0,${H})`)
+        .call(gg => { gg.select('.domain').remove(); gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.055)'); });
+
+    gridLayer.append('g')
+        .call(d3.axisLeft(ySc).tickSize(-W).tickValues(d3.range(0, 101, 10)).tickFormat(''))
+        .call(gg => { gg.select('.domain').remove(); gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.055)'); });
+
+    g.append('g').attr('class', 'ax-x')
+        .attr('transform', `translate(0,${H})`)
+        .call(d3.axisBottom(xSc).tickValues(d3.range(0, 101, 20)))
+        .call(gg => {
+            gg.select('.domain').attr('stroke', 'rgba(255,255,255,0.18)');
+            gg.selectAll('text').attr('fill', '#4a6080').attr('font-size', '10px');
+            gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.12)');
+        });
+
+    g.append('g').attr('class', 'ax-y')
+        .call(d3.axisLeft(ySc).tickValues(d3.range(0, 101, 20)))
+        .call(gg => {
+            gg.select('.domain').attr('stroke', 'rgba(255,255,255,0.18)');
+            gg.selectAll('text').attr('fill', '#4a6080').attr('font-size', '10px');
+            gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.12)');
+        });
+
+    g.append('text').attr('class', 'ax-lbl')
+        .attr('x', W / 2).attr('y', H + 36)
+        .attr('text-anchor', 'middle').attr('fill', '#3a5a88').attr('font-size', '10px')
+        .text('Ortam Işığı (0 – 100)');
+
+    g.append('text').attr('class', 'ax-lbl')
+        .attr('transform', 'rotate(-90)')
+        .attr('x', -H / 2).attr('y', -38)
+        .attr('text-anchor', 'middle').attr('fill', '#3a5a88').attr('font-size', '10px')
+        .text('Çıkış (0 – 100)');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EĞRİ & DÜĞÜM RENDER
+// ═══════════════════════════════════════════════════════════════════
+
+const lineGen = d3.line()
+    .x(d => xSc(d.x))
+    .y(d => ySc(d.y))
+    .curve(d3.curveCatmullRom.alpha(0));
+
+const curvePaths = {}; // ch → d3 selection
+
+function renderAll() {
+    // Ölçekler henüz hazır değilse çizme (resize() öncesi çağrı koruması)
+    if (!xSc || !ySc) return;
+
+    ['R', 'G', 'B', 'L'].forEach(ch => {
+        const cfg    = CHANNELS[ch];
+        const isActive = ch === activeChannel;
+        const pts    = [...nodes[ch]].sort((a, b) => a.x - b.x);
+
+        // ── Eğri ──
+        if (!curvePaths[ch]) {
+            curvePaths[ch] = curveLayer.append('path')
+                .attr('class', `curve-${ch}`)
+                .attr('fill', 'none')
+                .attr('stroke', cfg.color)
+                .attr('stroke-width', cfg.width)
+                .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
+                .attr('stroke-linecap', 'round')
+                .style('cursor', 'pointer')
+                // Eğriye tıklama → o kanala düğüm ekle
+                .on('click', function (event) {
+                    if (event.shiftKey) return;
+                    const [mx] = d3.pointer(event, g.node());
+                    const dx   = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
+                    const dy   = sampleAtX(ch, dx);
+                    addNode(ch, dx, dy);
+                    // Tıklanan eğrinin kanalını aktif yap
+                    activeChannel = ch;
+                    document.querySelectorAll('.ch-btn').forEach(b => {
+                        b.classList.toggle('active', b.dataset.ch === ch);
+                    });
+                    renderAll();
+                });
+        }
+
+        // Aktif kanal: tam görünür, pasif: soluk
+        curvePaths[ch]
+            .datum(pts)
+            .attr('d', lineGen(pts))
+            .attr('opacity', isActive ? 0.92 : 0.18)
+            .attr('stroke-width', isActive ? cfg.width + (ch === 'L' ? 0.5 : 0.5) : cfg.width);
+
+        // ── Düğümler (D3 enter-update-exit) ──
+        const sel = nodeLayer.selectAll(`.nd-${ch}`)
+            .data(nodes[ch], d => d.id);
+
+        const entered = sel.enter().append('circle')
+            .attr('class', `nd-${ch}`)
+            .attr('r', 7)
+            .attr('fill', cfg.color)
+            .attr('stroke', '#080c18')
+            .attr('stroke-width', 2)
+            // Sağ tık → sil
+            .on('contextmenu', (event, d) => {
+                event.preventDefault();
+                event.stopPropagation();
+                deleteNode(ch, d);
+            })
+            // Shift+Tık → sil
+            .on('click', (event, d) => {
+                if (event.shiftKey) {
+                    event.stopPropagation();
+                    deleteNode(ch, d);
+                }
+            })
+            .call(
+                d3.drag()
+                    .on('start', function (event, d) {
+                        d._dragFixed = d.fixed;
+                        d3.select(this).attr('cursor', 'grabbing').raise();
+                        // Sürüklenen kanalı aktif yap
+                        if (activeChannel !== ch) {
+                            activeChannel = ch;
+                            document.querySelectorAll('.ch-btn').forEach(b => {
+                                b.classList.toggle('active', b.dataset.ch === ch);
+                            });
+                        }
+                    })
+                    // d3.pointer(event, g.node()) — drag event.x/event.y KULLANILMAZ:
+                    // D3 drag event.x = subject.x(data-space) + delta_px → birim karışması.
+                    .on('drag', function (event, d) {
+                        const [mx, my] = d3.pointer(event, g.node());
+                        if (!d._dragFixed) {
+                            d.x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
+                        }
+                        d.y = Math.max(0, Math.min(100, ySc.invert(my)));
+                        renderAll();
+                        triggerUpdate(currentAmbient);
+                    })
+                    .on('end', function (event, d) {
+                        d3.select(this).attr('cursor', d._dragFixed ? 'ns-resize' : 'grab');
+                        saveToLocalStorage();
+                    })
+            );
+
+        // Hem yeni hem var olan düğümlerin konumu ve görünümü
+        entered.merge(sel)
+            .attr('cx', d => xSc(d.x))
+            .attr('cy', d => ySc(d.y))
+            // Aktif kanalda: normal düğümler; pasif kanalda: gizli
+            .style('display', isActive ? null : 'none')
+            .attr('cursor', d => d.fixed ? 'ns-resize' : 'grab')
+            .attr('pointer-events', isActive ? null : 'none');
+
+        sel.exit().remove();
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DÜĞÜM İŞLEMLERİ
+// ═══════════════════════════════════════════════════════════════════
+
+function addNode(ch, x, y) {
+    if (nodes[ch].some(n => Math.abs(n.x - x) < 2.5)) return;
+    nodes[ch].push(mkNode(x, y));
+    saveToLocalStorage();
+    renderAll();
+    triggerUpdate(currentAmbient);
+}
+
+function deleteNode(ch, d) {
+    if (d.fixed) return;
+    nodes[ch] = nodes[ch].filter(n => n !== d);
+    saveToLocalStorage();
+    renderAll();
+    triggerUpdate(currentAmbient);
+}
+
+// ── Eğri üzerinde Y değeri örnekleme (SVG path binary search) ──
+function sampleAtX(ch, x) {
+    const pathEl = curvePaths[ch] ? curvePaths[ch].node() : null;
+    if (!pathEl) return 50;
+    const total = pathEl.getTotalLength();
+    if (total === 0) return 50;
+
+    const targetX = xSc(x);
+    let lo = 0, hi = total;
+    for (let i = 0; i < 52; i++) {
+        const mid = (lo + hi) / 2;
+        if (pathEl.getPointAtLength(mid).x < targetX) lo = mid;
+        else hi = mid;
+    }
+    const pt = pathEl.getPointAtLength((lo + hi) / 2);
+    return Math.max(0, Math.min(100, ySc.invert(pt.y)));
+}
+
+// ── RGBL hesapla + ekranı güncelle ──
+function triggerUpdate(x) {
+    currentAmbient = Math.max(0, Math.min(100, x));
+
+    const cR = sampleAtX('R', currentAmbient);
+    const cG = sampleAtX('G', currentAmbient);
+    const cB = sampleAtX('B', currentAmbient);
+    const cL = sampleAtX('L', currentAmbient);
+
+    const fR = cR * (cL / 100);
+    const fG = cG * (cL / 100);
+    const fB = cB * (cL / 100);
+
+    if (dispAmb) dispAmb.textContent = Math.round(currentAmbient);
+    if (dispR)   dispR.textContent   = Math.round(fR);
+    if (dispG)   dispG.textContent   = Math.round(fG);
+    if (dispB)   dispB.textContent   = Math.round(fB);
+    if (dispL)   dispL.textContent   = Math.round(cL);
+
+    updateEnvironment(currentAmbient, fR, fG, fB, cL);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  FARE ETKILEŞIMI
+// ═══════════════════════════════════════════════════════════════════
+
+// Mousemove g'ye bağlandı (bgRect yerine).
+// Böylece cursor eğri veya düğüm üzerindeyken de crosshair güncellenir.
+g.on('mousemove', function (event) {
+    if (!xSc || !ySc) return;
+    const [mx] = d3.pointer(event, g.node());
+    const x    = Math.max(0, Math.min(100, xSc.invert(mx)));
+
+    xhLine.style('display', null)
+        .attr('x1', xSc(x)).attr('y1', 0)
+        .attr('x2', xSc(x)).attr('y2', H);
+
+    Object.keys(CHANNELS).forEach(ch => {
+        const y = sampleAtX(ch, x);
+        xhDots[ch].style('display', null)
+            .attr('cx', xSc(x))
+            .attr('cy', ySc(y));
+    });
+
+    triggerUpdate(x);
+}).on('mouseleave', function () {
+    xhLine.style('display', 'none');
+    Object.values(xhDots).forEach(d => d.style('display', 'none'));
+});
+
+// Boş alana tıklama → aktif kanala düğüm ekle
+// (bgRect ALTINDA olduğu için sadece eğri/düğüm olmayan alanlarda tetiklenir)
+bgRect.on('click', function (event) {
+    if (event.shiftKey) return;
+    const [mx, my] = d3.pointer(event, g.node());
+    const x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
+    const y = Math.max(0,   Math.min(100,  ySc.invert(my)));
+    addNode(activeChannel, x, y);
+});
+
+// ── ResizeObserver ──
+new ResizeObserver(() => resize()).observe(wrap);
+
+// ── Başlangıç ──
+requestAnimationFrame(() => {
+    resize();
+    triggerUpdate(50);
+});
+
 </script>
 
 <!-- Tanılama: yükleme sorunlarını ekranda göster -->
@@ -353,10 +1008,12 @@ window._editorError  = null;
         var msgs = [];
         // D3 yüklendi mi?
         msgs.push('d3=' + (typeof d3 !== 'undefined' ? '✓' + d3.version : '✗ YOK'));
+        // Editor adım sayacı (d3-editor.js)
         msgs.push('es=' + (window._es !== undefined ? window._es : '✗ editor yüklenmedi'));
-        // Yükleme/syntax hatası
-        if (window._editorError) msgs.push('edErr=' + window._editorError);
+        // JS hataları
         if (window._jsErrors && window._jsErrors.length) msgs.push('jsErr=' + window._jsErrors.join(' | '));
+        // Simülasyon motoru yüklendi mi?
+        msgs.push('sim=' + (typeof updateEnvironment === 'function' ? '✓' : '✗ YOK'));
         // wrap boyutu
         var wrap = document.getElementById('d3-wrap');
         if (wrap) {
@@ -365,6 +1022,8 @@ window._editorError  = null;
         } else {
             msgs.push('wrap=✗ BULUNAMADI');
         }
+        // resize() çalıştı mı? (W ve H d3-editor.js'te global)
+        try { msgs.push('WH=' + (typeof W === 'number' ? Math.round(W)+'×'+Math.round(H) : '✗')); } catch(e) { msgs.push('WH=✗'); }
         // SVG var mı?
         var svg = document.querySelector('#d3-wrap svg');
         msgs.push('svg=' + (svg ? svg.getAttribute('width') + '×' + svg.getAttribute('height') : '✗ YOK'));
@@ -372,11 +1031,16 @@ window._editorError  = null;
         try { msgs.push('nodes=R' + nodes.R.length + '/G' + nodes.G.length + '/B' + nodes.B.length + '/L' + nodes.L.length); } catch(e) { msgs.push('nodes=✗'); }
         // xSc
         try { msgs.push('xSc=' + (typeof xSc === 'function' ? '✓' : '✗')); } catch(e) { msgs.push('xSc=✗'); }
+        // Son triggerUpdate değeri
+        try { msgs.push('amb=' + (typeof currentAmbient === 'number' ? Math.round(currentAmbient) : '✗')); } catch(e) { msgs.push('amb=✗'); }
 
+        var hasError = msgs.some(function(m) { return m.includes('✗'); });
+        diag.style.background = hasError ? '#1a0000' : '#001a00';
+        diag.style.color      = hasError ? '#ff9999'  : '#99ff99';
         diag.textContent = '🔍 ' + msgs.join('  |  ');
 
         // Sorun yoksa 3 saniye sonra gizle
-        if (msgs.every(m => !m.includes('✗'))) {
+        if (!hasError) {
             setTimeout(function() { diag.style.display = 'none'; }, 3000);
         }
     }
