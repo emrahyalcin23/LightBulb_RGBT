@@ -654,7 +654,11 @@ document.querySelectorAll('.ch-btn').forEach(btn => {
 
 // ── Mod değişimi (radio) ──
 document.querySelectorAll('input[name="simMode"]').forEach(r => {
-    r.addEventListener('change', () => triggerUpdate(currentAmbient));
+    r.addEventListener('change', () => {
+        buildAxes();                    // X eksenini mod için yeniden çiz
+        renderAll();
+        triggerUpdate(currentAmbient);
+    });
 });
 
 // ── JSON Dışa Aktar ──
@@ -727,6 +731,9 @@ function resize() {
 }
 
 function buildAxes() {
+    const mode   = document.querySelector('input[name="simMode"]:checked').value;
+    const isTime = (mode === 'time');
+
     gridLayer.selectAll('*').remove();
     g.selectAll('.ax-x,.ax-y,.ax-lbl').remove();
 
@@ -739,9 +746,13 @@ function buildAxes() {
         .call(d3.axisLeft(ySc).tickSize(-W).tickValues(d3.range(0, 101, 10)).tickFormat(''))
         .call(gg => { gg.select('.domain').remove(); gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.055)'); });
 
+    // Saatlik modda 0h/6h/12h/18h/24h; sensör modunda 0-100
+    const xTicks  = isTime ? [0, 25, 50, 75, 100] : d3.range(0, 101, 20);
+    const xFormat = isTime ? d => `${Math.round(d / 100 * 24)}h` : d3.format('d');
+
     g.append('g').attr('class', 'ax-x')
         .attr('transform', `translate(0,${H})`)
-        .call(d3.axisBottom(xSc).tickValues(d3.range(0, 101, 20)))
+        .call(d3.axisBottom(xSc).tickValues(xTicks).tickFormat(xFormat))
         .call(gg => {
             gg.select('.domain').attr('stroke', 'rgba(255,255,255,0.18)');
             gg.selectAll('text').attr('fill', '#4a6080').attr('font-size', '10px');
@@ -759,7 +770,7 @@ function buildAxes() {
     g.append('text').attr('class', 'ax-lbl')
         .attr('x', W / 2).attr('y', H + 36)
         .attr('text-anchor', 'middle').attr('fill', '#3a5a88').attr('font-size', '10px')
-        .text('Ortam Işığı (0 – 100)');
+        .text(isTime ? 'Saat (0h – 24h)' : 'Ortam Işığı (0 – 100)');
 
     g.append('text').attr('class', 'ax-lbl')
         .attr('transform', 'rotate(-90)')
@@ -925,26 +936,36 @@ function sampleAtX(ch, x) {
     return Math.max(0, Math.min(100, ySc.invert(pt.y)));
 }
 
+// Gaussian: saat pozisyonu (x=0-100 → saat 0h-24h) → ortam parlaklığı (0-100)
+// Tepe nokta: x=50 (12:00) → 100; gece (x=0 veya 100) → ≈3
+function timeToAmbient(x) {
+    const sigma = 12.5; // ≈ 3 saat yarı-genişlik (12.5/100*24 ≈ 3h)
+    return Math.min(100, Math.max(0, 3 + 97 * Math.exp(-Math.pow(x - 50, 2) / (2 * sigma * sigma))));
+}
+
 // ── RGBL hesapla + ekranı güncelle ──
 function triggerUpdate(x) {
     currentAmbient = Math.max(0, Math.min(100, x));
+    const mode = document.querySelector('input[name="simMode"]:checked').value;
+    // Saatlik modda: fare konumu = zaman → Gaussian ile gerçek ortam parlaklığı hesaplanır
+    const ambForRGBL = (mode === 'time') ? timeToAmbient(currentAmbient) : currentAmbient;
 
-    const cR = sampleAtX('R', currentAmbient);
-    const cG = sampleAtX('G', currentAmbient);
-    const cB = sampleAtX('B', currentAmbient);
-    const cL = sampleAtX('L', currentAmbient);
+    const cR = sampleAtX('R', ambForRGBL);
+    const cG = sampleAtX('G', ambForRGBL);
+    const cB = sampleAtX('B', ambForRGBL);
+    const cL = sampleAtX('L', ambForRGBL);
 
     const fR = cR * (cL / 100);
     const fG = cG * (cL / 100);
     const fB = cB * (cL / 100);
 
-    if (dispAmb) dispAmb.textContent = Math.round(currentAmbient);
+    if (dispAmb) dispAmb.textContent = Math.round(ambForRGBL); // gerçek ortam parlaklığını göster
     if (dispR)   dispR.textContent   = Math.round(fR);
     if (dispG)   dispG.textContent   = Math.round(fG);
     if (dispB)   dispB.textContent   = Math.round(fB);
     if (dispL)   dispL.textContent   = Math.round(cL);
 
-    updateEnvironment(currentAmbient, fR, fG, fB, cL);
+    updateEnvironment(currentAmbient, fR, fG, fB, cL); // currentAmbient: ham zaman/sensör pozisyonu
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -957,15 +978,18 @@ g.on('mousemove', function (event) {
     if (!xSc || !ySc) return;
     const [mx] = d3.pointer(event, g.node());
     const x    = Math.max(0, Math.min(100, xSc.invert(mx)));
+    const mode = document.querySelector('input[name="simMode"]:checked').value;
+    // Saatlik modda noktalar Gaussian ortam pozisyonunda; sensör modunda fare pozisyonunda
+    const ambX = (mode === 'time') ? timeToAmbient(x) : x;
 
     xhLine.style('display', null)
         .attr('x1', xSc(x)).attr('y1', 0)
         .attr('x2', xSc(x)).attr('y2', H);
 
     Object.keys(CHANNELS).forEach(ch => {
-        const y = sampleAtX(ch, x);
+        const y = sampleAtX(ch, ambX);
         xhDots[ch].style('display', null)
-            .attr('cx', xSc(x))
+            .attr('cx', xSc(ambX))
             .attr('cy', ySc(y));
     });
 
@@ -1038,14 +1062,8 @@ requestAnimationFrame(() => {
         diag.style.background = hasError ? '#1a0000' : '#001a00';
         diag.style.color      = hasError ? '#ff9999'  : '#99ff99';
         diag.textContent = '🔍 ' + msgs.join('  |  ');
-
-        // Sorun yoksa 3 saniye sonra gizle
-        if (!hasError) {
-            setTimeout(function() { diag.style.display = 'none'; }, 3000);
-        }
     }
-    setTimeout(check, 500);
-    setTimeout(check, 1500);
+    setInterval(check, 300); // sürekli güncelle — fare hareketini yansıtır, kaybolmaz
 })();
 </script>
 
