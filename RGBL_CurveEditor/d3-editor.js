@@ -131,8 +131,9 @@ const gridLayer    = g.append('g').attr('class', 'grid-layer');
 const overlayLayer = g.append('g').attr('class', 'overlay-layer');
 const bgRect       = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
 
-const curveLayer = g.append('g').attr('class', 'curve-layer');
-const nodeLayer  = g.append('g').attr('class', 'node-layer');
+const curveLayer     = g.append('g').attr('class', 'curve-layer');
+const timeCurveLayer = g.append('g').attr('class', 'time-curve-layer');
+const nodeLayer      = g.append('g').attr('class', 'node-layer');
 const crossLayer = g.append('g').attr('class', 'crosshair').attr('pointer-events', 'none');
 
 // ── Crosshair elemanları ──
@@ -226,7 +227,8 @@ const lineGen = d3.line()
     .y(d => ySc(d.y))
     .curve(d3.curveCatmullRom.alpha(0));
 
-const curvePaths = {}; // ch → d3 selection
+const curvePaths     = {}; // ch → d3 selection (ambient-space, editing)
+const timeCurvePaths = {}; // ch → d3 selection (time-domain display, Gaussian)
 
 function renderAll() {
     // Ölçekler henüz hazır değilse çizme (resize() öncesi çağrı koruması)
@@ -334,6 +336,45 @@ function renderAll() {
 
         sel.exit().remove();
     });
+
+    // Saatlik modda: base eğrileri gizle → time eğrilerini göster
+    const isTimeMode = (document.querySelector('input[name="simMode"]:checked').value === 'time');
+    Object.keys(CHANNELS).forEach(ch => {
+        if (curvePaths[ch]) {
+            curvePaths[ch].attr('opacity', isTimeMode ? 0 : (ch === activeChannel ? 0.92 : 0.18));
+        }
+    });
+    timeCurveLayer.style('display', isTimeMode ? null : 'none');
+    if (isTimeMode) renderTimeCurves();
+}
+
+// ── Saatlik modda türetilmiş Gaussian eğrilerini çizer ──
+// Her xi (0-100) için timeToAmbient(xi) → sampleAtX → çıkış noktası
+function renderTimeCurves() {
+    Object.keys(CHANNELS).forEach(ch => {
+        const cfg      = CHANNELS[ch];
+        const isActive = ch === activeChannel;
+        const pts = d3.range(0, 101).map(xi => ({
+            x: xi,
+            y: sampleAtX(ch, timeToAmbient(xi))
+        }));
+
+        if (!timeCurvePaths[ch]) {
+            timeCurvePaths[ch] = timeCurveLayer.append('path')
+                .attr('class', `time-curve-${ch}`)
+                .attr('fill', 'none')
+                .attr('stroke', cfg.color)
+                .attr('stroke-linecap', 'round')
+                .attr('pointer-events', 'none');
+        }
+
+        timeCurvePaths[ch]
+            .datum(pts)
+            .attr('d', lineGen(pts))
+            .attr('stroke-width', isActive ? cfg.width + 0.5 : cfg.width)
+            .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
+            .attr('opacity', isActive ? 0.92 : 0.18);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -424,10 +465,12 @@ g.on('mousemove', function (event) {
         .attr('x1', xSc(x)).attr('y1', 0)
         .attr('x2', xSc(x)).attr('y2', H);
 
+    // Time modunda nokta fare (zaman) pozisyonunda; sensor modunda ambient pozisyonunda
+    const dotX = (mode === 'time') ? x : ambX;
     Object.keys(CHANNELS).forEach(ch => {
         const y = sampleAtX(ch, ambX);
         xhDots[ch].style('display', null)
-            .attr('cx', xSc(ambX))
+            .attr('cx', xSc(dotX))
             .attr('cy', ySc(y));
     });
 
