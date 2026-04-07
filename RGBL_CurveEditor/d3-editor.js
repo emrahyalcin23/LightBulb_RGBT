@@ -114,10 +114,14 @@ function computeEffectiveAmbient(t) {
 
 // ── D3 SVG kurulumu ──
 const margin = { top: 20, right: 20, bottom: 40, left: 50 };
-const W = 480 - margin.left - margin.right;
-const H = 340 - margin.top  - margin.bottom;
 
-const svg = d3.select('#curve-editor')
+const wrap = document.getElementById('d3-wrap');
+let W = (wrap ? wrap.clientWidth  : 480) - margin.left - margin.right;
+let H = (wrap ? wrap.clientHeight : 340) - margin.top  - margin.bottom;
+if (W < 100) W = 410;
+if (H < 100) H = 280;
+
+const svg = d3.select('#d3-wrap')
     .append('svg')
     .attr('width',  W + margin.left + margin.right)
     .attr('height', H + margin.top  + margin.bottom);
@@ -127,6 +131,47 @@ const g = svg.append('g')
 
 const xSc = d3.scaleLinear().domain([0, 100]).range([0, W]);
 const ySc = d3.scaleLinear().domain([0, 100]).range([H, 0]);
+
+// ── Yeniden boyutlandırma ──
+function resize() {
+    if (!wrap) return;
+    const nw = wrap.clientWidth  - margin.left - margin.right;
+    const nh = wrap.clientHeight - margin.top  - margin.bottom;
+    if (nw < 50 || nh < 50) return;
+    W = nw; H = nh;
+    svg.attr('width', W + margin.left + margin.right)
+       .attr('height', H + margin.top + margin.bottom);
+    xSc.range([0, W]);
+    ySc.range([H, 0]);
+    // Grid güncelle
+    grid.selectAll('line').remove();
+    [0, 25, 50, 75, 100].forEach(v => {
+        grid.append('line')
+            .attr('x1', xSc(v)).attr('x2', xSc(v))
+            .attr('y1', 0).attr('y2', H)
+            .style('stroke', '#334155').style('stroke-width', '1')
+            .style('stroke-dasharray', v === 0 || v === 100 ? 'none' : '4,4');
+        grid.append('line')
+            .attr('x1', 0).attr('x2', W)
+            .attr('y1', ySc(v)).attr('y2', ySc(v))
+            .style('stroke', '#334155').style('stroke-width', '1')
+            .style('stroke-dasharray', v === 0 || v === 100 ? 'none' : '4,4');
+    });
+    // Eksenler güncelle
+    xAxisEl.call(d3.axisBottom(xSc).ticks(5));
+    xAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
+    xAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
+    xAxisEl.attr('transform', `translate(0,${H})`);
+    yAxisEl.call(d3.axisLeft(ySc).ticks(5));
+    yAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
+    yAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
+    xAxisLabel.attr('x', W / 2).attr('y', H + 35);
+    xhLine.attr('y2', H);
+    xhLineCanon.attr('y2', H);
+    renderAll();
+}
+
+if (wrap) new ResizeObserver(() => resize()).observe(wrap);
 
 // ── Grid ──
 const grid = g.append('g').attr('class', 'grid');
@@ -144,11 +189,13 @@ const grid = g.append('g').attr('class', 'grid');
 });
 
 // ── Eksenler ──
-g.append('g').attr('transform', `translate(0,${H})`).call(d3.axisBottom(xSc).ticks(5))
-    .selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
-g.append('g').call(d3.axisLeft(ySc).ticks(5))
-    .selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
-g.selectAll('.domain, .tick line').style('stroke', '#475569');
+const xAxisEl = g.append('g').attr('transform', `translate(0,${H})`).call(d3.axisBottom(xSc).ticks(5));
+xAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
+xAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
+
+const yAxisEl = g.append('g').call(d3.axisLeft(ySc).ticks(5));
+yAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
+yAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
 
 // ── Eksen etiketleri ──
 const xAxisLabel = g.append('text')
