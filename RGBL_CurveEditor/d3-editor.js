@@ -338,8 +338,9 @@ function makeDrag(ch) {
     return d3.drag()
         .on('start', function() { d3.select(this).style('cursor', 'grabbing'); })
         .on('drag', function(ev, d) {
-            const mx = xSc.invert(ev.x);
-            const my = ySc.invert(ev.y);
+            const [px, py] = d3.pointer(ev, g.node());
+            const mx = xSc.invert(px);
+            const my = ySc.invert(py);
             const cy = Math.max(0, Math.min(100, my));
 
             if (d.fixed) {
