@@ -224,7 +224,8 @@ html, body {
     <div id="d3-wrap"></div>
 
     <div id="value-bar">
-      <div class="val-chip"><div class="lbl">Ortam</div><div class="num" id="disp-amb" style="color:#94a3b8">—</div></div>
+      <div class="val-chip"><div class="lbl" id="lbl-xpos">Ortam</div><div class="num" id="disp-amb" style="color:#94a3b8">—</div></div>
+      <div class="val-chip" id="chip-eff" style="display:none;" title="T(t): LT eğrisindeki parlaklığa karşılık gelen etkin ortam seviyesi"><div class="lbl">T(t)</div><div class="num" id="disp-eff" style="color:#fbbf24">—</div></div>
       <div class="val-chip"><div class="lbl">Final R</div><div class="num" id="disp-r" style="color:#f87171">—</div></div>
       <div class="val-chip"><div class="lbl">Final G</div><div class="num" id="disp-g" style="color:#4ade80">—</div></div>
       <div class="val-chip"><div class="lbl">Final B</div><div class="num" id="disp-b" style="color:#60a5fa">—</div></div>
@@ -1020,14 +1021,14 @@ function triggerUpdate() {
     let cR, cG, cB, cL, effAmb;
 
     if (isTime) {
-        // Zaman modu: LT eğrisinden L, ardından T(t) ile RGB örnekle
-        cL     = sampleAtX('LT', currentAmbient);
-        effAmb = invertLSensor(cL);   // T(t) = L_sensor⁻¹(LT(t))
+        // Zaman modu: LT(t) → L; T(t) = L_sensor⁻¹(LT(t)) → RGB örnekle
+        cL     = sampleAtX('LT', currentAmbient);          // parlaklık
+        effAmb = invertLSensor(cL);                         // T(t): etkin ortam
         cR     = sampleAtX('R', effAmb);
         cG     = sampleAtX('G', effAmb);
         cB     = sampleAtX('B', effAmb);
     } else {
-        // Sensör modu: L_sensor, RGB doğrudan
+        // Sensör modu: ortam → L_sensor; RGB doğrudan
         effAmb = currentAmbient;
         cR     = sampleAtX('R', effAmb);
         cG     = sampleAtX('G', effAmb);
@@ -1035,6 +1036,9 @@ function triggerUpdate() {
         cL     = sampleAtX('L', effAmb);
     }
 
+    // ── Hesap modu ──
+    // Mutlak: her kanal bağımsız × L/100 ölçeklenir  (fR+fG+fB = (R+G+B)·L/100)
+    // Oran  : RGB renk oranı sabit, toplam güç = L   (fR+fG+fB = cL her zaman)
     let fR, fG, fB;
     if (calcMode === 'ratio') {
         const sum = cR + cG + cB;
@@ -1055,12 +1059,20 @@ function triggerUpdate() {
         updateEnvironment(currentAmbient, fR, fG, fB, cL);
     }
 
-    // Değer çubuğu
+    // ── Değer çubuğu ──
+    const lblXpos  = document.getElementById('lbl-xpos');
+    const chipEff  = document.getElementById('chip-eff');
+    const dispEff  = document.getElementById('disp-eff');
     const da = document.getElementById('disp-amb');
     const dr = document.getElementById('disp-r');
     const dg = document.getElementById('disp-g');
     const db = document.getElementById('disp-b');
     const dl = document.getElementById('disp-l');
+
+    if (lblXpos) lblXpos.textContent = isTime ? 'Saat' : 'Ortam';
+    if (chipEff) chipEff.style.display = isTime ? '' : 'none';
+    if (dispEff && isTime) dispEff.textContent = Math.round(effAmb);
+
     if (da) da.textContent = Math.round(currentAmbient);
     if (dr) dr.textContent = Math.round(fR);
     if (dg) dg.textContent = Math.round(fG);
@@ -1081,13 +1093,25 @@ document.querySelectorAll('.ch-btn').forEach(btn => {
 });
 
 // ── Hesap modu toggle ──
+function _updateCalcBtn() {
+    const calcBtn = document.getElementById('calc-mode-btn');
+    if (!calcBtn) return;
+    if (calcMode === 'ratio') {
+        calcBtn.textContent = '⚡ Oran';
+        calcBtn.title = 'ORAN modu: RGB eğrileri renk oranını belirler, toplam güç = L (fR+fG+fB = L her zaman)';
+    } else {
+        calcBtn.textContent = '⚡ Mutlak';
+        calcBtn.title = 'MUTLAK mod: Her kanal bağımsız ölçeklenir, fR=R×(L/100) — toplam güç = (R+G+B)×L/100';
+    }
+}
+
 const calcBtn = document.getElementById('calc-mode-btn');
 if (calcBtn) {
-    calcBtn.textContent = calcMode === 'ratio' ? 'Mod: Oran' : 'Mod: Mutlak';
+    _updateCalcBtn();
     calcBtn.addEventListener('click', () => {
         calcMode = calcMode === 'ratio' ? 'absolute' : 'ratio';
         localStorage.setItem('rgbl_calc_mode', calcMode);
-        calcBtn.textContent = calcMode === 'ratio' ? 'Mod: Oran' : 'Mod: Mutlak';
+        _updateCalcBtn();
         triggerUpdate();
     });
 }
@@ -1127,8 +1151,10 @@ if (resetBtn) {
 document.querySelectorAll('input[name="simMode"]').forEach(radio => {
     radio.addEventListener('change', () => {
         isTimeMode = radio.value === 'time';
+        // Moda geçişte x eksenini ortaya sıfırla — iki mod farklı koordinat uzayı kullanır
+        currentAmbient = 50;
         // Aktif kanalı moda göre ayarla
-        if (isTimeMode && activeCh === 'L')  activeCh = 'LT';
+        if (isTimeMode && activeCh === 'L')   activeCh = 'LT';
         if (!isTimeMode && activeCh === 'LT') activeCh = 'L';
         renderAll();
         triggerUpdate();
