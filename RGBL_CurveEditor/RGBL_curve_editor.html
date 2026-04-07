@@ -69,6 +69,23 @@ html, body {
 .ch-btn[data-ch="G"] { color: #4ade80; }
 .ch-btn[data-ch="B"] { color: #60a5fa; }
 .ch-btn[data-ch="L"] { color: #e2e8f0; }
+.ch-btn[data-ch="T"] { color: #fbbf24; }
+
+#day-controls {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    flex-wrap: wrap;
+}
+#l-range-controls {
+    display: none;
+    align-items: center;
+    gap: 4px;
+}
+#l-range-controls label { font-size: 9px; color: #94a3b8; }
+#l-range-controls input[type="range"] { width: 60px; cursor: pointer; }
+#l-range-controls span { font-size: 9px; color: #e2e8f0; min-width: 20px; }
 
 #d3-wrap {
     flex: 1;
@@ -205,6 +222,7 @@ html, body {
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <span class="panel-title">RGBL Eğri Editörü</span>
       <div style="display:flex;gap:6px;">
+        <button id="calc-mode-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#0e1628;color:#fbbf24;cursor:pointer;letter-spacing:0.04em;" title="Hesap modunu değiştir">⚡ Mutlak</button>
         <button id="export-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#0e1628;color:#4ade80;cursor:pointer;letter-spacing:0.04em;">⬇ Kaydet JSON</button>
         <button id="reset-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#0e1628;color:#3a5a88;cursor:pointer;letter-spacing:0.04em;">↺ Sıfırla</button>
       </div>
@@ -216,6 +234,20 @@ html, body {
       <button class="ch-btn" data-ch="G">G</button>
       <button class="ch-btn" data-ch="B">B</button>
       <button class="ch-btn active" data-ch="L">L</button>
+      <button id="t-btn" class="ch-btn" data-ch="T" style="display:none;">T</button>
+    </div>
+
+    <!-- Gün Eğrisi kontrolleri — sadece saat modunda görünür -->
+    <div id="day-controls">
+      <button id="l-lock-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:#0e1628;color:#fbbf24;cursor:pointer;">🔓 L Serbest</button>
+      <div id="l-range-controls">
+        <label>L Min</label>
+        <input type="range" id="l-min-slider" min="0" max="50" value="5">
+        <span id="l-min-val">5</span>
+        <label style="margin-left:6px;">L Max</label>
+        <input type="range" id="l-max-slider" min="50" max="100" value="100">
+        <span id="l-max-val">100</span>
+      </div>
     </div>
 
     <div id="d3-wrap"></div>
@@ -561,16 +593,22 @@ function updateEnvironment(ambientLight, finalR, finalG, finalB, finalL) {
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <script>
 // ═══════════════════════════════════════════════════════════════════
-//  D3-EDITOR.JS — RGBL Eğri Editörü
+//  D3-EDITOR.JS — RGBL Eğri Editörü  (v2)
+//  Değişiklikler:
+//    1. curveCatmullRom.alpha(0) → alpha(0.5)  (geçiş yumuşatma)
+//    2. T kanalı  (Gün Eğrisi) — tam düzenlenebilir zaman→ortam eğrisi
+//    3. L → Gün Eğrisi kilidi  (lLockedToDay)
+//    4. Hesap modu toggle  (Mutlak | Oran)
 //  Gereksinim: sim-engine.js önceden yüklenmiş olmalı.
 // ═══════════════════════════════════════════════════════════════════
-window._es = 1; // adım 1: script başladı
+window._es = 1;
 
 const CHANNELS = {
     R: { color: '#f87171', dashed: false, width: 2   },
     G: { color: '#4ade80', dashed: false, width: 2   },
     B: { color: '#60a5fa', dashed: false, width: 2   },
     L: { color: '#e2e8f0', dashed: true,  width: 3.5 },
+    T: { color: '#fbbf24', dashed: true,  width: 2.5 }, // Gün Eğrisi (zaman→ortam)
 };
 
 // ── Düğüm yönetimi ──
@@ -583,11 +621,11 @@ function defaultNodes() {
         G: [mkNode(0, 15, true), mkNode(100, 82, true)],
         B: [mkNode(0, 28, true), mkNode(100, 68, true)],
         L: [mkNode(0, 10, true), mkNode(50, 55), mkNode(100, 95, true)],
+        T: [mkNode(0, 3, true), mkNode(50, 100), mkNode(100, 3, true)], // Varsayılan Gauss-benzeri
     };
 }
 
 // ── localStorage kalıcılık ──
-// LS_KEY'i nodes'tan ÖNCE tanımla (temporal dead zone sorunu önlenir)
 const LS_KEY = 'rgbl_calibration';
 
 function saveToLocalStorage() {
@@ -604,12 +642,14 @@ function loadFromLocalStorage() {
         if (!raw) return null;
         const data = JSON.parse(raw);
         const result = {};
-        ['R', 'G', 'B', 'L'].forEach(ch => {
+        ['R', 'G', 'B', 'L', 'T'].forEach(ch => {
             if (data[ch] && Array.isArray(data[ch])) {
                 result[ch] = data[ch].map(n => mkNode(n.x, n.y, !!n.fixed));
             }
         });
-        if (['R', 'G', 'B', 'L'].every(ch => result[ch] && result[ch].length >= 2)) return result;
+        // T kanalı yoksa varsayılan ekle (eski kayıtlar için geriye uyumluluk)
+        if (!result['T'] || result['T'].length < 2) result['T'] = defaultNodes().T;
+        if (['R', 'G', 'B', 'L', 'T'].every(ch => result[ch] && result[ch].length >= 2)) return result;
     } catch(e) {}
     return null;
 }
@@ -627,39 +667,132 @@ function exportJSON() {
     URL.revokeObjectURL(url);
 }
 
-window._es = 2; // adım 2: fonksiyon tanımları OK
+window._es = 2;
 // ── State ──
 let nodes          = loadFromLocalStorage() || defaultNodes();
 let activeChannel  = 'L';
 let currentAmbient = 50;
 
-// ── Değer gösterge chip'leri ──
+// ── Yeni state değişkenleri ──
+let lLockedToDay = (localStorage.getItem('l_locked') === '1');
+let lMin = parseInt(localStorage.getItem('l_min') || '5',  10);
+let lMax = parseInt(localStorage.getItem('l_max') || '100', 10);
+let calcMode = localStorage.getItem('rgbl_calc_mode') || 'absolute';
+
+// ── DOM referansları ──
 const dispAmb = document.getElementById('disp-amb');
 const dispR   = document.getElementById('disp-r');
 const dispG   = document.getElementById('disp-g');
 const dispB   = document.getElementById('disp-b');
 const dispL   = document.getElementById('disp-l');
 
-window._es = 3; // adım 3: state & disp OK
+window._es = 3;
+
+// ════════════════════════════════════════════════════════
+//  EVENT LISTENERS
+// ════════════════════════════════════════════════════════
+
 // ── Kanal butonları ──
-// Aktif kanal değişince renderAll() çağrılır; böylece eğri/düğüm vurgusu güncellenir.
 document.querySelectorAll('.ch-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         activeChannel = btn.dataset.ch;
         document.querySelectorAll('.ch-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        renderAll();          // ← aktif kanalı vurgulamak için şart
+        renderAll();
     });
 });
 
 // ── Mod değişimi (radio) ──
 document.querySelectorAll('input[name="simMode"]').forEach(r => {
     r.addEventListener('change', () => {
-        buildAxes();                    // X eksenini mod için yeniden çiz
+        const isTime = (document.querySelector('input[name="simMode"]:checked').value === 'time');
+        // Saat moduna geçince T kanalı aktif olsun; sensör modunda L'ye dön
+        const newCh = isTime ? 'T' : 'L';
+        activeChannel = newCh;
+        document.querySelectorAll('.ch-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.ch === newCh);
+        });
+        applyModeUI(isTime);
+        buildAxes();
         renderAll();
         triggerUpdate(currentAmbient);
     });
 });
+
+function applyModeUI(isTime) {
+    const tBtn       = document.getElementById('t-btn');
+    const dayCtrl    = document.getElementById('day-controls');
+    if (tBtn)    tBtn.style.display    = isTime ? '' : 'none';
+    if (dayCtrl) dayCtrl.style.display = isTime ? 'flex' : 'none';
+}
+
+// ── Hesap modu toggle ──
+const calcModeBtn = document.getElementById('calc-mode-btn');
+if (calcModeBtn) {
+    _updateCalcBtn();
+    calcModeBtn.addEventListener('click', () => {
+        calcMode = (calcMode === 'absolute') ? 'ratio' : 'absolute';
+        localStorage.setItem('rgbl_calc_mode', calcMode);
+        _updateCalcBtn();
+        triggerUpdate(currentAmbient);
+    });
+}
+function _updateCalcBtn() {
+    if (!calcModeBtn) return;
+    if (calcMode === 'ratio') {
+        calcModeBtn.textContent = '⚖ Oran';
+        calcModeBtn.title = 'Oran Modu: RGB normalize → L ile çarp. Tıkla: Mutlak Modu';
+    } else {
+        calcModeBtn.textContent = '⚡ Mutlak';
+        calcModeBtn.title = 'Mutlak Modu: fR = cR × (L/100). Tıkla: Oran Modu';
+    }
+}
+
+// ── L → Gün Eğrisi kilidi ──
+const lLockBtn    = document.getElementById('l-lock-btn');
+const lRangeDiv   = document.getElementById('l-range-controls');
+const lMinSlider  = document.getElementById('l-min-slider');
+const lMaxSlider  = document.getElementById('l-max-slider');
+const lMinValEl   = document.getElementById('l-min-val');
+const lMaxValEl   = document.getElementById('l-max-val');
+
+if (lLockBtn) {
+    _updateLLockBtn();
+    lLockBtn.addEventListener('click', () => {
+        lLockedToDay = !lLockedToDay;
+        localStorage.setItem('l_locked', lLockedToDay ? '1' : '0');
+        _updateLLockBtn();
+        renderAll();
+        triggerUpdate(currentAmbient);
+    });
+}
+function _updateLLockBtn() {
+    if (!lLockBtn) return;
+    lLockBtn.textContent = lLockedToDay ? '🔒 L = Gün Eğrisi' : '🔓 L Serbest';
+    lLockBtn.style.borderColor = lLockedToDay ? '#fbbf24' : '';
+    if (lRangeDiv) lRangeDiv.style.display = lLockedToDay ? 'flex' : 'none';
+}
+
+if (lMinSlider) {
+    lMinSlider.value = lMin;
+    if (lMinValEl) lMinValEl.textContent = lMin;
+    lMinSlider.addEventListener('input', () => {
+        lMin = parseInt(lMinSlider.value, 10);
+        if (lMinValEl) lMinValEl.textContent = lMin;
+        localStorage.setItem('l_min', lMin);
+        triggerUpdate(currentAmbient);
+    });
+}
+if (lMaxSlider) {
+    lMaxSlider.value = lMax;
+    if (lMaxValEl) lMaxValEl.textContent = lMax;
+    lMaxSlider.addEventListener('input', () => {
+        lMax = parseInt(lMaxSlider.value, 10);
+        if (lMaxValEl) lMaxValEl.textContent = lMax;
+        localStorage.setItem('l_max', lMax);
+        triggerUpdate(currentAmbient);
+    });
+}
 
 // ── JSON Dışa Aktar ──
 document.getElementById('export-btn').addEventListener('click', () => exportJSON());
@@ -672,34 +805,32 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     triggerUpdate(currentAmbient);
 });
 
-window._es = 4; // adım 4: event listener'lar OK
+window._es = 4;
+
 // ═══════════════════════════════════════════════════════════════════
 //  D3 KURULUMU
 // ═══════════════════════════════════════════════════════════════════
 
 const margin = { top: 28, right: 20, bottom: 44, left: 50 };
 const wrap   = document.getElementById('d3-wrap');
-window._es = 5; // adım 5: wrap alındı
+window._es = 5;
 const d3svg  = d3.select('#d3-wrap').append('svg');
-window._es = 6; // adım 6: SVG oluşturuldu
+window._es = 6;
 const g      = d3svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
 let W, H, xSc, ySc;
 
-// ── KATMAN SIRASI (kritik — bgRect eğri/düğümlerin ALTINDA olmalı) ──
-const gridLayer    = g.append('g').attr('class', 'grid-layer');
-
-// overlayLayer (bgRect) önce ekleniyor → eğri ve düğümler üstte kalıyor
-const overlayLayer = g.append('g').attr('class', 'overlay-layer');
-const bgRect       = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
-
-const curveLayer     = g.append('g').attr('class', 'curve-layer');
+// ── Katman sırası ──
+const gridLayer          = g.append('g').attr('class', 'grid-layer');
+const overlayLayer       = g.append('g').attr('class', 'overlay-layer');
+const bgRect             = overlayLayer.append('rect').attr('fill', 'transparent').attr('cursor', 'crosshair');
+const curveLayer         = g.append('g').attr('class', 'curve-layer');
 const timeCurveLayer     = g.append('g').attr('class', 'time-curve-layer');
 const projectedNodeLayer = g.append('g').attr('class', 'proj-node-layer');
 const nodeLayer          = g.append('g').attr('class', 'node-layer');
-const crossLayer = g.append('g').attr('class', 'crosshair').attr('pointer-events', 'none');
+const crossLayer         = g.append('g').attr('class', 'crosshair').attr('pointer-events', 'none');
 
-// ── Crosshair elemanları ──
+// ── Crosshair ──
 const xhLine = crossLayer.append('line')
     .attr('stroke', 'rgba(255,255,255,0.22)')
     .attr('stroke-width', 1)
@@ -748,7 +879,6 @@ function buildAxes() {
         .call(d3.axisLeft(ySc).tickSize(-W).tickValues(d3.range(0, 101, 10)).tickFormat(''))
         .call(gg => { gg.select('.domain').remove(); gg.selectAll('line').attr('stroke', 'rgba(255,255,255,0.055)'); });
 
-    // Saatlik modda 0h/6h/12h/18h/24h; sensör modunda 0-100
     const xTicks  = isTime ? [0, 25, 50, 75, 100] : d3.range(0, 101, 20);
     const xFormat = isTime ? d => `${Math.round(d / 100 * 24)}h` : d3.format('d');
 
@@ -778,155 +908,167 @@ function buildAxes() {
         .attr('transform', 'rotate(-90)')
         .attr('x', -H / 2).attr('y', -38)
         .attr('text-anchor', 'middle').attr('fill', '#3a5a88').attr('font-size', '10px')
-        .text('Çıkış (0 – 100)');
+        .text(isTime ? 'Ortam Işığı / Çıkış (0 – 100)' : 'Çıkış (0 – 100)');
 }
 
 // ═══════════════════════════════════════════════════════════════════
 //  EĞRİ & DÜĞÜM RENDER
 // ═══════════════════════════════════════════════════════════════════
 
+// FIX 1: alpha(0.5) — centripetal Catmull-Rom, overshoot azaltılmış
 const lineGen = d3.line()
     .x(d => xSc(d.x))
     .y(d => ySc(d.y))
-    .curve(d3.curveCatmullRom.alpha(0));
+    .curve(d3.curveCatmullRom.alpha(0.5));
 
-const curvePaths     = {}; // ch → d3 selection (ambient-space, editing)
-const timeCurvePaths = {}; // ch → d3 selection (time-domain display, Gaussian)
+// Yoğun örnekli eğriler için doğrusal çizici (timeCurve projeksiyonları)
+const lineGenLinear = d3.line()
+    .x(d => xSc(d.x))
+    .y(d => ySc(d.y))
+    .curve(d3.curveLinear);
+
+const curvePaths     = {};
+const timeCurvePaths = {};
+
+function _makeDragHandler(ch) {
+    return d3.drag()
+        .on('start', function (event, d) {
+            d._dragFixed = d.fixed;
+            d3.select(this).attr('cursor', 'grabbing').raise();
+            if (activeChannel !== ch) {
+                activeChannel = ch;
+                document.querySelectorAll('.ch-btn').forEach(b => {
+                    b.classList.toggle('active', b.dataset.ch === ch);
+                });
+            }
+        })
+        .on('drag', function (event, d) {
+            const [mx, my] = d3.pointer(event, g.node());
+            if (!d._dragFixed) {
+                d.x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
+            }
+            d.y = Math.max(0, Math.min(100, ySc.invert(my)));
+            renderAll();
+            triggerUpdate(currentAmbient);
+        })
+        .on('end', function (event, d) {
+            d3.select(this).attr('cursor', d._dragFixed ? 'ns-resize' : 'grab');
+            saveToLocalStorage();
+        });
+}
+
+function _renderChannel(ch, showCurve, showNodes) {
+    const cfg      = CHANNELS[ch];
+    const isActive = ch === activeChannel;
+    const pts      = [...nodes[ch]].sort((a, b) => a.x - b.x);
+
+    // ── Eğri ──
+    if (!curvePaths[ch]) {
+        curvePaths[ch] = curveLayer.append('path')
+            .attr('class', `curve-${ch}`)
+            .attr('fill', 'none')
+            .attr('stroke', cfg.color)
+            .attr('stroke-width', cfg.width)
+            .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
+            .attr('stroke-linecap', 'round')
+            .style('cursor', 'pointer')
+            .on('click', function (event) {
+                if (event.shiftKey) return;
+                if (!showCurve) return;
+                const [mx] = d3.pointer(event, g.node());
+                const dx = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
+                const dy = sampleAtX(ch, dx);
+                addNode(ch, dx, dy);
+                activeChannel = ch;
+                document.querySelectorAll('.ch-btn').forEach(b => {
+                    b.classList.toggle('active', b.dataset.ch === ch);
+                });
+                renderAll();
+            });
+    }
+
+    const curveOpacity = showCurve ? (isActive ? 0.92 : (ch === 'T' ? 0.35 : 0.18)) : 0;
+    curvePaths[ch]
+        .datum(pts)
+        .attr('d', lineGen(pts))
+        .attr('opacity', curveOpacity)
+        .attr('stroke-width', isActive ? cfg.width + 0.5 : cfg.width)
+        .attr('pointer-events', showCurve ? null : 'none');
+
+    // ── Düğümler ──
+    // L kilitlendiyse L düğümleri gizlenir
+    const actuallyShowNodes = showNodes && !(ch === 'L' && lLockedToDay);
+
+    const sel = nodeLayer.selectAll(`.nd-${ch}`)
+        .data(nodes[ch], d => d.id);
+
+    const entered = sel.enter().append('circle')
+        .attr('class', `nd-${ch}`)
+        .attr('r', 7)
+        .attr('fill', cfg.color)
+        .attr('stroke', '#080c18')
+        .attr('stroke-width', 2)
+        .on('contextmenu', (event, d) => {
+            event.preventDefault();
+            event.stopPropagation();
+            deleteNode(ch, d);
+        })
+        .on('click', (event, d) => {
+            if (event.shiftKey) { event.stopPropagation(); deleteNode(ch, d); }
+        })
+        .call(_makeDragHandler(ch));
+
+    entered.merge(sel)
+        .attr('cx', d => xSc(d.x))
+        .attr('cy', d => ySc(d.y))
+        .style('display', (actuallyShowNodes && isActive) ? null : 'none')
+        .attr('cursor', d => d.fixed ? 'ns-resize' : 'grab')
+        .attr('pointer-events', (actuallyShowNodes && isActive) ? null : 'none');
+
+    sel.exit().remove();
+}
 
 function renderAll() {
-    // Ölçekler henüz hazır değilse çizme (resize() öncesi çağrı koruması)
     if (!xSc || !ySc) return;
 
-    ['R', 'G', 'B', 'L'].forEach(ch => {
-        const cfg    = CHANNELS[ch];
-        const isActive = ch === activeChannel;
-        const pts    = [...nodes[ch]].sort((a, b) => a.x - b.x);
-
-        // ── Eğri ──
-        if (!curvePaths[ch]) {
-            curvePaths[ch] = curveLayer.append('path')
-                .attr('class', `curve-${ch}`)
-                .attr('fill', 'none')
-                .attr('stroke', cfg.color)
-                .attr('stroke-width', cfg.width)
-                .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
-                .attr('stroke-linecap', 'round')
-                .style('cursor', 'pointer')
-                // Eğriye tıklama → o kanala düğüm ekle
-                .on('click', function (event) {
-                    if (event.shiftKey) return;
-                    const [mx] = d3.pointer(event, g.node());
-                    const dx   = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
-                    const dy   = sampleAtX(ch, dx);
-                    addNode(ch, dx, dy);
-                    // Tıklanan eğrinin kanalını aktif yap
-                    activeChannel = ch;
-                    document.querySelectorAll('.ch-btn').forEach(b => {
-                        b.classList.toggle('active', b.dataset.ch === ch);
-                    });
-                    renderAll();
-                });
-        }
-
-        // Aktif kanal: tam görünür, pasif: soluk
-        curvePaths[ch]
-            .datum(pts)
-            .attr('d', lineGen(pts))
-            .attr('opacity', isActive ? 0.92 : 0.18)
-            .attr('stroke-width', isActive ? cfg.width + (ch === 'L' ? 0.5 : 0.5) : cfg.width);
-
-        // ── Düğümler (D3 enter-update-exit) ──
-        const sel = nodeLayer.selectAll(`.nd-${ch}`)
-            .data(nodes[ch], d => d.id);
-
-        const entered = sel.enter().append('circle')
-            .attr('class', `nd-${ch}`)
-            .attr('r', 7)
-            .attr('fill', cfg.color)
-            .attr('stroke', '#080c18')
-            .attr('stroke-width', 2)
-            // Sağ tık → sil
-            .on('contextmenu', (event, d) => {
-                event.preventDefault();
-                event.stopPropagation();
-                deleteNode(ch, d);
-            })
-            // Shift+Tık → sil
-            .on('click', (event, d) => {
-                if (event.shiftKey) {
-                    event.stopPropagation();
-                    deleteNode(ch, d);
-                }
-            })
-            .call(
-                d3.drag()
-                    .on('start', function (event, d) {
-                        d._dragFixed = d.fixed;
-                        d3.select(this).attr('cursor', 'grabbing').raise();
-                        // Sürüklenen kanalı aktif yap
-                        if (activeChannel !== ch) {
-                            activeChannel = ch;
-                            document.querySelectorAll('.ch-btn').forEach(b => {
-                                b.classList.toggle('active', b.dataset.ch === ch);
-                            });
-                        }
-                    })
-                    // d3.pointer(event, g.node()) — drag event.x/event.y KULLANILMAZ:
-                    // D3 drag event.x = subject.x(data-space) + delta_px → birim karışması.
-                    .on('drag', function (event, d) {
-                        const [mx, my] = d3.pointer(event, g.node());
-                        if (!d._dragFixed) {
-                            d.x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
-                        }
-                        d.y = Math.max(0, Math.min(100, ySc.invert(my)));
-                        renderAll();
-                        triggerUpdate(currentAmbient);
-                    })
-                    .on('end', function (event, d) {
-                        d3.select(this).attr('cursor', d._dragFixed ? 'ns-resize' : 'grab');
-                        saveToLocalStorage();
-                    })
-            );
-
-        // Hem yeni hem var olan düğümlerin konumu ve görünümü
-        entered.merge(sel)
-            .attr('cx', d => xSc(d.x))
-            .attr('cy', d => ySc(d.y))
-            // Aktif kanalda: normal düğümler; pasif kanalda: gizli
-            .style('display', isActive ? null : 'none')
-            .attr('cursor', d => d.fixed ? 'ns-resize' : 'grab')
-            .attr('pointer-events', isActive ? null : 'none');
-
-        sel.exit().remove();
-    });
-
-    // Saatlik modda: base eğrileri gizle → time eğrilerini göster
     const isTimeMode = (document.querySelector('input[name="simMode"]:checked').value === 'time');
-    Object.keys(CHANNELS).forEach(ch => {
-        if (curvePaths[ch]) {
-            curvePaths[ch].attr('opacity', isTimeMode ? 0 : (ch === activeChannel ? 0.92 : 0.18));
-        }
+
+    // R, G, B, L: ortam uzayında; sadece sensör modunda düzenlenebilir
+    ['R', 'G', 'B', 'L'].forEach(ch => {
+        // showCurve: sensör modunda görünür (saat modunda gizli — projeksiyon olarak gösterilir)
+        // showNodes: sensör modunda aktif kanal düğümleri
+        _renderChannel(ch, !isTimeMode, !isTimeMode);
     });
-    if (isTimeMode) nodeLayer.selectAll('circle').style('display', 'none');
+
+    // T (Gün Eğrisi): zaman uzayında; sadece saat modunda düzenlenebilir
+    _renderChannel('T', isTimeMode, isTimeMode);
+
+    // Saat modunda: R/G/B/L → T üzerinden projekte edilmiş zaman eğrileri
     timeCurveLayer.style('display', isTimeMode ? null : 'none');
+    projectedNodeLayer.selectAll('*').remove();
     if (isTimeMode) {
         renderTimeCurves();
-        drawProjectedNodes();
-    } else {
-        projectedNodeLayer.selectAll('*').remove();
     }
 }
 
-// ── Saatlik modda türetilmiş Gaussian eğrilerini çizer ──
-// Her xi (0-100) için timeToAmbient(xi) → sampleAtX → çıkış noktası
+// ── Saat modunda R/G/B/L'yi T eğrisi üzerinden projekte eder ──
+// Her xi (zaman 0-100) için: T(xi) → ambient → R/G/B/L örnekleme
 function renderTimeCurves() {
-    Object.keys(CHANNELS).forEach(ch => {
+    ['R', 'G', 'B', 'L'].forEach(ch => {
         const cfg      = CHANNELS[ch];
         const isActive = ch === activeChannel;
-        const pts = d3.range(0, 101).map(xi => ({
-            x: xi,
-            y: sampleAtX(ch, timeToAmbient(xi))
-        }));
+
+        const pts = d3.range(0, 101).map(xi => {
+            const tVal = sampleAtX('T', xi);   // T kanalı: zaman → ortam
+            let y;
+            if (ch === 'L' && lLockedToDay) {
+                // L kilitlendiyse: T değerini [lMin, lMax] aralığına ölçekle
+                y = lMin + (lMax - lMin) * (tVal / 100);
+            } else {
+                y = sampleAtX(ch, tVal);        // Normal: ortam uzayında örnekle
+            }
+            return { x: xi, y };
+        });
 
         if (!timeCurvePaths[ch]) {
             timeCurvePaths[ch] = timeCurveLayer.append('path')
@@ -939,42 +1081,10 @@ function renderTimeCurves() {
 
         timeCurvePaths[ch]
             .datum(pts)
-            .attr('d', lineGen(pts))
+            .attr('d', lineGenLinear(pts))  // Yoğun nokta → doğrusal yeterli
             .attr('stroke-width', isActive ? cfg.width + 0.5 : cfg.width)
             .attr('stroke-dasharray', cfg.dashed ? '9,5' : null)
             .attr('opacity', isActive ? 0.92 : 0.18);
-    });
-}
-
-// ── Saatlik modda kontrol düğümlerini Gaussian eğrisi üzerine yansıtır ──
-// Her düğüm (ax, ay) → timeToAmbient(t)=ax denklemini çöz → t=50±dt
-function drawProjectedNodes() {
-    projectedNodeLayer.selectAll('*').remove();
-    const ch    = activeChannel;
-    const cfg   = CHANNELS[ch];
-    const sigma = 12.5;
-
-    nodes[ch].forEach(nd => {
-        const val = (nd.x - 3) / 97;              // timeToAmbient tersine çevir
-        if (val <= 0 || val > 1) return;           // çözüm yok (gece minimum)
-
-        const dt    = sigma * Math.sqrt(-2 * Math.log(Math.min(val, 1)));
-        const times = dt < 0.5 ? [50] : [50 - dt, 50 + dt];
-
-        times.forEach(t => {
-            if (t < 0 || t > 100) return;
-            const y = sampleAtX(ch, nd.x);         // ≈ nd.y (Catmull-Rom noktadan geçer)
-
-            projectedNodeLayer.append('circle')
-                .attr('cx', xSc(t))
-                .attr('cy', ySc(y))
-                .attr('r', 6)
-                .attr('fill', 'none')
-                .attr('stroke', cfg.color)
-                .attr('stroke-width', 2)
-                .attr('opacity', 0.7)
-                .attr('pointer-events', 'none');
-        });
     });
 }
 
@@ -1016,63 +1126,88 @@ function sampleAtX(ch, x) {
     return Math.max(0, Math.min(100, ySc.invert(pt.y)));
 }
 
-// Gaussian: saat pozisyonu (x=0-100 → saat 0h-24h) → ortam parlaklığı (0-100)
-// Tepe nokta: x=50 (12:00) → 100; gece (x=0 veya 100) → ≈3
-function timeToAmbient(x) {
-    const sigma = 12.5; // ≈ 3 saat yarı-genişlik (12.5/100*24 ≈ 3h)
-    return Math.min(100, Math.max(0, 3 + 97 * Math.exp(-Math.pow(x - 50, 2) / (2 * sigma * sigma))));
+// ── Zaman modunda anlık kanal değerini hesapla (crosshair için) ──
+function timeCurveYAt(ch, xi) {
+    const tVal = sampleAtX('T', xi);
+    if (ch === 'L' && lLockedToDay) return lMin + (lMax - lMin) * (tVal / 100);
+    return sampleAtX(ch, tVal);
 }
 
 // ── RGBL hesapla + ekranı güncelle ──
 function triggerUpdate(x) {
     currentAmbient = Math.max(0, Math.min(100, x));
-    const mode = document.querySelector('input[name="simMode"]:checked').value;
-    // Saatlik modda: fare konumu = zaman → Gaussian ile gerçek ortam parlaklığı hesaplanır
-    const ambForRGBL = (mode === 'time') ? timeToAmbient(currentAmbient) : currentAmbient;
+    const mode       = document.querySelector('input[name="simMode"]:checked').value;
+    const isTimeMode = (mode === 'time');
+
+    // FIX 2: Saat modunda T kanalı → ortam; sensör modunda doğrudan
+    const ambForRGBL = isTimeMode ? sampleAtX('T', currentAmbient) : currentAmbient;
 
     const cR = sampleAtX('R', ambForRGBL);
     const cG = sampleAtX('G', ambForRGBL);
     const cB = sampleAtX('B', ambForRGBL);
-    const cL = sampleAtX('L', ambForRGBL);
+    // FIX 3: L kilitlendiyse T × ölçek; değilse L eğrisinden
+    const cL = (isTimeMode && lLockedToDay)
+        ? (lMin + (lMax - lMin) * (ambForRGBL / 100))
+        : sampleAtX('L', ambForRGBL);
 
-    const fR = cR * (cL / 100);
-    const fG = cG * (cL / 100);
-    const fB = cB * (cL / 100);
+    let fR, fG, fB;
+    // FIX 4: Hesap modu
+    if (calcMode === 'ratio') {
+        const sum = cR + cG + cB;
+        if (sum > 0.001) {
+            fR = (cR / sum) * cL;
+            fG = (cG / sum) * cL;
+            fB = (cB / sum) * cL;
+        } else {
+            fR = fG = fB = cL / 3;  // Nötr beyaz (tüm kanallar sıfır)
+        }
+    } else {
+        fR = cR * (cL / 100);
+        fG = cG * (cL / 100);
+        fB = cB * (cL / 100);
+    }
 
-    if (dispAmb) dispAmb.textContent = Math.round(ambForRGBL); // gerçek ortam parlaklığını göster
+    if (dispAmb) dispAmb.textContent = Math.round(ambForRGBL);
     if (dispR)   dispR.textContent   = Math.round(fR);
     if (dispG)   dispG.textContent   = Math.round(fG);
     if (dispB)   dispB.textContent   = Math.round(fB);
     if (dispL)   dispL.textContent   = Math.round(cL);
 
-    updateEnvironment(currentAmbient, fR, fG, fB, cL); // currentAmbient: ham zaman/sensör pozisyonu
+    updateEnvironment(currentAmbient, fR, fG, fB, cL);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  FARE ETKILEŞIMI
+//  FARE ETKİLEŞİMİ
 // ═══════════════════════════════════════════════════════════════════
 
-// Mousemove g'ye bağlandı (bgRect yerine).
-// Böylece cursor eğri veya düğüm üzerindeyken de crosshair güncellenir.
 g.on('mousemove', function (event) {
     if (!xSc || !ySc) return;
     const [mx] = d3.pointer(event, g.node());
     const x    = Math.max(0, Math.min(100, xSc.invert(mx)));
     const mode = document.querySelector('input[name="simMode"]:checked').value;
-    // Saatlik modda noktalar Gaussian ortam pozisyonunda; sensör modunda fare pozisyonunda
-    const ambX = (mode === 'time') ? timeToAmbient(x) : x;
+    const isTimeMode = (mode === 'time');
 
     xhLine.style('display', null)
         .attr('x1', xSc(x)).attr('y1', 0)
         .attr('x2', xSc(x)).attr('y2', H);
 
-    // Time modunda nokta fare (zaman) pozisyonunda; sensor modunda ambient pozisyonunda
-    const dotX = (mode === 'time') ? x : ambX;
     Object.keys(CHANNELS).forEach(ch => {
-        const y = sampleAtX(ch, ambX);
-        xhDots[ch].style('display', null)
-            .attr('cx', xSc(dotX))
-            .attr('cy', ySc(y));
+        if (ch === 'T') {
+            // T: sadece saat modunda, zaman ekseni üzerinde
+            if (isTimeMode) {
+                const y = sampleAtX('T', x);
+                xhDots['T'].style('display', null)
+                    .attr('cx', xSc(x))
+                    .attr('cy', ySc(y));
+            } else {
+                xhDots['T'].style('display', 'none');
+            }
+        } else {
+            const y = isTimeMode ? timeCurveYAt(ch, x) : sampleAtX(ch, x);
+            xhDots[ch].style('display', null)
+                .attr('cx', xSc(x))
+                .attr('cy', ySc(y));
+        }
     });
 
     triggerUpdate(x);
@@ -1082,13 +1217,16 @@ g.on('mousemove', function (event) {
 });
 
 // Boş alana tıklama → aktif kanala düğüm ekle
-// (bgRect ALTINDA olduğu için sadece eğri/düğüm olmayan alanlarda tetiklenir)
 bgRect.on('click', function (event) {
     if (event.shiftKey) return;
     const [mx, my] = d3.pointer(event, g.node());
+    const mode = document.querySelector('input[name="simMode"]:checked').value;
+    const isTimeMode = (mode === 'time');
+    // Saat modunda T kanalına ekle; sensör modunda aktif kanala
+    const targetCh = isTimeMode ? 'T' : activeChannel;
     const x = Math.max(0.5, Math.min(99.5, xSc.invert(mx)));
     const y = Math.max(0,   Math.min(100,  ySc.invert(my)));
-    addNode(activeChannel, x, y);
+    addNode(targetCh, x, y);
 });
 
 // ── ResizeObserver ──
@@ -1096,6 +1234,9 @@ new ResizeObserver(() => resize()).observe(wrap);
 
 // ── Başlangıç ──
 requestAnimationFrame(() => {
+    const isTime = (document.querySelector('input[name="simMode"]:checked').value === 'time');
+    applyModeUI(isTime);
+    _updateLLockBtn();
     resize();
     triggerUpdate(50);
 });
