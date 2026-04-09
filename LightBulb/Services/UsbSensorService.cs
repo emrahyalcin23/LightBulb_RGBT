@@ -24,12 +24,18 @@ namespace LightBulb.Services;
 public partial class UsbSensorService : ObservableObject, IDisposable
 {
     // Adaptive luminance reference: tracks the highest CIE-Y value seen so far.
-    // Starts at 1.0 so the very first reading is never divided by zero.
-    // Grows as brighter readings arrive; the brightest observed reading always
-    // maps to luminance = 1.0, and dimmer readings scale proportionally.
-    // Initialised to 255 (= max CIE-Y when R=G=B=255) so the first reading
+    // Starts at 255.0 (= max CIE-Y when R=G=B=255) so the first reading
     // never incorrectly maps to 100 % brightness before the true peak is known.
     private double _peakRawY = 255.0;
+
+    // Adaptive peak for the Clear channel (raw_c). Used to normalise raw_c to
+    // the 0-100 % ambient range that feeds all five RGBL calibration curves.
+    // Starts at 1.0 to avoid division-by-zero on the very first reading.
+    private double _peakRawC = 1.0;
+
+    // RGBL curve evaluator loaded from rgbl_calibration.json.
+    // Null when no path is configured or the file cannot be parsed.
+    private RgblCurveEvaluator? _rgblEvaluator;
 
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
@@ -37,11 +43,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     // OKU_0 = single instantaneous reading (interval=0 means no periodic streaming)
     private const string InstantReadCommand = "OKU_0";
-
-    private static readonly Regex ReadingPattern = new(
-        @"R:\s*(?<r>[\d.]+)[\s,]+G:\s*(?<g>[\d.]+)[\s,]+B:\s*(?<b>[\d.]+)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled
-    );
 
     private readonly SettingsService _settingsService;
 
@@ -53,6 +54,26 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     [ObservableProperty]
     public partial double LatestCct { get; private set; } = 6500;
+
+    /// <summary>CCT computed from raw uint16 sensor counts (raw_r, raw_g, raw_b).</summary>
+    [ObservableProperty]
+    public partial double LatestCctRaw { get; private set; } = 6500;
+
+    /// <summary>CCT computed from firmware-processed 0-100 float values (proc_r, proc_g, proc_b).</summary>
+    [ObservableProperty]
+    public partial double LatestCctProc { get; private set; } = 6500;
+
+    /// <summary>RGBL curve output: final red channel percent (0-100). Set only when a calibration JSON is loaded.</summary>
+    [ObservableProperty]
+    public partial double LatestRgblR { get; private set; } = 50.0;
+
+    /// <summary>RGBL curve output: final green channel percent (0-100). Set only when a calibration JSON is loaded.</summary>
+    [ObservableProperty]
+    public partial double LatestRgblG { get; private set; } = 50.0;
+
+    /// <summary>RGBL curve output: final blue channel percent (0-100). Set only when a calibration JSON is loaded.</summary>
+    [ObservableProperty]
+    public partial double LatestRgblB { get; private set; } = 50.0;
 
     [ObservableProperty]
     public partial double LatestLuminance { get; private set; } = 1.0;
@@ -104,6 +125,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         _settingsService = settingsService;
     }
+
+    /// <summary>
+    /// (Re)loads the RGBL curve evaluator from the path stored in settings.
+    /// Call this after the user changes <see cref="SettingsService.RgblCalibrationJsonPath"/>.
+    /// </summary>
+    public void ReloadRgblEvaluator() =>
+        _rgblEvaluator = RgblCurveEvaluator.Load(_settingsService.RgblCalibrationJsonPath);
 
     /// <summary>
     /// Returns all available serial port names on this system.
@@ -259,10 +287,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// <summary>
     /// Opens the serial port and starts periodic sensor reads.
     /// Safe to call multiple times — stops any previous session first.
+    /// Also reloads the RGBL curve evaluator from the current settings path.
     /// </summary>
     public void Start()
     {
         Stop();
+        ReloadRgblEvaluator();
 
         if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName))
             return; // No port configured yet — wait for auto-detect
@@ -366,7 +396,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         response.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase) ||
         (response.Contains("OKU", StringComparison.OrdinalIgnoreCase) &&
          response.Contains("RAW", StringComparison.OrdinalIgnoreCase)) ||
-        ReadingPattern.IsMatch(response); // firmware responds to any command with sensor data
+        TryParseDualLine(response, out _); // firmware responds to any command with sensor data
 
     /// <summary>
     /// Reads one response line from the serial port, handling \r\n, \n-only, and \r-only
@@ -583,7 +613,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
                         // If KIMSIN already returned sensor data, reuse it; otherwise request a reading.
                         string raw;
-                        if (ReadingPattern.IsMatch(identity))
+                        if (TryParseDualLine(identity, out _))
                         {
                             raw = identity;
                         }
@@ -593,7 +623,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                             raw = ReadResponseLine(p).Trim();
                         }
 
-                        if (ReadingPattern.IsMatch(raw))
+                        if (TryParseDualLine(raw, out _))
                         {
                             foundPort = portName;
                             foundRaw = raw;
@@ -741,7 +771,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             // Step 2: Request an instant reading to confirm the sensor works.
             // If KIMSIN already returned sensor data, reuse it to avoid a second round-trip.
             string raw;
-            if (ReadingPattern.IsMatch(identity))
+            if (TryParseDualLine(identity, out _))
             {
                 raw = identity;
             }
@@ -750,7 +780,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 port.WriteLine(InstantReadCommand);
                 raw = ReadResponseLine(port).Trim();
             }
-            var ok = ReadingPattern.IsMatch(raw);
+            var ok = TryParseDualLine(raw, out _);
 
             var result = new ConnectionTestResult(portName, baud, InstantReadCommand, ok, raw,
                 ok ? "" : "Yanıt formatı beklenenle eşleşmedi");
@@ -817,53 +847,77 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Parses a firmware dual-output line into a <see cref="DualReading"/>.
+    /// Expected format: timestamp;6;mode;raw_r;raw_g;raw_b;raw_c;proc_r;proc_g;proc_b[;meta]
+    /// Returns false when the line is malformed or has too few fields.
+    /// </summary>
+    private static bool TryParseDualLine(string line, out DualReading reading)
+    {
+        reading = default;
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        var parts = line.Split(';');
+        if (parts.Length < 10)
+            return false;
+
+        if (!ushort.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawR) ||
+            !ushort.TryParse(parts[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawG) ||
+            !ushort.TryParse(parts[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawB) ||
+            !ushort.TryParse(parts[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawC) ||
+            !float.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out var procR) ||
+            !float.TryParse(parts[8], NumberStyles.Float, CultureInfo.InvariantCulture, out var procG) ||
+            !float.TryParse(parts[9], NumberStyles.Float, CultureInfo.InvariantCulture, out var procB))
+            return false;
+
+        reading = new DualReading(rawR, rawG, rawB, rawC, procR, procG, procB);
+        return true;
+    }
+
     private void ParseAndDispatch(string response)
     {
-        var match = ReadingPattern.Match(response);
-        if (!match.Success)
+        if (!TryParseDualLine(response, out var dr))
             return;
 
-        if (
-            !double.TryParse(
-                match.Groups["r"].Value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var r
-            )
-            || !double.TryParse(
-                match.Groups["g"].Value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var g
-            )
-            || !double.TryParse(
-                match.Groups["b"].Value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var b
-            )
-        )
-            return;
+        // CCT — two variants: raw uint16 counts and firmware-processed 0-100 floats.
+        var cctRaw  = ComputeCct(dr.RawR,  dr.RawG,  dr.RawB);
+        var cctProc = ComputeCct(dr.ProcR, dr.ProcG, dr.ProcB);
 
-        var cct = ComputeCct(r, g, b);
-        var rawY = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        // Existing luminance pipeline (unchanged): uses CIE-Y from raw RGB.
+        var rawY = 0.2126 * dr.RawR + 0.7152 * dr.RawG + 0.0722 * dr.RawB;
         var luminance = ComputeLuminance(rawY);
-        var rawText = $"R:{r:F2}  G:{g:F2}  B:{b:F2}";
-        var timeText = DateTime.Now.ToString("HH:mm:ss");
-
-        // Interpolate per-point bias values at the current rawY.
         var (rBias, gBias, bBias, lBias) = InterpolateBiases(rawY);
 
-        // Update observable properties on the UI thread so bindings refresh correctly.
+        // Ambient percentage from raw_c (Clear channel) — X input for all RGBL curves.
+        if (dr.RawC > _peakRawC) _peakRawC = dr.RawC;
+        var ambientPct = Math.Clamp(dr.RawC / _peakRawC * 100.0, 0, 100);
+
+        // RGBL curve evaluation — only when a calibration JSON is loaded.
+        double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB;
+        if (_rgblEvaluator is not null)
+            (rgblR, rgblG, rgblB) = _rgblEvaluator.Evaluate(ambientPct);
+
+        var rawText = string.Create(
+            CultureInfo.InvariantCulture,
+            $"R:{dr.RawR}  G:{dr.RawG}  B:{dr.RawB}  C:{dr.RawC}  pR:{dr.ProcR:F1}  pG:{dr.ProcG:F1}  pB:{dr.ProcB:F1}"
+        );
+        var timeText = DateTime.Now.ToString("HH:mm:ss");
+
         Dispatcher.UIThread.Post(() =>
         {
-            LatestCct = cct;
+            LatestCct = cctRaw;
+            LatestCctRaw = cctRaw;
+            LatestCctProc = cctProc;
             LatestLuminance = luminance;
             LatestRawY = rawY;
             LatestRBias = rBias;
             LatestGBias = gBias;
             LatestBBias = bBias;
             LatestLBias = lBias;
+            LatestRgblR = rgblR;
+            LatestRgblG = rgblG;
+            LatestRgblB = rgblB;
             LastRawReading = rawText;
             LastReadTime = timeText;
             IsConnected = true;
@@ -988,13 +1042,20 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>
     /// Injects a fake sensor reading directly — for testing without hardware.
-    /// Uses the same CCT/luminance pipeline as real serial data.
+    /// Builds a minimal dual-format line (type=6) and feeds it through the normal pipeline.
     /// </summary>
     public void InjectSimulatedReading(double r, double g, double b)
     {
+        var rawR = (ushort)Math.Clamp(r, 0, 65535);
+        var rawG = (ushort)Math.Clamp(g, 0, 65535);
+        var rawB = (ushort)Math.Clamp(b, 0, 65535);
+        var rawC = (ushort)Math.Clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0, 65535);
+        var procR = (float)Math.Clamp(r / 655.35, 0, 100);
+        var procG = (float)Math.Clamp(g / 655.35, 0, 100);
+        var procB = (float)Math.Clamp(b / 655.35, 0, 100);
         var fakeResponse = string.Create(
             CultureInfo.InvariantCulture,
-            $"R:{r:F2}, G:{g:F2}, B:{b:F2}"
+            $"0;6;0;{rawR};{rawG};{rawB};{rawC};{procR:F1};{procG:F1};{procB:F1}"
         );
         ParseAndDispatch(fakeResponse);
     }
@@ -1009,6 +1070,20 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _portLock.Dispose();
     }
 }
+
+/// <summary>
+/// Parsed representation of one OUT_DUAL (type=6) firmware output line.
+/// Raw values are uint16 sensor counts; Proc values are firmware-normalised 0-100 floats.
+/// </summary>
+internal readonly record struct DualReading(
+    ushort RawR,
+    ushort RawG,
+    ushort RawB,
+    ushort RawC,
+    float  ProcR,
+    float  ProcG,
+    float  ProcB
+);
 
 /// <summary>
 /// Diagnostic result returned by <see cref="UsbSensorService.TestConnectionAsync"/>.

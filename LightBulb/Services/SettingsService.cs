@@ -147,6 +147,11 @@ public partial class SettingsService()
     [ObservableProperty]
     public partial IReadOnlyList<UsbCalibrationPoint>? UsbCalibrationPoints { get; set; }
 
+    // RGBL curve editor calibration
+    [ObservableProperty]
+    [JsonPropertyName("RgblCalibrationJsonPath")]
+    public partial string RgblCalibrationJsonPath { get; set; } = string.Empty;
+
     // HotKeys
 
     [ObservableProperty]
@@ -230,5 +235,9 @@ public partial class SettingsService
     [JsonSerializable(typeof(SettingsService))]
     [JsonSerializable(typeof(UsbCalibrationPoint))]
     [JsonSerializable(typeof(List<UsbCalibrationPoint>))]
+    [JsonSerializable(typeof(RgblCalibration))]
+    [JsonSerializable(typeof(CurvePoint))]
+    [JsonSerializable(typeof(List<CurvePoint>))]
+    [JsonSerializable(typeof(Dictionary<string, List<CurvePoint>>))]
     private partial class SerializerContext : JsonSerializerContext;
 }
