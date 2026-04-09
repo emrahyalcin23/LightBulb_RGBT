@@ -1,7 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════
 //  SIM-ENGINE.JS — Simülasyon Motoru
 // ═══════════════════════════════════════════════════════════════════
-import { getAdjustedAmbient } from './luminosity.js';
+// import { getAdjustedAmbient } from './luminosity.js';
+
+const getAdjustedAmbient = window.getAdjustedAmbient;
 
 const simEl = {
     sky:           document.getElementById('simSky'),
@@ -127,8 +129,9 @@ function getRoomBrightnessBySensor(r) { return 0.1  + Math.pow(r, 1.2) * 0.85; }
 
 window.updateEnvironment = function(ambientLight, finalR, finalG, finalB, finalL, ltValue) {
     // ★ Sensör ham değerini düzelt ★
-    const adjustedAmbient = getAdjustedAmbient(ambientLight);
-    
+    // const adjustedAmbient = getAdjustedAmbient(ambientLight);
+    // const adjustedAmbient = window.getAdjustedAmbient(ambientLight);
+
     const mode = document.querySelector('input[name="simMode"]:checked').value;
     const ratio = Math.max(0, Math.min(1, ambientLight / 100));
 
@@ -267,3 +270,4 @@ window.updateEnvironment = function(ambientLight, finalR, finalG, finalB, finalL
     if (simEl.valY) simEl.valY.textContent =
         `R:${Math.round(finalR)} G:${Math.round(finalG)} B:${Math.round(finalB)} L:${Math.round(finalL)}`;
 };
+
