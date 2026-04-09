@@ -11,11 +11,4 @@
     <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
   </PropertyGroup>
 
-  <!-- Tmds.DBus.Protocol is a Linux D-Bus library brought in transitively by Avalonia.
-       This project targets net10.0-windows and never runs on Linux, so the vulnerability
-       is not exploitable here. Suppressed to unblock the build. -->
-  <ItemGroup>
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-xrw6-gwf8-vvr9" />
-  </ItemGroup>
-
 </Project>
