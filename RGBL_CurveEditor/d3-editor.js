@@ -1,13 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
-//  D3-EDITOR.JS — RGBL Eğri Editörü  (v6)
-//
-//  L  : sensör kalibrasyonu — ortam → parlaklık [monoton ↑, düzenlenebilir]
-//  T  : zaman profili      — konum → ortam eşdeğeri [düzenlenebilir]
-//  LT : LT(x) = L(T(x))   — her zaman türetilir, her 2 modda görünür, salt okunur
-//  RGB: her 2 modda aynı
-//
-//  Kural: L veya T değişince LT anında güncellenir.
+//  D3-EDITOR.JS — RGBL Eğri Editörü
 // ═══════════════════════════════════════════════════════════════════
+
 window._es = 1;
 
 const CHANNELS = {
@@ -20,7 +14,6 @@ const CHANNELS = {
 };
 const EDITABLE_CHS = Object.keys(CHANNELS).filter(ch => CHANNELS[ch].editable);
 
-// ── Düğüm yönetimi ──
 let _nid = 0;
 function mkNode(x, y, fixed = false) { return { id: ++_nid, x, y, fixed }; }
 
@@ -34,7 +27,6 @@ function defaultNodes() {
     };
 }
 
-// ── localStorage ──
 const LS_KEY = 'rgbl_calibration';
 
 function saveToLocalStorage() {
@@ -50,7 +42,6 @@ function loadFromLocalStorage() {
         const raw = localStorage.getItem(LS_KEY);
         if (!raw) return null;
         const data = JSON.parse(raw);
-        // Geriye uyumluluk: LT (v3) → T; eksik kanal olursa null
         if (!data.T && data.LT) data.T = data.LT;
         const result = {};
         let valid = true;
@@ -66,27 +57,23 @@ function loadFromLocalStorage() {
 }
 
 let nodes = loadFromLocalStorage() || defaultNodes();
-
-// ── calcMode ──
 let calcMode = localStorage.getItem('rgbl_calc_mode') || 'absolute';
 
-// ── LT önbelleği ──
 let _ltDirty = true;
 let _ltPoints = [];
 function _invalidateLT() { _ltDirty = true; }
 
-// ── SVG kurulumu ──
 const margin = { top: 20, right: 20, bottom: 40, left: 50 };
-const wrap   = document.getElementById('d3-wrap');
-let W = (wrap ? wrap.clientWidth  : 480) - margin.left - margin.right;
-let H = (wrap ? wrap.clientHeight : 340) - margin.top  - margin.bottom;
+const wrap = document.getElementById('d3-wrap');
+let W = (wrap ? wrap.clientWidth : 480) - margin.left - margin.right;
+let H = (wrap ? wrap.clientHeight : 340) - margin.top - margin.bottom;
 if (W < 100) W = 410;
 if (H < 100) H = 280;
 
 const svg = d3.select('#d3-wrap')
     .append('svg')
-    .attr('width',  W + margin.left + margin.right)
-    .attr('height', H + margin.top  + margin.bottom);
+    .attr('width', W + margin.left + margin.right)
+    .attr('height', H + margin.top + margin.bottom);
 
 const g = svg.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -94,7 +81,6 @@ const g = svg.append('g')
 const xSc = d3.scaleLinear().domain([0, 100]).range([0, W]);
 const ySc = d3.scaleLinear().domain([0, 100]).range([H, 0]);
 
-// ── Grid ──
 const grid = g.append('g').attr('class', 'grid');
 function _drawGrid() {
     grid.selectAll('line').remove();
@@ -111,14 +97,10 @@ function _drawGrid() {
 }
 _drawGrid();
 
-// ── Eksenler ──
 const xAxisEl = g.append('g').attr('transform', `translate(0,${H})`).call(d3.axisBottom(xSc).ticks(5));
 xAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
-xAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
-
 const yAxisEl = g.append('g').call(d3.axisLeft(ySc).ticks(5));
 yAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
-yAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
 
 const xAxisLabel = g.append('text')
     .attr('x', W / 2).attr('y', H + 35)
@@ -130,33 +112,30 @@ g.append('text')
     .attr('text-anchor', 'middle').style('fill', '#64748b').style('font-size', '11px')
     .text('Çıkış (%)');
 
-// ── Resize ──
 function resize() {
     if (!wrap) return;
-    const nw = wrap.clientWidth  - margin.left - margin.right;
-    const nh = wrap.clientHeight - margin.top  - margin.bottom;
+    const nw = wrap.clientWidth - margin.left - margin.right;
+    const nh = wrap.clientHeight - margin.top - margin.bottom;
     if (nw < 50 || nh < 50) return;
     W = nw; H = nh;
     svg.attr('width', W + margin.left + margin.right)
-       .attr('height', H + margin.top  + margin.bottom);
+       .attr('height', H + margin.top + margin.bottom);
     xSc.range([0, W]); ySc.range([H, 0]);
     _drawGrid();
     xAxisEl.attr('transform', `translate(0,${H})`).call(d3.axisBottom(xSc).ticks(5));
     xAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
-    xAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
     yAxisEl.call(d3.axisLeft(ySc).ticks(5));
     yAxisEl.selectAll('text').style('fill', '#94a3b8').style('font-size', '11px');
-    yAxisEl.selectAll('.domain,.tick line').style('stroke', '#475569');
     xAxisLabel.attr('x', W / 2).attr('y', H + 35);
     xhLine.attr('y2', H);
+    yhLine.attr('x2', W);
     _invalidateLT();
     renderAll();
 }
 if (wrap) new ResizeObserver(() => resize()).observe(wrap);
 
-// ── Katmanlar ──
-const pathLayer  = g.append('g').attr('class', 'paths');
-const nodeLayer  = g.append('g').attr('class', 'nodes');
+const pathLayer = g.append('g').attr('class', 'paths');
+const nodeLayer = g.append('g').attr('class', 'nodes');
 const crossLayer = g.append('g').attr('class', 'crosshairs');
 
 const curvePaths = {};
@@ -170,18 +149,21 @@ Object.keys(CHANNELS).forEach(ch => {
         .style('pointer-events', 'none');
 });
 
-// ── Çizgi üreticiler ──
-const lineGen     = d3.line().x(d => xSc(d.x)).y(d => ySc(d.y)).curve(d3.curveCatmullRom.alpha(0.5));
+const lineGen = d3.line().x(d => xSc(d.x)).y(d => ySc(d.y)).curve(d3.curveCatmullRom.alpha(0.5));
 const lineGenMono = d3.line().x(d => xSc(d.x)).y(d => ySc(d.y)).curve(d3.curveMonotoneX);
 
-// ── Crosshair ──
-const xhLine = crossLayer.append('line')
-    .attr('y1', 0).attr('y2', H)
-    .style('stroke', 'rgba(255,255,255,0.5)').style('stroke-width', '1.5')
-    .style('stroke-dasharray', '4,3').style('pointer-events', 'none');
+const xhLine = crossLayer.append('line').attr('y1', 0).attr('y2', H)
+    .style('stroke', 'rgba(255,255,255,0.4)').style('stroke-width', '1.2')
+    .style('stroke-dasharray', '3,3').style('pointer-events', 'none');
 
-// ── Durum ──
-let activeCh   = 'L';
+const yhLine = crossLayer.append('line').attr('x1', 0).attr('x2', W)
+    .style('stroke', 'rgba(255,255,255,0.4)').style('stroke-width', '1.2')
+    .style('stroke-dasharray', '3,3').style('pointer-events', 'none');
+
+const xValueMarker = document.getElementById('x-value-marker');
+const yValueMarker = document.getElementById('y-value-marker');
+
+let activeCh = 'L';
 let isTimeMode = false;
 
 function getSimMode() {
@@ -189,74 +171,84 @@ function getSimMode() {
     return el ? el.value : 'sensor';
 }
 
-// ── sampleAtX ──
-function sampleAtX(ch, xVal) {
-    const pathEl = curvePaths[ch] && curvePaths[ch].node();
-    if (!pathEl) return xVal;
-    const totalLen = pathEl.getTotalLength();
-    if (totalLen === 0) return xVal;
-    const targetX = xSc(Math.max(0, Math.min(100, xVal)));
-    let lo = 0, hi = totalLen, mid, pt;
-    for (let i = 0; i < 50; i++) {
-        mid = (lo + hi) / 2;
-        pt  = pathEl.getPointAtLength(mid);
-        if (Math.abs(pt.x - targetX) < 0.3) break;
-        if (pt.x < targetX) lo = mid; else hi = mid;
-    }
-    return Math.max(0, Math.min(100, ySc.invert(pt.y)));
+function getLT(xVal) {
+    return sampleAtX('L', sampleAtX('T', xVal));
 }
 
-// ── LT türetme: LT(x) = L(T(x)) ──
+function sampleAtX(ch, xVal) {
+    
+    // // LT ÖZEL DURUMU Eklemeye gerek yok çünkü kendi fonksiyonu var. (zorunlu, çünkü nodes.LT yok)
+    // if (ch === 'LT') {
+    //     // LT(x) = L(T(x))
+    //     const tAmb = sampleAtX('T', xVal);
+    //     return sampleAtX('L', tAmb);
+    // }
+    
+
+    const points = nodes[ch];
+    if (!points || points.length < 2) return Math.max(0, Math.min(100, xVal));
+    
+    const sorted = [...points].sort((a, b) => a.x - b.x);
+    xVal = Math.max(0, Math.min(100, xVal));
+    
+    if (xVal <= sorted[0].x) return Math.max(0, Math.min(100, sorted[0].y));
+    if (xVal >= sorted[sorted.length - 1].x) return Math.max(0, Math.min(100, sorted[sorted.length - 1].y));
+    
+    for (let i = 0; i < sorted.length - 1; i++) {
+        const p1 = sorted[i];
+        const p2 = sorted[i + 1];
+        if (xVal >= p1.x && xVal <= p2.x) {
+            const t = (xVal - p1.x) / (p2.x - p1.x);
+            const y = p1.y + t * (p2.y - p1.y);
+            return Math.max(0, Math.min(100, y));
+        }
+    }
+    return Math.max(0, Math.min(100, xVal));
+}
+
 function _renderLT() {
     if (_ltDirty) {
         _ltPoints = [];
+        // console.log("LT yeniden hesaplanıyor..."); // DEBUG
         for (let xi = 0; xi <= 100; xi += 2) {
-            const tAmb = sampleAtX('T', xi);   // T(x)
-            const lVal = sampleAtX('L', tAmb); // L(T(x))
+            const tAmb = sampleAtX('T', xi);
+            const lVal = sampleAtX('L', tAmb);
             _ltPoints.push({ x: xi, y: lVal });
         }
+        // console.log("LT noktaları:", _ltPoints.slice(0, 5)); // DEBUG
         _ltDirty = false;
     }
+    
     curvePaths['LT']
         .datum(_ltPoints)
-        .attr('d', lineGen)
-        .attr('opacity', 0.85)
-        .style('pointer-events', 'none');
+        .attr('d', d3.line().x(d => xSc(d.x)).y(d => ySc(d.y)).curve(d3.curveLinear))
+        .attr('opacity', 0.85);
 }
 
-// ── Monoton kısıt (L) ──
 function clampLMonotone(node, newY) {
     const sorted = [...nodes.L].sort((a, b) => a.x - b.x);
-    const idx    = sorted.findIndex(n => n.id === node.id);
-    const minY   = idx > 0                  ? sorted[idx - 1].y : 0;
-    const maxY   = idx < sorted.length - 1 ? sorted[idx + 1].y : 100;
+    const idx = sorted.findIndex(n => n.id === node.id);
+    const minY = idx > 0 ? Math.max(0, sorted[idx - 1].y) : 0;
+    const maxY = idx < sorted.length - 1 ? Math.min(100, sorted[idx + 1].y) : 100;
     return Math.max(minY, Math.min(maxY, newY));
 }
 
-// ── Render ──
 function renderAll() {
     xAxisLabel.text(isTimeMode ? 'Saat (0h → 24h)' : 'Ortam Işığı (%)');
 
-    // 1. Düzenlenebilir kanalları çiz (L ve T her 2 modda da görünür)
     EDITABLE_CHS.forEach(ch => {
-        const gen    = ch === 'L' ? lineGenMono : lineGen;
+        const gen = ch === 'L' ? lineGenMono : lineGen;
         const sorted = [...nodes[ch]].sort((a, b) => a.x - b.x);
-        curvePaths[ch]
-            .datum(sorted).attr('d', gen)
-            .attr('opacity', 1)
-            .style('pointer-events', 'stroke');
+        curvePaths[ch].datum(sorted).attr('d', gen).attr('opacity', 1);
     });
 
-    // 2. LT türetilmiş eğri — her zaman göster (L veya T değişince güncellenir)
     _renderLT();
 
-    // 3. Düğümler (sadece düzenlenebilir kanallar)
     EDITABLE_CHS.forEach(ch => {
         const isActive = ch === activeCh;
-        const sorted   = [...nodes[ch]].sort((a, b) => a.x - b.x);
+        const sorted = [...nodes[ch]].sort((a, b) => a.x - b.x);
 
-        const sel = nodeLayer.selectAll(`.node-${ch}`)
-            .data(sorted, d => d.id);
+        const sel = nodeLayer.selectAll(`.node-${ch}`).data(sorted, d => d.id);
 
         sel.enter()
             .append('circle')
@@ -271,7 +263,8 @@ function renderAll() {
                 nodes[ch] = nodes[ch].filter(n => n.id !== d.id);
                 if (ch === 'L' || ch === 'T') _invalidateLT();
                 saveToLocalStorage();
-                renderAll(); triggerUpdate();
+                renderAll();
+                window._updateSimulation();
             })
             .merge(sel)
             .attr('cx', d => xSc(d.x))
@@ -281,18 +274,16 @@ function renderAll() {
         sel.exit().remove();
     });
 
-    // 4. Buton durumları
     document.querySelectorAll('.ch-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.ch === activeCh);
     });
 }
 
-// ── Sürükleme ──
 function makeDrag(ch) {
     return d3.drag()
-        .on('start', function() { d3.select(this).style('cursor', 'grabbing'); })
-        .on('drag', function(ev, d) {
-            const [px, py] = d3.pointer(ev, g.node());
+        .on('start', function(event) { d3.select(this).style('cursor', 'grabbing'); })
+        .on('drag', function(event, d) {
+            const [px, py] = d3.pointer(event, g.node());
             const mx = xSc.invert(px);
             const my = Math.max(0, Math.min(100, ySc.invert(py)));
 
@@ -303,15 +294,15 @@ function makeDrag(ch) {
                 d.y = (ch === 'L') ? clampLMonotone(d, my) : my;
             }
             if (ch === 'L' || ch === 'T') _invalidateLT();
-            renderAll(); triggerUpdate();
+            renderAll();
+            window._updateSimulation();
         })
-        .on('end', function(ev, d) {
+        .on('end', function(event, d) {
             d3.select(this).style('cursor', d.fixed ? 'ns-resize' : 'grab');
             saveToLocalStorage();
         });
 }
 
-// ── Tıklama → düğüm ekle ──
 svg.on('click', function(ev) {
     if (!CHANNELS[activeCh] || !CHANNELS[activeCh].editable) return;
     const [px, py] = d3.pointer(ev, g.node());
@@ -322,60 +313,88 @@ svg.on('click', function(ev) {
     nodes[activeCh].push(mkNode(nx, ny, false));
     if (activeCh === 'L' || activeCh === 'T') _invalidateLT();
     saveToLocalStorage();
-    renderAll(); triggerUpdate();
+    renderAll();
+    window._updateSimulation();
 });
 
-// ── Crosshair ──
 let currentAmbient = 50;
 
 svg.on('mousemove', function(ev) {
-    const [px] = d3.pointer(ev, g.node());
+    const [px, py] = d3.pointer(ev, g.node());
     currentAmbient = Math.max(0, Math.min(100, xSc.invert(px)));
+    const currentY = Math.max(0, Math.min(100, ySc.invert(py)));
+    
     xhLine.attr('x1', xSc(currentAmbient)).attr('x2', xSc(currentAmbient));
-    triggerUpdate();
+    yhLine.attr('y1', ySc(currentY)).attr('y2', ySc(currentY));
+    
+    if (xValueMarker) {
+        const svgRect = svg.node().getBoundingClientRect();
+        const markerX = svgRect.left + margin.left + xSc(currentAmbient);
+        const markerY = svgRect.top + margin.top + H + 5;
+        xValueMarker.style.display = 'block';
+        xValueMarker.style.left = markerX + 'px';
+        xValueMarker.style.top = markerY + 'px';
+        xValueMarker.textContent = Math.round(currentAmbient) + '%';
+    }
+    
+    if (yValueMarker) {
+        const svgRect = svg.node().getBoundingClientRect();
+        const markerX = svgRect.left + margin.left - 35;
+        const markerY = svgRect.top + margin.top + ySc(currentY);
+        yValueMarker.style.display = 'block';
+        yValueMarker.style.left = markerX + 'px';
+        yValueMarker.style.top = markerY + 'px';
+        yValueMarker.textContent = Math.round(currentY) + '%';
+    }
+    
+    window._updateSimulation();
 });
 
 svg.on('mouseleave', function() {
     xhLine.attr('x1', -10).attr('x2', -10);
+    yhLine.attr('y1', -10).attr('y2', -10);
+    if (xValueMarker) xValueMarker.style.display = 'none';
+    if (yValueMarker) yValueMarker.style.display = 'none';
 });
 
-// ── Simülasyon güncelleme ──
-function triggerUpdate() {
+window._updateSimulation = function() {
     const x = currentAmbient;
-    // Sensör: RGB ve L doğrudan x'ten
-    // Saat  : T(x) = etkin ortam, L ve RGB oradan
-    const effAmb = isTimeMode ? sampleAtX('T', x) : x;
-    const cL = sampleAtX('L', effAmb);
+    const tVal = sampleAtX('T', x);
+    const effAmb = isTimeMode ? tVal : x;
+    const ltVal = getLT(x);
     const cR = sampleAtX('R', effAmb);
     const cG = sampleAtX('G', effAmb);
     const cB = sampleAtX('B', effAmb);
+    const cL = sampleAtX('L', effAmb);
 
     let fR, fG, fB;
     if (calcMode === 'ratio') {
         const sum = cR + cG + cB;
         if (sum > 0.001) { fR = cR/sum*cL; fG = cG/sum*cL; fB = cB/sum*cL; }
-        else             { fR = fG = fB = cL / 3; }
+        else { fR = fG = fB = cL / 3; }
     } else {
-        fR = cR*(cL/100); fG = cG*(cL/100); fB = cB*(cL/100);
+        fR = cR * (cL / 100);
+        fG = cG * (cL / 100);
+        fB = cB * (cL / 100);
     }
 
-    if (typeof updateEnvironment === 'function') {
-        updateEnvironment(currentAmbient, fR, fG, fB, cL);
+    if (typeof window.updateEnvironment === 'function') {
+        window.updateEnvironment(currentAmbient, fR, fG, fB, cL, ltVal);
     }
 
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = Math.round(v); };
     const lbl = document.getElementById('lbl-xpos');
     if (lbl) lbl.textContent = isTimeMode ? 'Saat' : 'Ortam';
-    const chipEff = document.getElementById('chip-eff');
-    if (chipEff) chipEff.style.display = 'none';
-    set('disp-amb', Math.round(x));
-    set('disp-r',   Math.round(fR));
-    set('disp-g',   Math.round(fG));
-    set('disp-b',   Math.round(fB));
-    set('disp-l',   Math.round(cL));
-}
+    
+    set('disp-amb', x);
+    set('disp-t', tVal);
+    set('disp-lt', ltVal);
+    set('disp-r', fR);
+    set('disp-g', fG);
+    set('disp-b', fB);
+    set('disp-l', cL);
+};
 
-// ── Kanal seçimi ──
 document.querySelectorAll('.ch-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const ch = btn.dataset.ch;
@@ -385,35 +404,38 @@ document.querySelectorAll('.ch-btn').forEach(btn => {
     });
 });
 
-// ── Hesap modu ──
 function _updateCalcBtn() {
     const btn = document.getElementById('calc-mode-btn');
     if (!btn) return;
-    if (calcMode === 'ratio') {
-        btn.textContent = '⚡ Oran';
-        btn.title = 'ORAN: RGB renk oranını belirler, toplam güç = L';
-    } else {
-        btn.textContent = '⚡ Mutlak';
-        btn.title = 'MUTLAK: fR = R×(L/100), her kanal bağımsız';
-    }
+    btn.textContent = calcMode === 'ratio' ? '⚡ Oran' : '⚡ Mutlak';
 }
 const calcBtn = document.getElementById('calc-mode-btn');
-if (calcBtn) { _updateCalcBtn(); calcBtn.addEventListener('click', () => { calcMode = calcMode === 'ratio' ? 'absolute' : 'ratio'; localStorage.setItem('rgbl_calc_mode', calcMode); _updateCalcBtn(); triggerUpdate(); }); }
+if (calcBtn) {
+    _updateCalcBtn();
+    calcBtn.addEventListener('click', () => {
+        calcMode = calcMode === 'ratio' ? 'absolute' : 'ratio';
+        localStorage.setItem('rgbl_calc_mode', calcMode);
+        _updateCalcBtn();
+        window._updateSimulation();
+    });
+}
 
-// ── JSON Dışa Aktarma ──
 const exportBtn = document.getElementById('export-btn');
 if (exportBtn) {
     exportBtn.addEventListener('click', () => {
         const data = {};
-        EDITABLE_CHS.forEach(ch => { data[ch] = nodes[ch].map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })); });
-        const blob = new Blob([JSON.stringify({ version: 6, calcMode, channels: data }, null, 2)], { type: 'application/json' });
+        EDITABLE_CHS.forEach(ch => {
+            data[ch] = nodes[ch].map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed }));
+        });
+        const blob = new Blob([JSON.stringify({ version: 7, calcMode, channels: data }, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob); a.download = 'rgbl_calibration.json'; a.click();
+        a.href = URL.createObjectURL(blob);
+        a.download = 'rgbl_calibration.json';
+        a.click();
         URL.revokeObjectURL(a.href);
     });
 }
 
-// ── Sıfırlama ──
 const resetBtn = document.getElementById('reset-btn');
 if (resetBtn) {
     resetBtn.addEventListener('click', () => {
@@ -421,26 +443,26 @@ if (resetBtn) {
         localStorage.removeItem(LS_KEY);
         nodes = defaultNodes();
         _invalidateLT();
-        renderAll(); triggerUpdate();
+        renderAll();
+        window._updateSimulation();
     });
 }
 
-// ── Mod değişimi ──
 document.querySelectorAll('input[name="simMode"]').forEach(radio => {
     radio.addEventListener('change', () => {
         isTimeMode = radio.value === 'time';
         currentAmbient = 50;
-        // Aktif kanalı moda göre öner (kullanıcı dilerse değiştirebilir)
         if (isTimeMode && activeCh === 'L') activeCh = 'T';
         if (!isTimeMode && activeCh === 'T') activeCh = 'L';
-        renderAll(); triggerUpdate();
+        renderAll();
+        window._updateSimulation();
     });
 });
 
-// ── İlk render ──
 (function init() {
     isTimeMode = getSimMode() === 'time';
     if (isTimeMode && activeCh === 'L') activeCh = 'T';
     if (!isTimeMode && activeCh === 'T') activeCh = 'L';
-    renderAll(); triggerUpdate();
+    renderAll();
+    window._updateSimulation();
 })();
