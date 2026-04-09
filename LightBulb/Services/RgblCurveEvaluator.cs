@@ -124,10 +124,13 @@ public sealed class RgblCurveEvaluator
         return pts.OrderBy(p => p.X).ToList();
     }
 
-    // Source-generated JSON context for trim-safe deserialization of RGBL calibration.
-    [JsonSerializable(typeof(RgblCalibration))]
-    [JsonSerializable(typeof(CurvePoint))]
-    [JsonSerializable(typeof(List<CurvePoint>))]
-    [JsonSerializable(typeof(Dictionary<string, List<CurvePoint>>))]
-    private partial class RgblSerializerContext : JsonSerializerContext;
 }
+
+// Source-generated JSON context for trim-safe deserialization of RGBL calibration.
+// Must be a top-level partial type — source generator requires the context and all
+// containing types to be partial, so it cannot be nested inside a non-partial class.
+[JsonSerializable(typeof(RgblCalibration))]
+[JsonSerializable(typeof(CurvePoint))]
+[JsonSerializable(typeof(List<CurvePoint>))]
+[JsonSerializable(typeof(Dictionary<string, List<CurvePoint>>))]
+internal partial class RgblSerializerContext : JsonSerializerContext;
