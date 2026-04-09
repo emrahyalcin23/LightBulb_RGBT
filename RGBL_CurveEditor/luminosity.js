@@ -29,7 +29,7 @@ function normalizeToSensitiveRange(sensorValue) {
 }
 
 // Aynı mantıkla "düzeltilmiş ortam değeri" döndürür
-export function getAdjustedAmbient(sensorValue) {
+function getAdjustedAmbient(sensorValue) {
     return normalizeToSensitiveRange(sensorValue);
 }
 
