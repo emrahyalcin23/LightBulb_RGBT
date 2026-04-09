@@ -2,15 +2,6 @@
 //  SIM-ENGINE.JS — Simülasyon Motoru
 // ═══════════════════════════════════════════════════════════════════
 
-// Inlined from luminosity.js — avoids ES module import which breaks file:// loading.
-function getAdjustedAmbient(sensorValue) {
-    const min = 0, max = 100, minH = 1, maxH = 25;
-    const raw = Math.min(max, Math.max(min, sensorValue));
-    const t   = (raw - min) / (max - min);
-    const mapped = minH + t * (maxH - minH);
-    return Math.min(100, Math.max(0, ((mapped - minH) / (maxH - minH)) * 100));
-}
-
 const simEl = {
     sky:           document.getElementById('simSky'),
     celestial:     document.getElementById('celestial'),
