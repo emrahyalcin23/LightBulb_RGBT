@@ -66,8 +66,5 @@ function percentageRGB(R, G, B) {
     };
 }
 
-export function absoluteOrPercentageRGB(R, G, B, mode) {
-    if (mode === 'absolute') return absoluteRGB(R, G, B);
-    if (mode === 'ratio') return percentageRGB(R, G, B);
-    throw new Error('Invalid mode');
-}
+
+window.getAdjustedAmbient = getAdjustedAmbient;
