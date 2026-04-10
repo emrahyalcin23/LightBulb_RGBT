@@ -586,6 +586,31 @@ async function ensureHandle(forcePick = false) {
 async function handleSave(forcePick = false) {
     const jsonStr = buildCalibrationJson();
 
+    // C# localhost sunucu mevcut mu kontrol et (?port=NNNN URL parametresi)
+    const port = new URLSearchParams(window.location.search).get('port');
+    if (port) {
+        try {
+            const resp = await fetch(`http://127.0.0.1:${port}/rgbl-save`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    jsonStr,
+            });
+            const result = await resp.json();
+            if (result.ok) {
+                rotateBackup(jsonStr);
+                flashSaveStatus('✓ Kaydedildi');
+                return;
+            }
+            flashSaveStatus('✗ Sunucu hatası', '#f87171', 3000);
+        } catch (e) {
+            console.error('HTTP kayıt hatası:', e);
+            flashSaveStatus('✗ LightBulb bağlantı hatası', '#f87171', 3000);
+        }
+        return;   // port parametresi vardı — fallback devreye girmez
+    }
+
+    // ── Mevcut IndexedDB / File System API akışı (port yoksa) ─────────────────
+
     // File System Access API desteklenmiyor → indirme ile fallback
     if (!window.showSaveFilePicker) {
         downloadJson(jsonStr);

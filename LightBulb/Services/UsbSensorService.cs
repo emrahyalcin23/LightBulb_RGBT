@@ -56,6 +56,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     // Serialises all blocking port I/O so PerformRead and RunTest never race.
     private readonly System.Threading.SemaphoreSlim _portLock = new(1, 1);
 
+    // Calibration HTTP server fields
+    private System.Net.HttpListener? _httpListener;
+    private System.Threading.CancellationTokenSource? _httpCts;
+
     [ObservableProperty]
     public partial double LatestCct { get; private set; } = 6500;
 
@@ -127,6 +131,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>True when an RGBL calibration JSON is loaded; the display pipeline uses this to decide routing.</summary>
     public bool IsRgblCalibrationActive => _rgblEvaluator is not null;
+
+    /// <summary>
+    /// Port of the local calibration HTTP server (127.0.0.1:PORT).
+    /// 0 when the server is not running.
+    /// </summary>
+    public int CalibrationServerPort { get; private set; }
 
     public UsbSensorService(SettingsService settingsService)
     {
@@ -307,6 +317,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         Stop();
         ReloadRgblEvaluator();
+        StartCalibrationHttpServer();
 
         if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName))
             return; // No port configured yet — wait for auto-detect
@@ -358,6 +369,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             IsConnected = false;
         else
             Dispatcher.UIThread.Post(() => IsConnected = false);
+
+        StopCalibrationHttpServer();
     }
 
     private void ScheduleNextRead(TimeSpan? delay = null)
@@ -1093,6 +1106,108 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             $"0;6;0;{rawR};{rawG};{rawB};{rawC};{procR:F1};{procG:F1};{procB:F1}"
         );
         ParseAndDispatch(fakeResponse);
+    }
+
+    // ── Calibration HTTP server ───────────────────────────────────────────────
+
+    private void StartCalibrationHttpServer()
+    {
+        StopCalibrationHttpServer();
+
+        // Find a free loopback port
+        int port;
+        using (var tmp = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        {
+            tmp.Start();
+            port = ((System.Net.IPEndPoint)tmp.LocalEndpoint).Port;
+            tmp.Stop();
+        }
+
+        var listener = new System.Net.HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+
+        _httpListener = listener;
+        _httpCts     = new System.Threading.CancellationTokenSource();
+        CalibrationServerPort = port;
+
+        _ = Task.Run(() => RunHttpLoopAsync(listener, _httpCts.Token));
+    }
+
+    private void StopCalibrationHttpServer()
+    {
+        _httpCts?.Cancel();
+        _httpCts = null;
+        try { _httpListener?.Stop(); } catch { }
+        _httpListener = null;
+        CalibrationServerPort = 0;
+    }
+
+    private async Task RunHttpLoopAsync(
+        System.Net.HttpListener listener,
+        System.Threading.CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            System.Net.HttpListenerContext ctx;
+            try { ctx = await listener.GetContextAsync(); }
+            catch { break; }
+            _ = Task.Run(() => HandleCalibrationRequestAsync(ctx, ct), ct);
+        }
+    }
+
+    private async Task HandleCalibrationRequestAsync(
+        System.Net.HttpListenerContext ctx,
+        System.Threading.CancellationToken ct)
+    {
+        var req  = ctx.Request;
+        var resp = ctx.Response;
+
+        // CORS — required for file:// origin
+        resp.Headers.Add("Access-Control-Allow-Origin",  "*");
+        resp.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
+        resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+
+        if (req.HttpMethod == "OPTIONS")
+        {
+            resp.StatusCode = 204;
+            resp.Close();
+            return;
+        }
+
+        if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/rgbl-save")
+        {
+            try
+            {
+                using var sr  = new StreamReader(req.InputStream, req.ContentEncoding);
+                var json      = await sr.ReadToEndAsync();
+                var dest      = Path.Combine(AppContext.BaseDirectory, "rgbl_calibration.json");
+                await File.WriteAllTextAsync(dest, json, ct);
+
+                // Reload evaluator after file is written
+                Dispatcher.UIThread.Post(ReloadRgblEvaluator);
+
+                var ok = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
+                resp.ContentType    = "application/json; charset=utf-8";
+                resp.ContentLength64 = ok.Length;
+                await resp.OutputStream.WriteAsync(ok, ct);
+            }
+            catch (Exception ex)
+            {
+                resp.StatusCode = 500;
+                var msg = ex.Message.Replace("\"", "'");
+                var err = System.Text.Encoding.UTF8.GetBytes(
+                    $"{{\"ok\":false,\"error\":\"{msg}\"}}");
+                resp.ContentType    = "application/json; charset=utf-8";
+                resp.ContentLength64 = err.Length;
+                await resp.OutputStream.WriteAsync(err, ct);
+            }
+            finally { resp.Close(); }
+            return;
+        }
+
+        resp.StatusCode = 404;
+        resp.Close();
     }
 
     public void Dispose()
