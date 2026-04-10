@@ -143,6 +143,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _settingsService = settingsService;
         // Auto-reload when the user changes the calibration JSON path.
         _ = settingsService.WatchProperty(o => o.RgblCalibrationJsonPath, ReloadRgblEvaluator);
+        // HTTP calibration server starts with the app; runs for the app's lifetime.
+        StartCalibrationHttpServer();
     }
 
     /// <summary>
@@ -317,7 +319,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         Stop();
         ReloadRgblEvaluator();
-        StartCalibrationHttpServer();
 
         if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName))
             return; // No port configured yet — wait for auto-detect
@@ -369,8 +370,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             IsConnected = false;
         else
             Dispatcher.UIThread.Post(() => IsConnected = false);
-
-        StopCalibrationHttpServer();
     }
 
     private void ScheduleNextRead(TimeSpan? delay = null)
@@ -1217,6 +1216,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         _isDisposed = true;
         Stop();
+        StopCalibrationHttpServer();
         _portLock.Dispose();
     }
 }
