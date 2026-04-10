@@ -420,29 +420,125 @@ if (calcBtn) {
     });
 }
 
+// ── Save-to-file logic ─────────────────────────────────────────────────────────
+const BACKUP_LS_KEY = 'rgbl_cal_backups';
+const MAX_BACKUPS   = 10;
+
+let _fileHandle = null;   // FileSystemFileHandle; null = not yet picked
+
+/** Build the export JSON string from current curve state. */
+function buildCalibrationJson() {
+    const ltPoints = [];
+    for (let xi = 0; xi <= 100; xi += 2) {
+        const tAmb = sampleAtX('T', xi);
+        const lVal = sampleAtX('L', tAmb);
+        ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2), fixed: false });
+    }
+    const data = {
+        R: nodes.R.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
+        G: nodes.G.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
+        B: nodes.B.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
+        L: ltPoints,
+    };
+    return JSON.stringify({ version: 8, calcMode, channels: data }, null, 2);
+}
+
+/** Push jsonStr to the front of the localStorage backup ring (max MAX_BACKUPS). */
+function rotateBackup(jsonStr) {
+    try {
+        let backups = [];
+        try { backups = JSON.parse(localStorage.getItem(BACKUP_LS_KEY) || '[]'); } catch {}
+        backups.unshift({ ts: new Date().toISOString(), data: jsonStr });
+        if (backups.length > MAX_BACKUPS) backups.length = MAX_BACKUPS;
+        localStorage.setItem(BACKUP_LS_KEY, JSON.stringify(backups));
+    } catch (_) { /* localStorage dolu olabilir */ }
+}
+
+/** Flash the save-status label for `ms` milliseconds. */
+function flashSaveStatus(msg, color = '#4ade80', ms = 2000) {
+    const el = document.getElementById('save-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color  = color;
+    el.style.opacity = '1';
+    setTimeout(() => { el.style.opacity = '0'; }, ms);
+}
+
+/**
+ * Write jsonStr to _fileHandle (must already be set).
+ * Returns true on success, false on error.
+ */
+async function writeToHandle(jsonStr) {
+    try {
+        const writable = await _fileHandle.createWritable();
+        await writable.write(jsonStr);
+        await writable.close();
+        return true;
+    } catch (e) {
+        _fileHandle = null;
+        console.error('Yazma hatası:', e);
+        return false;
+    }
+}
+
+/** Pick a new save file and remember the handle; returns true if picked. */
+async function pickSaveFile() {
+    if (!window.showSaveFilePicker) return false;
+    try {
+        _fileHandle = await window.showSaveFilePicker({
+            suggestedName: 'rgbl_calibration.json',
+            types: [{ description: 'JSON Kalibrasyon', accept: { 'application/json': ['.json'] } }],
+        });
+        return true;
+    } catch (e) {
+        if (e.name !== 'AbortError') console.error('Dosya seçme hatası:', e);
+        return false;
+    }
+}
+
+/** Fallback: trigger browser download. */
+function downloadJson(jsonStr) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([jsonStr], { type: 'application/json' }));
+    a.download = 'rgbl_calibration.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+/** Main save handler: prefer File System API, fall back to download. */
+async function handleSave(forcePick = false) {
+    const jsonStr = buildCalibrationJson();
+
+    if (window.showSaveFilePicker) {
+        if (forcePick || !_fileHandle) {
+            const picked = await pickSaveFile();
+            if (!picked) return;   // user cancelled
+        }
+        const ok = await writeToHandle(jsonStr);
+        if (ok) {
+            rotateBackup(jsonStr);
+            const name = _fileHandle.name ?? 'rgbl_calibration.json';
+            flashSaveStatus(`✓ ${name}`);
+        } else {
+            flashSaveStatus('✗ Yazma hatası', '#f87171');
+            downloadJson(jsonStr);   // fallback
+        }
+    } else {
+        // Browser doesn't support File System Access API
+        downloadJson(jsonStr);
+        rotateBackup(jsonStr);
+        flashSaveStatus('✓ İndirildi');
+    }
+}
+
 const exportBtn = document.getElementById('export-btn');
 if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-        // LT = L(T(x)) — pre-compute every 2 units across 0-100
-        const ltPoints = [];
-        for (let xi = 0; xi <= 100; xi += 2) {
-            const tAmb = sampleAtX('T', xi);
-            const lVal = sampleAtX('L', tAmb);
-            ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2), fixed: false });
-        }
-        const data = {
-            R: nodes.R.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
-            G: nodes.G.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
-            B: nodes.B.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
-            L: ltPoints,  // LT pre-computed, exported as "L"
-        };
-        const blob = new Blob([JSON.stringify({ version: 8, calcMode, channels: data }, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'rgbl_calibration.json';
-        a.click();
-        URL.revokeObjectURL(a.href);
-    });
+    exportBtn.addEventListener('click', () => handleSave(false));
+}
+
+const pickFileBtn = document.getElementById('pick-file-btn');
+if (pickFileBtn) {
+    pickFileBtn.addEventListener('click', () => handleSave(true));
 }
 
 const resetBtn = document.getElementById('reset-btn');
