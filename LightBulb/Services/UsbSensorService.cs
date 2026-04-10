@@ -39,7 +39,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
-    private const string PicoIdentity = "BENIM_OZEL_PICOM_V1";
+    // Firmware now replies to KIMSIN with a semicolon-delimited line that embeds
+    // "IDENTITY=PICOM_<version>" (e.g. "1685106;4;0;0;0;0;IDENTITY=PICOM_V1").
+    // We match on the prefix so any firmware version is accepted.
+    private const string PicoIdentityPrefix = "IDENTITY=PICOM_";
 
     // OKU_0 = single instantaneous reading (interval=0 means no periodic streaming)
     private const string InstantReadCommand = "OKU_0";
@@ -386,14 +389,17 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>
     /// Returns true when the KIMSIN response identifies our PiColor firmware.
-    /// Two cases are accepted:
-    ///   1. Firmware implements KIMSIN and replies with PicoIdentity (ideal).
+    /// Three cases are accepted:
+    ///   1. Firmware replies with a line containing "IDENTITY=PICOM_" (current protocol).
+    ///      The full response is a semicolon-delimited string, e.g.:
+    ///      "1685106;4;0;0;0;0;IDENTITY=PICOM_V1"
     ///   2. Firmware does not implement KIMSIN and replies with its help/command
     ///      list that mentions the known read commands (OKU + RAW).  This handles
     ///      existing devices without requiring a firmware update.
+    ///   3. Firmware responds to any command with sensor data (dual-line format).
     /// </summary>
     private static bool IsKnownFirmware(string response) =>
-        response.Equals(PicoIdentity, StringComparison.OrdinalIgnoreCase) ||
+        response.Contains(PicoIdentityPrefix, StringComparison.OrdinalIgnoreCase) ||
         (response.Contains("OKU", StringComparison.OrdinalIgnoreCase) &&
          response.Contains("RAW", StringComparison.OrdinalIgnoreCase)) ||
         TryParseDualLine(response, out _); // firmware responds to any command with sensor data
@@ -758,7 +764,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             if (!IsKnownFirmware(identity))
             {
                 var badResult = new ConnectionTestResult(portName, baud, KimsinCommand, false, identity,
-                    $"Kimlik doğrulanamadı — beklenen: '{PicoIdentity}' veya firmware yardım mesajı, gelen: '{identity}'");
+                    $"Kimlik doğrulanamadı — beklenen: '...{PicoIdentityPrefix}...' veya firmware yardım mesajı, gelen: '{identity}'");
                 Dispatcher.UIThread.Post(() =>
                 {
                     IsConnected = false;
