@@ -428,13 +428,24 @@ public partial class DashboardViewModel : ViewModelBase
 
         if (_settingsService.IsUsbSensorEnabled)
         {
-            _gammaService.SetGamma(
-                CurrentConfiguration,
-                _usbSensorService.LatestRBias,
-                _usbSensorService.LatestGBias,
-                _usbSensorService.LatestBBias,
-                _usbSensorService.LatestLBias
-            );
+            if (_usbSensorService.IsRgblCalibrationActive)
+            {
+                _gammaService.SetGammaRgbl(
+                    _usbSensorService.LatestRgblR,
+                    _usbSensorService.LatestRgblG,
+                    _usbSensorService.LatestRgblB
+                );
+            }
+            else
+            {
+                _gammaService.SetGamma(
+                    CurrentConfiguration,
+                    _usbSensorService.LatestRBias,
+                    _usbSensorService.LatestGBias,
+                    _usbSensorService.LatestBBias,
+                    _usbSensorService.LatestLBias
+                );
+            }
         }
         else
         {

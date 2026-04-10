@@ -63,7 +63,6 @@ public class App : Application, IDisposable
         services.AddTransient<SettingsTabViewModelBase, HotKeySettingsTabViewModel>();
         services.AddTransient<SettingsTabViewModelBase, LocationSettingsTabViewModel>();
         services.AddTransient<SettingsTabViewModelBase, UsbSensorSettingsTabViewModel>();
-        services.AddTransient<UsbCalibrationViewModel>();
 
         _services = services.BuildServiceProvider(true);
         _settingsService = _services.GetRequiredService<SettingsService>();

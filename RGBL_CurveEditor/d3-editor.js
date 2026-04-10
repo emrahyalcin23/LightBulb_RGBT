@@ -423,11 +423,20 @@ if (calcBtn) {
 const exportBtn = document.getElementById('export-btn');
 if (exportBtn) {
     exportBtn.addEventListener('click', () => {
-        const data = {};
-        EDITABLE_CHS.forEach(ch => {
-            data[ch] = nodes[ch].map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed }));
-        });
-        const blob = new Blob([JSON.stringify({ version: 7, calcMode, channels: data }, null, 2)], { type: 'application/json' });
+        // LT = L(T(x)) — pre-compute every 2 units across 0-100
+        const ltPoints = [];
+        for (let xi = 0; xi <= 100; xi += 2) {
+            const tAmb = sampleAtX('T', xi);
+            const lVal = sampleAtX('L', tAmb);
+            ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2), fixed: false });
+        }
+        const data = {
+            R: nodes.R.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
+            G: nodes.G.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
+            B: nodes.B.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
+            L: ltPoints,  // LT pre-computed, exported as "L"
+        };
+        const blob = new Blob([JSON.stringify({ version: 8, calcMode, channels: data }, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'rgbl_calibration.json';

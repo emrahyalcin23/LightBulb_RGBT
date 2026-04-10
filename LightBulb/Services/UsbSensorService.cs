@@ -9,6 +9,7 @@ using System.Management;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LightBulb.Models;
+using LightBulb.Utils.Extensions;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
@@ -29,7 +30,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private double _peakRawY = 255.0;
 
     // Adaptive peak for the Clear channel (raw_c). Used to normalise raw_c to
-    // the 0-100 % ambient range that feeds all five RGBL calibration curves.
+    // the 0-100 % ambient range that feeds the RGBL calibration curves.
     // Starts at 1.0 to avoid division-by-zero on the very first reading.
     private double _peakRawC = 1.0;
 
@@ -124,17 +125,27 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string ConnectionTestMessage { get; private set; } = string.Empty;
 
+    /// <summary>True when an RGBL calibration JSON is loaded; the display pipeline uses this to decide routing.</summary>
+    public bool IsRgblCalibrationActive => _rgblEvaluator is not null;
+
     public UsbSensorService(SettingsService settingsService)
     {
         _settingsService = settingsService;
+        // Auto-reload when the user changes the calibration JSON path.
+        _ = settingsService.WatchProperty(o => o.RgblCalibrationJsonPath, ReloadRgblEvaluator);
     }
 
     /// <summary>
     /// (Re)loads the RGBL curve evaluator from the path stored in settings.
-    /// Call this after the user changes <see cref="SettingsService.RgblCalibrationJsonPath"/>.
+    /// Falls back to rgbl_calibration.json in the application base directory when no path is set.
     /// </summary>
-    public void ReloadRgblEvaluator() =>
-        _rgblEvaluator = RgblCurveEvaluator.Load(_settingsService.RgblCalibrationJsonPath);
+    public void ReloadRgblEvaluator()
+    {
+        var path = string.IsNullOrEmpty(_settingsService.RgblCalibrationJsonPath)
+            ? Path.Combine(AppContext.BaseDirectory, "rgbl_calibration.json")
+            : _settingsService.RgblCalibrationJsonPath;
+        _rgblEvaluator = RgblCurveEvaluator.Load(path);
+    }
 
     /// <summary>
     /// Returns all available serial port names on this system.

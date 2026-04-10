@@ -9,12 +9,14 @@ using LightBulb.Models;
 namespace LightBulb.Services;
 
 /// <summary>
-/// Evaluates the five RGBL calibration curves (R, G, B, L, T) loaded from a
+/// Evaluates the four RGBL calibration curves (R, G, B, L) loaded from a
 /// rgbl_calibration.json file exported by the RGBL_CurveEditor HTML tool.
 ///
+/// The "L" channel in the JSON is the pre-computed LT = L(T(x)) composition
+/// from the editor (the purple dashed curve). T is never stored separately.
+///
 /// Pipeline for a given ambient light percentage (0-100):
-///   tAmb  = T(ambientPct)          — time-remap of ambient level
-///   ltVal = L(tAmb)                — brightness multiplier (LT composition)
+///   ltVal = L(ambientPct)          — brightness multiplier (pre-computed LT)
 ///   fR    = R(ambientPct)          — raw red contribution
 ///   fG    = G(ambientPct)          — raw green contribution
 ///   fB    = B(ambientPct)          — raw blue contribution
@@ -27,8 +29,7 @@ public sealed class RgblCurveEvaluator
     private readonly IReadOnlyList<CurvePoint> _r;
     private readonly IReadOnlyList<CurvePoint> _g;
     private readonly IReadOnlyList<CurvePoint> _b;
-    private readonly IReadOnlyList<CurvePoint> _l;
-    private readonly IReadOnlyList<CurvePoint> _t;
+    private readonly IReadOnlyList<CurvePoint> _l;   // pre-computed LT from editor
     private readonly bool _isRatio;
 
     private RgblCurveEvaluator(RgblCalibration cal)
@@ -37,7 +38,6 @@ public sealed class RgblCurveEvaluator
         _g = SortedPoints(cal.Channels, "G");
         _b = SortedPoints(cal.Channels, "B");
         _l = SortedPoints(cal.Channels, "L");
-        _t = SortedPoints(cal.Channels, "T");
         _isRatio = string.Equals(cal.CalcMode, "ratio", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -63,13 +63,12 @@ public sealed class RgblCurveEvaluator
     }
 
     /// <summary>
-    /// Evaluates the full RGBL pipeline for the given ambient light percentage.
+    /// Evaluates the RGBL pipeline for the given ambient light percentage.
     /// Returns (finalR, finalG, finalB) each in the 0-100 range.
     /// </summary>
     public (double R, double G, double B) Evaluate(double ambientPct)
     {
-        var tAmb  = SampleAtX(_t, ambientPct);
-        var ltVal = SampleAtX(_l, tAmb);
+        var ltVal = SampleAtX(_l, ambientPct);   // L = pre-computed LT
         var fR    = SampleAtX(_r, ambientPct);
         var fG    = SampleAtX(_g, ambientPct);
         var fB    = SampleAtX(_b, ambientPct);

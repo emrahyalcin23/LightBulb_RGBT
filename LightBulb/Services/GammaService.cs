@@ -23,6 +23,9 @@ public partial class GammaService : IDisposable
     private ColorConfiguration? _lastConfiguration;
     private DateTimeOffset _lastUpdateTimestamp = DateTimeOffset.MinValue;
 
+    // Last RGBL curve values applied; -1 forces the first call to always write.
+    private double _lastRgblR = -1, _lastRgblG = -1, _lastRgblB = -1;
+
     public GammaService(SettingsService settingsService)
     {
         _settingsService = settingsService;
@@ -198,6 +201,40 @@ public partial class GammaService : IDisposable
         Debug.WriteLine(
             $"Updated gamma to {configuration} (rBias={rBias:F2}, gBias={gBias:F2}, bBias={bBias:F2}, lBias={lBias:F2})."
         );
+    }
+
+    /// <summary>
+    /// Applies gamma directly from RGBL curve output values (0-100 percent).
+    /// Bypasses Kelvin→RGB conversion. Skips write when values are unchanged
+    /// and gamma is not stale.
+    /// </summary>
+    public void SetGammaRgbl(double r, double g, double b)
+    {
+        if (!IsGammaStale()
+            && Math.Abs(r - _lastRgblR) < 0.1
+            && Math.Abs(g - _lastRgblG) < 0.1
+            && Math.Abs(b - _lastRgblB) < 0.1)
+            return;
+
+        EnsureValidDeviceContexts();
+        _isUpdatingGamma = true;
+
+        foreach (var deviceContext in _deviceContexts)
+        {
+            deviceContext.SetGamma(
+                Math.Clamp(r / 100.0, 0, 1),
+                Math.Clamp(g / 100.0, 0, 1),
+                Math.Clamp(b / 100.0, 0, 1)
+            );
+        }
+
+        _isUpdatingGamma = false;
+        _lastRgblR = r;
+        _lastRgblG = g;
+        _lastRgblB = b;
+        _lastConfiguration = null;   // clear so SetGamma re-applies on RGBL→normal switch
+        _lastUpdateTimestamp = DateTimeOffset.Now;
+        Debug.WriteLine($"RGBL gamma: R={r:F1} G={g:F1} B={b:F1}");
     }
 
     public void Dispose()

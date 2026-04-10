@@ -15,7 +15,7 @@ public record CurvePoint(
 
 /// <summary>
 /// Top-level model for rgbl_calibration.json exported by the RGBL_CurveEditor HTML tool.
-/// Channels: R, G, B, L, T — each a list of CurvePoints sorted by X.
+/// Channels: R, G, B, L — where "L" is the pre-computed LT = L(T(x)) curve from the editor.
 /// CalcMode: "absolute" or "ratio".
 /// </summary>
 public record RgblCalibration(

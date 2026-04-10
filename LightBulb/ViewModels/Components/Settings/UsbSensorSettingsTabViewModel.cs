@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
@@ -54,11 +56,11 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         InjectSimulatedReadingCommand = new RelayCommand(() =>
             _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB));
 
-        OpenCalibrationWindowCommand = new AsyncRelayCommand(async () =>
-            await _dialogManager.ShowWindowDialogAsync(
-                _viewModelManager.CreateUsbCalibrationViewModel()
-            )
-        );
+        OpenCalibrationWindowCommand = new RelayCommand(() =>
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "RGBL_curve_editor.html");
+            Process.StartShellExecute(path);
+        });
     }
 
     private async Task TestConnectionAsync()
@@ -279,9 +281,9 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public IRelayCommand InjectSimulatedReadingCommand { get; }
 
-    // ── Calibration window ────────────────────────────────────────────────────
+    // ── RGBL Simulation ───────────────────────────────────────────────────────
 
-    public IAsyncRelayCommand OpenCalibrationWindowCommand { get; }
+    public IRelayCommand OpenCalibrationWindowCommand { get; }
 
     protected override void Dispose(bool disposing)
     {
