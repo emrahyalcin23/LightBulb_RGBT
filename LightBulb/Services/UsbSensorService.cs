@@ -1162,11 +1162,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         var req  = ctx.Request;
         var resp = ctx.Response;
 
-        // CORS — required for file:// origin
-        resp.Headers.Add("Access-Control-Allow-Origin",  "*");
-        resp.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
-        resp.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
-
         if (req.HttpMethod == "OPTIONS")
         {
             resp.StatusCode = 204;
@@ -1174,7 +1169,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             return;
         }
 
-        if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/rgbl-save")
+        var urlPath = req.Url?.AbsolutePath ?? "/";
+
+        // ── POST /rgbl-save ───────────────────────────────────────────────────
+        if (req.HttpMethod == "POST" && urlPath == "/rgbl-save")
         {
             try
             {
@@ -1203,6 +1201,31 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             }
             finally { resp.Close(); }
             return;
+        }
+
+        // ── GET static files (/  →  RGBL_curve_editor.html, /*.js  →  js files)
+        if (req.HttpMethod == "GET")
+        {
+            var fileName = urlPath == "/" ? "RGBL_curve_editor.html" : urlPath.TrimStart('/');
+
+            // Security: no path traversal, only .html/.js files
+            if (!fileName.Contains('/') && !fileName.Contains('\\') &&
+                (fileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                 fileName.EndsWith(".js",   StringComparison.OrdinalIgnoreCase)))
+            {
+                var filePath = Path.Combine(AppContext.BaseDirectory, fileName);
+                if (File.Exists(filePath))
+                {
+                    resp.ContentType = fileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                        ? "text/html; charset=utf-8"
+                        : "application/javascript; charset=utf-8";
+                    var bytes = await File.ReadAllBytesAsync(filePath, ct);
+                    resp.ContentLength64 = bytes.Length;
+                    await resp.OutputStream.WriteAsync(bytes, ct);
+                    resp.Close();
+                    return;
+                }
+            }
         }
 
         resp.StatusCode = 404;

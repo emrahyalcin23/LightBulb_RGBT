@@ -58,11 +58,10 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         OpenCalibrationWindowCommand = new RelayCommand(() =>
         {
-            var filePath = Path.Combine(AppContext.BaseDirectory, "RGBL_curve_editor.html");
-            var uri      = new Uri(filePath).AbsoluteUri;
-            var port     = _usbSensorService.CalibrationServerPort;
-            if (port > 0)
-                uri += $"?port={port}";
+            var port = _usbSensorService.CalibrationServerPort;
+            var uri  = port > 0
+                ? $"http://127.0.0.1:{port}/"
+                : new Uri(Path.Combine(AppContext.BaseDirectory, "RGBL_curve_editor.html")).AbsoluteUri;
             Process.StartShellExecute(uri);
         });
     }
