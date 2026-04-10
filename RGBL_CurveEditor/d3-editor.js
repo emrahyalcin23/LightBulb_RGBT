@@ -421,12 +421,95 @@ if (calcBtn) {
 }
 
 // ── Save-to-file logic ─────────────────────────────────────────────────────────
-const BACKUP_LS_KEY = 'rgbl_cal_backups';
-const MAX_BACKUPS   = 10;
+//
+// Strateji:
+//   • Kullanıcı ilk kez "Kaydet"e basınca bir dosya seçici açılır (tek seferlik).
+//   • Seçilen FileSystemFileHandle IndexedDB'de saklanır ve page reload'dan sonra
+//     geri yüklenir; bu sayede sonraki tüm kayıtlar sessizce aynı dosyaya yazılır.
+//   • localStorage'da "korumalı ilk yedek" + 9 döner yedek = toplam 10 yedek.
+//   • "📁 Konum Değiştir" butonu yeni bir konum seçmek için kullanılabilir.
+//   • File System Access API yoksa indirme yöntemine geri döner.
+// ──────────────────────────────────────────────────────────────────────────────
 
-let _fileHandle = null;   // FileSystemFileHandle; null = not yet picked
+// ── IndexedDB yardımcıları ────────────────────────────────────────────────────
+const _IDB = (() => {
+    const DB = 'rgbl_editor_db', STORE = 'kv', VER = 1;
+    const open = () => new Promise((res, rej) => {
+        const r = indexedDB.open(DB, VER);
+        r.onupgradeneeded = e => e.target.result.createObjectStore(STORE);
+        r.onsuccess = e => res(e.target.result);
+        r.onerror   = () => rej(r.error);
+    });
+    return {
+        async get(key) {
+            try {
+                const db = await open();
+                return await new Promise(res =>
+                    db.transaction(STORE).objectStore(STORE).get(key).onsuccess =
+                        e => res(e.target.result ?? null)
+                );
+            } catch { return null; }
+        },
+        async set(key, val) {
+            try {
+                const db = await open();
+                await new Promise((res, rej) => {
+                    const tx = db.transaction(STORE, 'readwrite');
+                    tx.objectStore(STORE).put(val, key);
+                    tx.oncomplete = res;
+                    tx.onerror    = () => rej(tx.error);
+                });
+            } catch (e) { console.warn('idb.set:', e); }
+        },
+        async del(key) {
+            try {
+                const db = await open();
+                await new Promise((res, rej) => {
+                    const tx = db.transaction(STORE, 'readwrite');
+                    tx.objectStore(STORE).delete(key);
+                    tx.oncomplete = res;
+                    tx.onerror    = () => rej(tx.error);
+                });
+            } catch (e) { console.warn('idb.del:', e); }
+        },
+    };
+})();
 
-/** Build the export JSON string from current curve state. */
+// ── localStorage yedekleme (10 slot) ─────────────────────────────────────────
+const BACKUP_LS_KEY  = 'rgbl_cal_backups';    // döner yedekler (9 adet)
+const INITIAL_LS_KEY = 'rgbl_cal_initial';    // korumalı ilk yedek (hiç silinmez)
+const MAX_ROT_BACKUPS = 9;
+
+function rotateBackup(jsonStr) {
+    // İlk kayıt → korumalı slota yaz (bir kez, sonsuza kadar saklı)
+    if (!localStorage.getItem(INITIAL_LS_KEY)) {
+        try {
+            localStorage.setItem(INITIAL_LS_KEY,
+                JSON.stringify({ ts: new Date().toISOString(), data: jsonStr }));
+        } catch {}
+    }
+    // Döner halka (en yeni başa, en eski silinir)
+    try {
+        let b = [];
+        try { b = JSON.parse(localStorage.getItem(BACKUP_LS_KEY) || '[]'); } catch {}
+        b.unshift({ ts: new Date().toISOString(), data: jsonStr });
+        if (b.length > MAX_ROT_BACKUPS) b.length = MAX_ROT_BACKUPS;
+        localStorage.setItem(BACKUP_LS_KEY, JSON.stringify(b));
+    } catch {}
+}
+
+// ── Durum flash mesajı ────────────────────────────────────────────────────────
+function flashSaveStatus(msg, color = '#4ade80', ms = 2500) {
+    const el = document.getElementById('save-status');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.color   = color;
+    el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '0'; }, ms);
+}
+
+// ── JSON oluşturucu ───────────────────────────────────────────────────────────
 function buildCalibrationJson() {
     const ltPoints = [];
     for (let xi = 0; xi <= 100; xi += 2) {
@@ -443,103 +526,97 @@ function buildCalibrationJson() {
     return JSON.stringify({ version: 8, calcMode, channels: data }, null, 2);
 }
 
-/** Push jsonStr to the front of the localStorage backup ring (max MAX_BACKUPS). */
-function rotateBackup(jsonStr) {
-    try {
-        let backups = [];
-        try { backups = JSON.parse(localStorage.getItem(BACKUP_LS_KEY) || '[]'); } catch {}
-        backups.unshift({ ts: new Date().toISOString(), data: jsonStr });
-        if (backups.length > MAX_BACKUPS) backups.length = MAX_BACKUPS;
-        localStorage.setItem(BACKUP_LS_KEY, JSON.stringify(backups));
-    } catch (_) { /* localStorage dolu olabilir */ }
-}
-
-/** Flash the save-status label for `ms` milliseconds. */
-function flashSaveStatus(msg, color = '#4ade80', ms = 2000) {
-    const el = document.getElementById('save-status');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color  = color;
-    el.style.opacity = '1';
-    setTimeout(() => { el.style.opacity = '0'; }, ms);
-}
-
-/**
- * Write jsonStr to _fileHandle (must already be set).
- * Returns true on success, false on error.
- */
-async function writeToHandle(jsonStr) {
-    try {
-        const writable = await _fileHandle.createWritable();
-        await writable.write(jsonStr);
-        await writable.close();
-        return true;
-    } catch (e) {
-        _fileHandle = null;
-        console.error('Yazma hatası:', e);
-        return false;
-    }
-}
-
-/** Pick a new save file and remember the handle; returns true if picked. */
-async function pickSaveFile() {
-    if (!window.showSaveFilePicker) return false;
-    try {
-        _fileHandle = await window.showSaveFilePicker({
-            suggestedName: 'rgbl_calibration.json',
-            types: [{ description: 'JSON Kalibrasyon', accept: { 'application/json': ['.json'] } }],
-        });
-        return true;
-    } catch (e) {
-        if (e.name !== 'AbortError') console.error('Dosya seçme hatası:', e);
-        return false;
-    }
-}
-
-/** Fallback: trigger browser download. */
+// ── İndirme fallback ──────────────────────────────────────────────────────────
 function downloadJson(jsonStr) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([jsonStr], { type: 'application/json' }));
+    const a   = document.createElement('a');
+    a.href    = URL.createObjectURL(new Blob([jsonStr], { type: 'application/json' }));
     a.download = 'rgbl_calibration.json';
     a.click();
     URL.revokeObjectURL(a.href);
 }
 
-/** Main save handler: prefer File System API, fall back to download. */
+// ── FileSystemFileHandle yönetimi ─────────────────────────────────────────────
+const IDB_HANDLE_KEY = 'save_handle';
+let _fileHandle = null;   // bellekteki cache; sayfa yüklenince IDB'den restore edilir
+
+/**
+ * Geçerli bir yazılabilir handle sağlar.
+ * forcePick=true → daima yeni dosya seçici açar.
+ * İlk kullanımda seçici bir kez açılır, handle IDB'de saklanır.
+ * Sonraki ziyaretlerde IDB'den yüklenir, seçici çıkmaz.
+ */
+async function ensureHandle(forcePick = false) {
+    if (!window.showSaveFilePicker) return false;
+
+    // IDB'den yükle (bellek boşsa)
+    if (!_fileHandle && !forcePick) {
+        _fileHandle = await _IDB.get(IDB_HANDLE_KEY);
+    }
+
+    // Yeni konum seçimi gerekiyorsa (ya hiç seçilmemiş ya da zorla)
+    if (!_fileHandle || forcePick) {
+        try {
+            _fileHandle = await window.showSaveFilePicker({
+                suggestedName: 'rgbl_calibration.json',
+                types: [{ description: 'JSON Kalibrasyon', accept: { 'application/json': ['.json'] } }],
+            });
+            await _IDB.set(IDB_HANDLE_KEY, _fileHandle);
+        } catch (e) {
+            if (e.name !== 'AbortError') console.error('Dosya seçici hatası:', e);
+            return false;   // kullanıcı iptal etti
+        }
+    }
+
+    // İzin kontrolü (sayfa yenilendikten sonra gerekebilir)
+    try {
+        let perm = await _fileHandle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted')
+            perm = await _fileHandle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') {
+            flashSaveStatus('✗ Dosya erişim izni reddedildi', '#f87171', 3000);
+            return false;
+        }
+    } catch {
+        // Eski tarayıcıda queryPermission yoksa geç
+    }
+    return true;
+}
+
+// ── Ana kaydet işleyicisi ─────────────────────────────────────────────────────
 async function handleSave(forcePick = false) {
     const jsonStr = buildCalibrationJson();
 
-    if (window.showSaveFilePicker) {
-        if (forcePick || !_fileHandle) {
-            const picked = await pickSaveFile();
-            if (!picked) return;   // user cancelled
-        }
-        const ok = await writeToHandle(jsonStr);
-        if (ok) {
-            rotateBackup(jsonStr);
-            const name = _fileHandle.name ?? 'rgbl_calibration.json';
-            flashSaveStatus(`✓ ${name}`);
-        } else {
-            flashSaveStatus('✗ Yazma hatası', '#f87171');
-            downloadJson(jsonStr);   // fallback
-        }
-    } else {
-        // Browser doesn't support File System Access API
+    // File System Access API desteklenmiyor → indirme ile fallback
+    if (!window.showSaveFilePicker) {
         downloadJson(jsonStr);
         rotateBackup(jsonStr);
-        flashSaveStatus('✓ İndirildi');
+        flashSaveStatus('✓ İndirildi (API desteklenmiyor)');
+        return;
+    }
+
+    const ok = await ensureHandle(forcePick);
+    if (!ok) return;
+
+    try {
+        const writable = await _fileHandle.createWritable();
+        await writable.write(jsonStr);
+        await writable.close();
+        rotateBackup(jsonStr);
+        flashSaveStatus(`✓ ${_fileHandle.name ?? 'rgbl_calibration.json'}`);
+    } catch (e) {
+        console.error('Yazma hatası:', e);
+        // Handle geçersiz olabilir; sıfırla ki bir sonraki kayıtta yeniden seçsin
+        _fileHandle = null;
+        await _IDB.del(IDB_HANDLE_KEY);
+        flashSaveStatus('✗ Yazma hatası — tekrar deneyin', '#f87171', 3000);
     }
 }
 
 const exportBtn = document.getElementById('export-btn');
-if (exportBtn) {
-    exportBtn.addEventListener('click', () => handleSave(false));
-}
+if (exportBtn) exportBtn.addEventListener('click', () => handleSave(false));
 
 const pickFileBtn = document.getElementById('pick-file-btn');
-if (pickFileBtn) {
-    pickFileBtn.addEventListener('click', () => handleSave(true));
-}
+if (pickFileBtn) pickFileBtn.addEventListener('click', () => handleSave(true));
 
 const resetBtn = document.getElementById('reset-btn');
 if (resetBtn) {
