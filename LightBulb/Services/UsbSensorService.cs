@@ -854,8 +854,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Parses a firmware dual-output line into a <see cref="DualReading"/>.
-    /// Expected format: timestamp;6;mode;raw_r;raw_g;raw_b;raw_c;proc_r;proc_g;proc_b[;meta]
+    /// Parses a firmware output line into a <see cref="DualReading"/>.
+    /// Two formats are supported:
+    ///   Compact (type=1): timestamp;1;mode;proc_r;proc_g;proc_b          (6 fields)
+    ///   Dual    (type=6): timestamp;6;mode;raw_r;raw_g;raw_b;raw_c;proc_r;proc_g;proc_b[;meta]
     /// Returns false when the line is malformed or has too few fields.
     /// </summary>
     private static bool TryParseDualLine(string line, out DualReading reading)
@@ -865,6 +867,22 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             return false;
 
         var parts = line.Split(';');
+        if (parts.Length < 6)
+            return false;
+
+        // Compact format: timestamp;1;mode;proc_r;proc_g;proc_b
+        if (parts[1] == "1")
+        {
+            if (!float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var procR) ||
+                !float.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var procG) ||
+                !float.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var procB))
+                return false;
+
+            reading = new DualReading(0, 0, 0, 0, procR, procG, procB);
+            return true;
+        }
+
+        // Dual format: timestamp;6;mode;raw_r;raw_g;raw_b;raw_c;proc_r;proc_g;proc_b[;meta]
         if (parts.Length < 10)
             return false;
 
@@ -872,12 +890,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             !ushort.TryParse(parts[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawG) ||
             !ushort.TryParse(parts[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawB) ||
             !ushort.TryParse(parts[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawC) ||
-            !float.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out var procR) ||
-            !float.TryParse(parts[8], NumberStyles.Float, CultureInfo.InvariantCulture, out var procG) ||
-            !float.TryParse(parts[9], NumberStyles.Float, CultureInfo.InvariantCulture, out var procB))
+            !float.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out var procR2) ||
+            !float.TryParse(parts[8], NumberStyles.Float, CultureInfo.InvariantCulture, out var procG2) ||
+            !float.TryParse(parts[9], NumberStyles.Float, CultureInfo.InvariantCulture, out var procB2))
             return false;
 
-        reading = new DualReading(rawR, rawG, rawB, rawC, procR, procG, procB);
+        reading = new DualReading(rawR, rawG, rawB, rawC, procR2, procG2, procB2);
         return true;
     }
 
@@ -1078,8 +1096,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 }
 
 /// <summary>
-/// Parsed representation of one OUT_DUAL (type=6) firmware output line.
-/// Raw values are uint16 sensor counts; Proc values are firmware-normalised 0-100 floats.
+/// Parsed representation of a firmware output line.
+/// Proc values are firmware-normalised 0-100 floats (always present).
+/// Raw values are uint16 sensor counts; zero when the compact (type=1) format is used.
 /// </summary>
 internal readonly record struct DualReading(
     ushort RawR,
