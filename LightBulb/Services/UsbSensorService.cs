@@ -146,8 +146,80 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _settingsService = settingsService;
         // Auto-reload when the user changes the calibration JSON path.
         _ = settingsService.WatchProperty(o => o.RgblCalibrationJsonPath, ReloadRgblEvaluator);
+        // Create default calibration file if it doesn't exist yet.
+        WriteDefaultCalibrationIfMissing();
+        // Load calibration immediately (regardless of whether the sensor is enabled).
+        ReloadRgblEvaluator();
         // HTTP calibration server starts with the app; runs for the app's lifetime.
         StartCalibrationHttpServer();
+    }
+
+    /// <summary>
+    /// Writes a rgbl_calibration.json with default curve values to AppContext.BaseDirectory
+    /// if the file does not already exist. Values mirror defaultNodes() in d3-editor.js.
+    /// The L channel is the pre-computed LT = L(T(x)) composite (piecewise linear, x = 0..100 step 2).
+    /// </summary>
+    private static void WriteDefaultCalibrationIfMissing()
+    {
+        var dest = Path.Combine(AppContext.BaseDirectory, "rgbl_calibration.json");
+        if (File.Exists(dest)) return;
+
+        // T nodes: [(0,3),(50,100),(100,3)]  L nodes: [(0,10),(50,55),(100,95)]
+        static double Lerp((double X, double Y)[] pts, double x)
+        {
+            x = Math.Clamp(x, 0, 100);
+            if (x <= pts[0].X) return Math.Clamp(pts[0].Y, 0, 100);
+            if (x >= pts[^1].X) return Math.Clamp(pts[^1].Y, 0, 100);
+            for (var i = 0; i < pts.Length - 1; i++)
+            {
+                if (x >= pts[i].X && x <= pts[i + 1].X)
+                {
+                    var t = (x - pts[i].X) / (pts[i + 1].X - pts[i].X);
+                    return Math.Clamp(pts[i].Y + t * (pts[i + 1].Y - pts[i].Y), 0, 100);
+                }
+            }
+            return Math.Clamp(pts[^1].Y, 0, 100);
+        }
+
+        (double X, double Y)[] tPts = [(0, 3), (50, 100), (100, 3)];
+        (double X, double Y)[] lPts = [(0, 10), (50, 55), (100, 95)];
+
+        var ltRows = new System.Text.StringBuilder();
+        for (var xi = 0; xi <= 100; xi += 2)
+        {
+            var lVal = Lerp(lPts, Lerp(tPts, xi));
+            if (xi > 0) ltRows.Append(",\n      ");
+            ltRows.Append(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{{ \"x\": {xi:F2}, \"y\": {lVal:F2}, \"fixed\": false }}"));
+        }
+
+        var json = $$"""
+{
+  "version": 8,
+  "calcMode": "absolute",
+  "channels": {
+    "R": [
+      { "x": 0.00, "y": 20.00, "fixed": true },
+      { "x": 100.00, "y": 88.00, "fixed": true }
+    ],
+    "G": [
+      { "x": 0.00, "y": 15.00, "fixed": true },
+      { "x": 100.00, "y": 82.00, "fixed": true }
+    ],
+    "B": [
+      { "x": 0.00, "y": 28.00, "fixed": true },
+      { "x": 100.00, "y": 68.00, "fixed": true }
+    ],
+    "L": [
+      {{ltRows}}
+    ]
+  }
+}
+""";
+
+        try { File.WriteAllText(dest, json); }
+        catch { /* Non-fatal — app runs without default calibration */ }
     }
 
     /// <summary>
