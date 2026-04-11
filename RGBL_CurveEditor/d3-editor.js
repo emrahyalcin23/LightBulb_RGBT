@@ -877,12 +877,80 @@ function _loadProfile(p) {
     flashSaveStatus(`✓ Profil yüklendi: ${p.name}`, '#c084fc');
 }
 
+// ── Profil dışa/içe aktarma ───────────────────────────────────────────────────
+
+async function _exportProfiles() {
+    const profiles = await _getProfiles();
+    if (profiles.length === 0) {
+        flashSaveStatus('Dışa aktarılacak profil yok', '#94a3b8', 2000);
+        return;
+    }
+    const payload = {
+        type: 'rgbl_profiles',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        profiles,
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    a.download = 'rgbl_profiles.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flashSaveStatus(`✓ ${profiles.length} profil dışa aktarıldı`, '#c084fc');
+}
+
+async function _importProfiles(file) {
+    let data;
+    try { data = JSON.parse(await file.text()); } catch {
+        flashSaveStatus('✗ Dosya okunamadı', '#f87171', 3000);
+        return;
+    }
+
+    const incoming = (data.profiles || []).filter(p => p.name && p.nodes);
+    if (incoming.length === 0) {
+        flashSaveStatus('✗ Dosyada geçerli profil bulunamadı', '#f87171', 3000);
+        return;
+    }
+
+    const existing  = await _getProfiles();
+    const takenNames = new Set(existing.map(p => p.name));
+    const conflicts  = incoming.filter(p => takenNames.has(p.name));
+    const fresh      = incoming.filter(p => !takenNames.has(p.name));
+
+    let merged = [...existing];
+
+    if (conflicts.length > 0) {
+        const overwrite = confirm(
+            `${conflicts.length} profil mevcut isimlerle çakışıyor:\n` +
+            conflicts.map(p => `  • ${p.name}`).join('\n') +
+            '\n\nÜzerine yazılsın mı? "İptal" seçerseniz yalnızca yeni profiller eklenir.'
+        );
+        if (overwrite) {
+            merged = merged.map(p => {
+                const hit = conflicts.find(c => c.name === p.name);
+                return hit ? hit : p;
+            });
+        }
+    }
+
+    merged = [...merged, ...fresh];
+    await _IDB.set(PROFILES_IDB_KEY, merged);
+    await _renderProfileList();
+
+    const overwritten = conflicts.length > 0 && merged.length > existing.length + fresh.length
+        ? `, ${conflicts.length} güncellendi` : '';
+    flashSaveStatus(`✓ ${fresh.length} yeni profil içe aktarıldı${overwritten}`, '#c084fc', 3000);
+}
+
 // Event wiring
 (function _initProfileUI() {
     const profileBtn      = document.getElementById('profile-btn');
     const profileDropdown = document.getElementById('profile-dropdown');
     const profileAddBtn   = document.getElementById('profile-add-btn');
     const profileInput    = document.getElementById('profile-name-input');
+    const exportBtn       = document.getElementById('profile-export-btn');
+    const importBtn       = document.getElementById('profile-import-btn');
+    const importInput     = document.getElementById('profile-import-input');
 
     if (profileBtn && profileDropdown) {
         profileBtn.addEventListener('click', e => {
@@ -906,6 +974,18 @@ function _loadProfile(p) {
         };
         profileAddBtn.addEventListener('click', doSave);
         profileInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); });
+    }
+
+    if (exportBtn) exportBtn.addEventListener('click', e => { e.stopPropagation(); _exportProfiles(); });
+
+    if (importBtn && importInput) {
+        importBtn.addEventListener('click', e => { e.stopPropagation(); importInput.click(); });
+        importInput.addEventListener('change', () => {
+            if (importInput.files[0]) {
+                _importProfiles(importInput.files[0]);
+                importInput.value = '';  // aynı dosyayı tekrar seçmeye izin ver
+            }
+        });
     }
 })();
 
