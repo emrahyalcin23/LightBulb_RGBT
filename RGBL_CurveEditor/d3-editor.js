@@ -640,7 +640,35 @@ const exportBtn = document.getElementById('export-btn');
 if (exportBtn) exportBtn.addEventListener('click', () => handleSave(false));
 
 const pickFileBtn = document.getElementById('pick-file-btn');
-if (pickFileBtn) pickFileBtn.addEventListener('click', () => handleSave(true));
+if (pickFileBtn) pickFileBtn.addEventListener('click', async () => {
+    if (window.location.protocol === 'http:' && window.location.hostname === '127.0.0.1') {
+        // HTTP modu: yedek için dosya konumu seç
+        const jsonStr = buildCalibrationJson();
+        if (window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: 'rgbl_calibration_yedek.json',
+                    types: [{ description: 'JSON Kalibrasyon', accept: { 'application/json': ['.json'] } }],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(jsonStr);
+                await writable.close();
+                flashSaveStatus(`✓ Yedek: ${handle.name}`);
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    console.error('Yedek kayıt hatası:', e);
+                    flashSaveStatus('✗ Yedek kayıt hatası', '#f87171', 3000);
+                }
+            }
+        } else {
+            downloadJson(jsonStr);
+            flashSaveStatus('✓ Yedek indirildi');
+        }
+    } else {
+        // file:// modu: varsayılan kayıt konumunu değiştir
+        handleSave(true);
+    }
+});
 
 const resetBtn = document.getElementById('reset-btn');
 if (resetBtn) {
