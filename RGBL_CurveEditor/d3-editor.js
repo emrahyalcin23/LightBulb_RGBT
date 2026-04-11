@@ -646,21 +646,47 @@ if (pickFileBtn) pickFileBtn.addEventListener('click', async () => {
         const jsonStr = buildCalibrationJson();
         if (window.showSaveFilePicker) {
             try {
+                // Aynı oturumda daha önce yedek alındıysa o handle'ı startIn olarak kullan.
+                // İlk yedekte handle yok; önce asıl dosyayı açtırarak dizini belirle.
+                let startInHandle = await _IDB.get('backup_handle');
+
+                if (!startInHandle) {
+                    // İlk yedek: kullanıcıdan asıl dosyayı seçmesini iste (konum tespiti için)
+                    flashSaveStatus('Konum için asıl dosyayı seçin…', '#94a3b8', 30000);
+                    let locHandle;
+                    try {
+                        [locHandle] = await window.showOpenFilePicker({
+                            types: [{ description: 'JSON Kalibrasyon', accept: { 'application/json': ['.json'] } }],
+                        });
+                    } catch (e) {
+                        flashSaveStatus('', '#4ade80', 0);
+                        return; // iptal
+                    }
+                    startInHandle = locHandle;
+                }
+
                 const handle = await window.showSaveFilePicker({
+                    startIn:       startInHandle,
                     suggestedName: 'rgbl_calibration_yedek.json',
                     types: [{ description: 'JSON Kalibrasyon', accept: { 'application/json': ['.json'] } }],
                 });
                 const writable = await handle.createWritable();
                 await writable.write(jsonStr);
                 await writable.close();
+
+                // Bir sonraki yedek için handle'ı sakla (aynı oturum içinde konum hatırlanır)
+                await _IDB.set('backup_handle', handle);
                 flashSaveStatus(`✓ Yedek: ${handle.name}`);
             } catch (e) {
                 if (e.name !== 'AbortError') {
                     console.error('Yedek kayıt hatası:', e);
                     flashSaveStatus('✗ Yedek kayıt hatası', '#f87171', 3000);
+                } else {
+                    flashSaveStatus('', '#4ade80', 0);
                 }
             }
         } else {
+            // File System API desteklenmiyor → indirme
             downloadJson(jsonStr);
             flashSaveStatus('✓ Yedek indirildi');
         }
