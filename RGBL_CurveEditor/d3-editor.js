@@ -35,6 +35,11 @@ function saveToLocalStorage() {
         data[ch] = nodes[ch].map(n => ({ x: n.x, y: n.y, fixed: n.fixed }));
     });
     try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e) {}
+    // Profil yüklüyse ve henüz kirletilmemişse dirty yap
+    if (_activeProfileName && !_profileDirty) {
+        _profileDirty = true;
+        _updateProfileBtn();
+    }
 }
 
 function loadFromLocalStorage() {
@@ -165,6 +170,8 @@ const yValueMarker = document.getElementById('y-value-marker');
 
 let activeCh = 'L';
 let isTimeMode = false;
+let _activeProfileName = null;   // hangi profil yüklü
+let _profileDirty = false;       // yüklemeden bu yana değişiklik var mı
 
 function getSimMode() {
     const el = document.querySelector('input[name="simMode"]:checked');
@@ -533,8 +540,8 @@ function buildCalibrationJson() {
         ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2) });
     }
     const channels = { R: rPoints, G: gPoints, B: bPoints, L: ltPoints };
-    // Editörde profil geri yüklemek için seyrek düğüm verisi (T kanalı dahil)
-    const nodeData = {};
+    // Editörde profil geri yüklemek için seyrek düğüm verisi (T kanalı + simMode dahil)
+    const nodeData = { simMode: getSimMode() };
     EDITABLE_CHS.forEach(ch => {
         nodeData[ch] = nodes[ch].map(n => ({ x: +n.x.toFixed(4), y: +n.y.toFixed(4), fixed: n.fixed }));
     });
@@ -713,7 +720,6 @@ document.querySelectorAll('input[name="simMode"]').forEach(radio => {
 // ═══════════════════════════════════════════════════════════════════
 
 const PROFILES_IDB_KEY = 'rgbl_profiles';
-let _activeProfileName = null;
 
 async function _getProfiles() {
     return (await _IDB.get(PROFILES_IDB_KEY)) || [];
@@ -726,10 +732,11 @@ function _updateProfileBtn() {
         const short = _activeProfileName.length > 9
             ? _activeProfileName.slice(0, 8) + '…' : _activeProfileName;
         btn.textContent = `📋 ${short} ▾`;
-        btn.classList.add('has-profile');
+        btn.classList.toggle('has-profile',       !_profileDirty);
+        btn.classList.toggle('has-profile-stale',  _profileDirty);
     } else {
         btn.textContent = '📋 ▾';
-        btn.classList.remove('has-profile');
+        btn.classList.remove('has-profile', 'has-profile-stale');
     }
 }
 
@@ -748,13 +755,39 @@ async function _renderProfileList() {
         return;
     }
     profiles.forEach(p => {
+        const isActive = p.name === _activeProfileName;
         const item = document.createElement('div');
-        item.className = 'profile-item' + (p.name === _activeProfileName ? ' active-profile' : '');
+        item.className = 'profile-item' +
+            (isActive ? ' active-profile' + (_profileDirty ? ' stale' : '') : '');
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'profile-item-name';
         nameSpan.textContent = p.name;
         nameSpan.title = p.name;
+
+        const updateBtn = document.createElement('button');
+        updateBtn.className = 'profile-update-btn';
+        updateBtn.textContent = '↺';
+        updateBtn.title = 'Mevcut eğrilerle güncelle';
+        updateBtn.addEventListener('click', async () => {
+            if (!confirm(`"${p.name}" profili mevcut eğrilerle güncellensin mi?`)) return;
+            const all = await _getProfiles();
+            const idx = all.findIndex(x => x.name === p.name);
+            if (idx < 0) return;
+            all[idx] = {
+                ...all[idx],
+                ts: new Date().toISOString(),
+                calcMode,
+                simMode: getSimMode(),
+                nodes: Object.fromEntries(
+                    EDITABLE_CHS.map(ch => [ch, nodes[ch].map(n => ({ x: n.x, y: n.y, fixed: n.fixed }))])
+                ),
+            };
+            await _IDB.set(PROFILES_IDB_KEY, all);
+            if (_activeProfileName === p.name) { _profileDirty = false; _updateProfileBtn(); }
+            await _renderProfileList();
+            flashSaveStatus(`✓ Profil güncellendi: ${p.name}`, '#c084fc');
+        });
 
         const loadBtn = document.createElement('button');
         loadBtn.className = 'profile-load-btn';
@@ -766,17 +799,20 @@ async function _renderProfileList() {
         delBtn.textContent = '×';
         delBtn.title = 'Profili sil';
         delBtn.addEventListener('click', async () => {
+            if (!confirm(`"${p.name}" profili silinsin mi?`)) return;
             let all = await _getProfiles();
             all = all.filter(x => x.name !== p.name);
             await _IDB.set(PROFILES_IDB_KEY, all);
             if (_activeProfileName === p.name) {
                 _activeProfileName = null;
+                _profileDirty = false;
                 _updateProfileBtn();
             }
             _renderProfileList();
         });
 
         item.appendChild(nameSpan);
+        item.appendChild(updateBtn);
         item.appendChild(loadBtn);
         item.appendChild(delBtn);
         list.appendChild(item);
@@ -792,6 +828,7 @@ async function _saveProfile(name) {
         name: trimmed,
         ts: new Date().toISOString(),
         calcMode,
+        simMode: getSimMode(),
         nodes: Object.fromEntries(
             EDITABLE_CHS.map(ch => [ch, nodes[ch].map(n => ({ x: n.x, y: n.y, fixed: n.fixed }))])
         ),
@@ -804,6 +841,7 @@ async function _saveProfile(name) {
     }
     await _IDB.set(PROFILES_IDB_KEY, profiles);
     _activeProfileName = trimmed;
+    _profileDirty = false;
     _updateProfileBtn();
     await _renderProfileList();
     flashSaveStatus(`✓ Profil kaydedildi: ${trimmed}`, '#c084fc');
@@ -819,11 +857,20 @@ function _loadProfile(p) {
         calcMode = p.calcMode;
         _updateCalcBtn();
     }
+    if (p.simMode) {
+        const radio = document.querySelector(`input[name="simMode"][value="${p.simMode}"]`);
+        if (radio && !radio.checked) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+        }
+    }
     _invalidateLT();
+    // saveToLocalStorage'ı dirty flag'den önce çağır ki flag tetiklenmesin
+    _activeProfileName = p.name;
+    _profileDirty = false;
     saveToLocalStorage();
     renderAll();
     window._updateSimulation();
-    _activeProfileName = p.name;
     _updateProfileBtn();
     _renderProfileList();
     _closeProfileDropdown();
