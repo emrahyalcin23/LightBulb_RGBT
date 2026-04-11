@@ -52,7 +52,7 @@ if (passiveSlider) {
         s.setAttribute('r', 1 + Math.random() * 2.2);
         s.style.fill = '#fff9e0';
         s.style.opacity = '0';
-        s.style.transition = 'opacity 0.4s ease-out';
+        s.style.transition = 'opacity 1s ease-in-out';
         simEl.starsGroup.appendChild(s);
     }
 })();
@@ -68,7 +68,7 @@ setInterval(() => {
     } else {
         stars.forEach(s => { s.style.opacity = '0'; });
     }
-}, 700);
+}, 1800);
 
 function smoothStep(t) { return t * t * (3 - 2 * t); }
 

@@ -360,12 +360,15 @@ svg.on('mouseleave', function() {
 window._updateSimulation = function() {
     const x = currentAmbient;
     const tVal = sampleAtX('T', x);
-    const effAmb = isTimeMode ? tVal : x;
     const ltVal = getLT(x);
-    const cR = sampleAtX('R', effAmb);
-    const cG = sampleAtX('G', effAmb);
-    const cB = sampleAtX('B', effAmb);
-    const cL = sampleAtX('L', effAmb);
+    // RGB eğrileri her zaman ham x pozisyonunda örneklenir:
+    //   sensor modunda: x = ortam ışığı %
+    //   time modunda:   x = saat pozisyonu (0-100 = 0h-24h)
+    // L ise: sensor modunda L(x), time modunda L(T(x)) = ltVal
+    const cR = sampleAtX('R', x);
+    const cG = sampleAtX('G', x);
+    const cB = sampleAtX('B', x);
+    const cL = isTimeMode ? ltVal : sampleAtX('L', x);
 
     let fR, fG, fB;
     if (calcMode === 'ratio') {
@@ -520,18 +523,16 @@ function flashSaveStatus(msg, color = '#4ade80', ms = 2500) {
 
 // ── JSON oluşturucu ───────────────────────────────────────────────────────────
 function buildCalibrationJson() {
-    const ltPoints = [];
+    const rPoints = [], gPoints = [], bPoints = [], ltPoints = [];
     for (let xi = 0; xi <= 100; xi += 2) {
         const tAmb = sampleAtX('T', xi);
         const lVal = sampleAtX('L', tAmb);
-        ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2), fixed: false });
+        rPoints.push({ x: +xi.toFixed(2), y: +sampleAtX('R', xi).toFixed(2) });
+        gPoints.push({ x: +xi.toFixed(2), y: +sampleAtX('G', xi).toFixed(2) });
+        bPoints.push({ x: +xi.toFixed(2), y: +sampleAtX('B', xi).toFixed(2) });
+        ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2) });
     }
-    const data = {
-        R: nodes.R.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
-        G: nodes.G.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
-        B: nodes.B.map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), fixed: n.fixed })),
-        L: ltPoints,
-    };
+    const data = { R: rPoints, G: gPoints, B: bPoints, L: ltPoints };
     return JSON.stringify({ version: 8, calcMode, channels: data }, null, 2);
 }
 
