@@ -405,15 +405,24 @@ document.querySelectorAll('.ch-btn').forEach(btn => {
 });
 
 function _updateCalcBtn() {
-    const btn = document.getElementById('calc-mode-btn');
-    if (!btn) return;
-    btn.textContent = calcMode === 'ratio' ? '⚡ Oran' : '⚡ Mutlak';
+    const btnAbs = document.getElementById('calc-btn-absolute');
+    const btnRatio = document.getElementById('calc-btn-ratio');
+    if (!btnAbs || !btnRatio) return;
+    btnAbs.classList.toggle('active', calcMode === 'absolute');
+    btnRatio.classList.toggle('active', calcMode === 'ratio');
 }
-const calcBtn = document.getElementById('calc-mode-btn');
-if (calcBtn) {
+const btnAbs = document.getElementById('calc-btn-absolute');
+const btnRatio = document.getElementById('calc-btn-ratio');
+if (btnAbs && btnRatio) {
     _updateCalcBtn();
-    calcBtn.addEventListener('click', () => {
-        calcMode = calcMode === 'ratio' ? 'absolute' : 'ratio';
+    btnAbs.addEventListener('click', () => {
+        calcMode = 'absolute';
+        localStorage.setItem('rgbl_calc_mode', calcMode);
+        _updateCalcBtn();
+        window._updateSimulation();
+    });
+    btnRatio.addEventListener('click', () => {
+        calcMode = 'ratio';
         localStorage.setItem('rgbl_calc_mode', calcMode);
         _updateCalcBtn();
         window._updateSimulation();

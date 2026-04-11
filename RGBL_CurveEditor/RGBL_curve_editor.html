@@ -241,6 +241,23 @@ html, body {
     max-width: 640px;
 }
 #sim-status { color: #c8d8f0; font-weight: 600; }
+.calc-seg-btn {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 8px;
+    background: #0e1628;
+    color: #3a5a88;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: 0.15s;
+    outline: none;
+}
+.calc-seg-btn.active {
+    color: #fbbf24;
+    background: #131c2f;
+    border-color: rgba(251,191,36,0.35);
+    box-shadow: 0 0 6px rgba(251,191,36,0.25);
+}
 </style>
 </head>
 <body>
@@ -251,7 +268,10 @@ html, body {
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <span class="panel-title">RGBL Eğri Editörü</span>
       <div style="display:flex;gap:6px;">
-        <button id="calc-mode-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;background:#0e1628;color:#fbbf24;cursor:pointer;">⚡ Mutlak</button>
+        <div id="calc-mode-group" style="display:flex;gap:2px;">
+          <button class="calc-seg-btn" id="calc-btn-absolute">⚡ Mutlak</button>
+          <button class="calc-seg-btn" id="calc-btn-ratio">Oran</button>
+        </div>
         <button id="export-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;background:#0e1628;color:#4ade80;cursor:pointer;">💾 Kaydet</button>
         <button id="pick-file-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;background:#0e1628;color:#60a5fa;cursor:pointer;" title="Kayıt konumunu değiştir / Yedek al">📁</button>
         <button id="reset-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;background:#0e1628;color:#3a5a88;cursor:pointer;">↺ Sıfırla</button>
@@ -293,9 +313,9 @@ html, body {
       <span class="panel-title">Simülasyon Odası</span>
       <div id="mode-bar">
         <!-- Eski isim: Sensör Modu -->
-        <label><input type="radio" name="simMode" value="sensor" checked> 🌙 Işık Yoğunluğu Modu</label>
+        <label><input type="radio" name="simMode" value="sensor"> 🌙 Işık Yoğunluğu Modu</label>
         <!-- Eski isim: 24 Saat Döngüsü -->
-        <label><input type="radio" name="simMode" value="time"> 🌞 Gün Döngüsü Modu</label>
+        <label><input type="radio" name="simMode" value="time" checked> 🌞 Gün Döngüsü Modu</label>
       </div>
     </div>
 
