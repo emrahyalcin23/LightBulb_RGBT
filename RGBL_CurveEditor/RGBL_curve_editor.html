@@ -258,6 +258,78 @@ html, body {
     border-color: rgba(251,191,36,0.35);
     box-shadow: 0 0 6px rgba(251,191,36,0.25);
 }
+
+/* ── Profil dropdown ── */
+#profile-wrap { position: relative; }
+#profile-btn {
+    font-size: 10px; padding: 3px 8px; border-radius: 8px;
+    background: #0e1628; color: #c084fc; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.07);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 130px; transition: 0.15s; outline: none;
+}
+#profile-btn.has-profile { border-color: rgba(192,132,252,0.3); }
+#profile-dropdown {
+    display: none; position: absolute; top: calc(100% + 5px); right: 0;
+    background: #0c111e; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 8px; min-width: 210px; z-index: 1000;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+}
+#profile-dropdown.open { display: block; }
+#profile-save-row {
+    display: flex; gap: 4px;
+    padding-bottom: 7px; margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+#profile-name-input {
+    flex: 1; font-size: 10px; padding: 3px 7px; border-radius: 6px;
+    background: #131c2f; color: #c8d8f0;
+    border: 1px solid rgba(255,255,255,0.1); outline: none;
+    font-family: inherit;
+}
+#profile-name-input:focus { border-color: rgba(192,132,252,0.4); }
+#profile-add-btn {
+    font-size: 10px; padding: 3px 8px; border-radius: 6px;
+    background: #131c2f; color: #c084fc; cursor: pointer;
+    border: 1px solid rgba(192,132,252,0.2); white-space: nowrap; outline: none;
+    transition: 0.15s;
+}
+#profile-add-btn:hover { border-color: rgba(192,132,252,0.5); }
+#profile-list {
+    display: flex; flex-direction: column; gap: 3px;
+    max-height: 200px; overflow-y: auto;
+}
+.profile-item {
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 5px; border-radius: 6px;
+    border: 1px solid transparent;
+}
+.profile-item.active-profile {
+    border-color: rgba(192,132,252,0.25); background: #131c2f;
+}
+.profile-item-name {
+    flex: 1; font-size: 10px; color: #6b7280;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: default;
+}
+.profile-item.active-profile .profile-item-name { color: #c084fc; }
+.profile-load-btn, .profile-del-btn {
+    font-size: 9px; padding: 2px 6px; border-radius: 4px;
+    cursor: pointer; outline: none; transition: 0.15s; flex-shrink: 0;
+}
+.profile-load-btn {
+    background: rgba(96,165,250,0.08); color: #60a5fa;
+    border: 1px solid rgba(96,165,250,0.15);
+}
+.profile-load-btn:hover { background: rgba(96,165,250,0.2); }
+.profile-del-btn {
+    background: rgba(248,113,113,0.08); color: #f87171;
+    border: 1px solid rgba(248,113,113,0.15);
+}
+.profile-del-btn:hover { background: rgba(248,113,113,0.2); }
+.profile-empty {
+    font-size: 10px; color: #3a5a88; text-align: center; padding: 8px 0;
+}
 </style>
 </head>
 <body>
@@ -271,6 +343,16 @@ html, body {
         <div id="calc-mode-group" style="display:flex;gap:2px;">
           <button class="calc-seg-btn" id="calc-btn-absolute">⚡ Mutlak</button>
           <button class="calc-seg-btn" id="calc-btn-ratio">Oran</button>
+        </div>
+        <div id="profile-wrap">
+          <button id="profile-btn" title="Profil yönetimi">📋 ▾</button>
+          <div id="profile-dropdown">
+            <div id="profile-save-row">
+              <input id="profile-name-input" type="text" maxlength="16" placeholder="Profil adı… (max 16 karakter)">
+              <button id="profile-add-btn">+ Kaydet</button>
+            </div>
+            <div id="profile-list"></div>
+          </div>
         </div>
         <button id="export-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;background:#0e1628;color:#4ade80;cursor:pointer;">💾 Kaydet</button>
         <button id="pick-file-btn" style="font-size:10px;padding:3px 10px;border-radius:8px;background:#0e1628;color:#60a5fa;cursor:pointer;" title="Kayıt konumunu değiştir / Yedek al">📁</button>

@@ -532,8 +532,13 @@ function buildCalibrationJson() {
         bPoints.push({ x: +xi.toFixed(2), y: +sampleAtX('B', xi).toFixed(2) });
         ltPoints.push({ x: +xi.toFixed(2), y: +lVal.toFixed(2) });
     }
-    const data = { R: rPoints, G: gPoints, B: bPoints, L: ltPoints };
-    return JSON.stringify({ version: 8, calcMode, channels: data }, null, 2);
+    const channels = { R: rPoints, G: gPoints, B: bPoints, L: ltPoints };
+    // Editörde profil geri yüklemek için seyrek düğüm verisi (T kanalı dahil)
+    const nodeData = {};
+    EDITABLE_CHS.forEach(ch => {
+        nodeData[ch] = nodes[ch].map(n => ({ x: +n.x.toFixed(4), y: +n.y.toFixed(4), fixed: n.fixed }));
+    });
+    return JSON.stringify({ version: 9, calcMode, channels, nodes: nodeData }, null, 2);
 }
 
 // ── İndirme fallback ──────────────────────────────────────────────────────────
@@ -703,6 +708,161 @@ document.querySelectorAll('input[name="simMode"]').forEach(radio => {
     });
 });
 
+// ═══════════════════════════════════════════════════════════════════
+//  PROFİL YÖNETİMİ
+// ═══════════════════════════════════════════════════════════════════
+
+const PROFILES_IDB_KEY = 'rgbl_profiles';
+let _activeProfileName = null;
+
+async function _getProfiles() {
+    return (await _IDB.get(PROFILES_IDB_KEY)) || [];
+}
+
+function _updateProfileBtn() {
+    const btn = document.getElementById('profile-btn');
+    if (!btn) return;
+    if (_activeProfileName) {
+        const short = _activeProfileName.length > 9
+            ? _activeProfileName.slice(0, 8) + '…' : _activeProfileName;
+        btn.textContent = `📋 ${short} ▾`;
+        btn.classList.add('has-profile');
+    } else {
+        btn.textContent = '📋 ▾';
+        btn.classList.remove('has-profile');
+    }
+}
+
+function _closeProfileDropdown() {
+    const dd = document.getElementById('profile-dropdown');
+    if (dd) dd.classList.remove('open');
+}
+
+async function _renderProfileList() {
+    const profiles = await _getProfiles();
+    const list = document.getElementById('profile-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (profiles.length === 0) {
+        list.innerHTML = '<div class="profile-empty">Kayıtlı profil yok</div>';
+        return;
+    }
+    profiles.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'profile-item' + (p.name === _activeProfileName ? ' active-profile' : '');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'profile-item-name';
+        nameSpan.textContent = p.name;
+        nameSpan.title = p.name;
+
+        const loadBtn = document.createElement('button');
+        loadBtn.className = 'profile-load-btn';
+        loadBtn.textContent = 'Yükle';
+        loadBtn.addEventListener('click', () => _loadProfile(p));
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'profile-del-btn';
+        delBtn.textContent = '×';
+        delBtn.title = 'Profili sil';
+        delBtn.addEventListener('click', async () => {
+            let all = await _getProfiles();
+            all = all.filter(x => x.name !== p.name);
+            await _IDB.set(PROFILES_IDB_KEY, all);
+            if (_activeProfileName === p.name) {
+                _activeProfileName = null;
+                _updateProfileBtn();
+            }
+            _renderProfileList();
+        });
+
+        item.appendChild(nameSpan);
+        item.appendChild(loadBtn);
+        item.appendChild(delBtn);
+        list.appendChild(item);
+    });
+}
+
+async function _saveProfile(name) {
+    const trimmed = name.trim().slice(0, 16);
+    if (!trimmed) return;
+    const profiles = await _getProfiles();
+    const idx = profiles.findIndex(p => p.name === trimmed);
+    const snap = {
+        name: trimmed,
+        ts: new Date().toISOString(),
+        calcMode,
+        nodes: Object.fromEntries(
+            EDITABLE_CHS.map(ch => [ch, nodes[ch].map(n => ({ x: n.x, y: n.y, fixed: n.fixed }))])
+        ),
+    };
+    if (idx >= 0) {
+        if (!confirm(`"${trimmed}" profili zaten var. Üzerine yazılsın mı?`)) return;
+        profiles[idx] = snap;
+    } else {
+        profiles.push(snap);
+    }
+    await _IDB.set(PROFILES_IDB_KEY, profiles);
+    _activeProfileName = trimmed;
+    _updateProfileBtn();
+    await _renderProfileList();
+    flashSaveStatus(`✓ Profil kaydedildi: ${trimmed}`, '#c084fc');
+}
+
+function _loadProfile(p) {
+    EDITABLE_CHS.forEach(ch => {
+        if (p.nodes && p.nodes[ch] && p.nodes[ch].length >= 2) {
+            nodes[ch] = p.nodes[ch].map(n => mkNode(n.x, n.y, !!n.fixed));
+        }
+    });
+    if (p.calcMode) {
+        calcMode = p.calcMode;
+        _updateCalcBtn();
+    }
+    _invalidateLT();
+    saveToLocalStorage();
+    renderAll();
+    window._updateSimulation();
+    _activeProfileName = p.name;
+    _updateProfileBtn();
+    _renderProfileList();
+    _closeProfileDropdown();
+    flashSaveStatus(`✓ Profil yüklendi: ${p.name}`, '#c084fc');
+}
+
+// Event wiring
+(function _initProfileUI() {
+    const profileBtn      = document.getElementById('profile-btn');
+    const profileDropdown = document.getElementById('profile-dropdown');
+    const profileAddBtn   = document.getElementById('profile-add-btn');
+    const profileInput    = document.getElementById('profile-name-input');
+
+    if (profileBtn && profileDropdown) {
+        profileBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            const opening = !profileDropdown.classList.contains('open');
+            profileDropdown.classList.toggle('open', opening);
+            if (opening) _renderProfileList();
+        });
+        document.addEventListener('click', e => {
+            if (!profileDropdown.contains(e.target) && e.target !== profileBtn) {
+                _closeProfileDropdown();
+            }
+        });
+    }
+
+    if (profileAddBtn && profileInput) {
+        const doSave = () => {
+            const val = profileInput.value;
+            _saveProfile(val);
+            profileInput.value = '';
+        };
+        profileAddBtn.addEventListener('click', doSave);
+        profileInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); });
+    }
+})();
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 (function init() {
     isTimeMode = getSimMode() === 'time';
     if (isTimeMode && activeCh === 'L') activeCh = 'T';
