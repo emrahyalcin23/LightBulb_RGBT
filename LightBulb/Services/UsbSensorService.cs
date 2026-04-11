@@ -10,6 +10,9 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LightBulb.Models;
 using LightBulb.Utils.Extensions;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.PlatformInterop;
@@ -1200,6 +1203,57 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 await resp.OutputStream.WriteAsync(err, ct);
             }
             finally { resp.Close(); }
+            return;
+        }
+
+        // ── POST /rgbl-backup-pick  (native Avalonia save dialog) ────────────────
+        if (req.HttpMethod == "POST" && urlPath == "/rgbl-backup-pick")
+        {
+            using var sr    = new StreamReader(req.InputStream, req.ContentEncoding);
+            var jsonContent = await sr.ReadToEndAsync();
+
+            string? selectedPath = null;
+            await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                var sp = (Application.Current?.ApplicationLifetime
+                          as IClassicDesktopStyleApplicationLifetime)
+                         ?.MainWindow?.StorageProvider;
+                if (sp is null) return;
+
+                var startDir = await sp.TryGetFolderFromPathAsync(
+                    new Uri(AppContext.BaseDirectory));
+
+                var file = await sp.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title                  = "Yedek Konumu Seç",
+                    SuggestedFileName      = "rgbl_calibration_yedek.json",
+                    SuggestedStartLocation = startDir,
+                    FileTypeChoices        = [new FilePickerFileType("JSON Kalibrasyon")
+                                             { Patterns = ["*.json"] }],
+                });
+
+                if (file is not null)
+                    selectedPath = file.Path.LocalPath;
+            });
+
+            byte[] body;
+            if (selectedPath is null)
+            {
+                body = System.Text.Encoding.UTF8.GetBytes(
+                    "{\"ok\":false,\"cancelled\":true}");
+            }
+            else
+            {
+                await File.WriteAllTextAsync(selectedPath, jsonContent, ct);
+                var fname = Path.GetFileName(selectedPath)
+                                .Replace("\\", "\\\\").Replace("\"", "\\\"");
+                body = System.Text.Encoding.UTF8.GetBytes(
+                    $"{{\"ok\":true,\"filename\":\"{fname}\"}}");
+            }
+            resp.ContentType     = "application/json; charset=utf-8";
+            resp.ContentLength64 = body.Length;
+            await resp.OutputStream.WriteAsync(body, ct);
+            resp.Close();
             return;
         }
 
