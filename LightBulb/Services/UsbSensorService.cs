@@ -28,19 +28,14 @@ namespace LightBulb.Services;
 public partial class UsbSensorService : ObservableObject, IDisposable
 {
     // Adaptive luminance reference: tracks the highest CIE-Y value seen so far.
-    // Starts at 255.0 (= max CIE-Y when R=G=B=255) so the first reading
-    // never incorrectly maps to 100 % brightness before the true peak is known.
-    private double _peakRawY = 255.0;
+    // Starts at 2500.0 (= max CIE-Y when R=G=B at firmware raw_max=2500) so the
+    // first reading never incorrectly maps to 100 % brightness before the true peak is known.
+    private double _peakRawY = 2500.0;
 
     // Adaptive peak for the Clear channel (raw_c). Used to normalise raw_c to
     // the 0-100 % ambient range that feeds the RGBL calibration curves.
     // Starts at 1.0 to avoid division-by-zero on the very first reading.
     private double _peakRawC = 1.0;
-
-    // Adaptive peak for CIE-Y derived from proc values (0-100 floats).
-    // Used when the firmware sends type-1/2 compact format (no raw counts).
-    // Starts at 0.01 to avoid division-by-zero on the first reading.
-    private double _peakProcY = 0.01;
 
     // RGBL curve evaluator loaded from rgbl_calibration.json.
     // Null when no path is configured or the file cannot be parsed.
@@ -1217,12 +1212,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         // CIE-Y luminance. Type-6 (dual) format provides raw ADC counts; type-1/2 (compact)
         // format sets raw counts to 0 and only supplies proc values (0-100 floats).
         // When raw counts are absent, synthesise rawY by scaling proc CIE-Y to the same
-        // approximate ADC range (×655.35 maps 100 → 65535) so that downstream thresholds
-        // (e.g. the dark-reading guard at rawY < 200) behave correctly.
+        // ADC range (×25.0 maps 100 → 2500, the firmware raw_max) so that downstream
+        // thresholds (e.g. the dark-reading guard at rawY < 200) behave correctly.
         var hasRawCounts = dr.RawR > 0 || dr.RawG > 0 || dr.RawB > 0;
         var rawY = hasRawCounts
             ? 0.2126 * dr.RawR  + 0.7152 * dr.RawG  + 0.0722 * dr.RawB
-            : (0.2126 * dr.ProcR + 0.7152 * dr.ProcG + 0.0722 * dr.ProcB) * 655.35;
+            : (0.2126 * dr.ProcR + 0.7152 * dr.ProcG + 0.0722 * dr.ProcB) * 25.0;
         var luminance = ComputeLuminance(rawY);
         var (rBias, gBias, bBias, lBias) = InterpolateBiases(rawY);
 
@@ -1243,12 +1238,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         else
         {
-            // Type-1/2: no Clear channel — derive ambient from proc CIE-Y with adaptive peak.
+            // Type-1/2: no Clear channel — firmware proc values are already 0-100 absolute
+            // percentages; use CIE-Y weighted average directly as the ambient X input.
             var procY = 0.2126 * dr.ProcR + 0.7152 * dr.ProcG + 0.0722 * dr.ProcB;
-            if (procY > _peakProcY) _peakProcY = procY;
-            ambientPct = _peakProcY > 0
-                ? Math.Clamp(procY / _peakProcY * 100.0, 0, 100)
-                : 0;
+            ambientPct = Math.Clamp(procY, 0, 100);
         }
         _lastAmbientPct = ambientPct;
 
