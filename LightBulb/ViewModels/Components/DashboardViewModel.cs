@@ -354,7 +354,7 @@ public partial class DashboardViewModel : ViewModelBase
     /// </summary>
     private ColorConfiguration GetEffectiveTarget()
     {
-        if (_settingsService.IsUsbSensorEnabled)
+        if (_settingsService.IsUsbSensorEnabled && _usbSensorService.IsConnected)
         {
             return new ColorConfiguration(
                 Math.Clamp(
@@ -432,7 +432,7 @@ public partial class DashboardViewModel : ViewModelBase
             _configurationSmoothingTarget = null;
         }
 
-        if (_settingsService.IsUsbSensorEnabled)
+        if (_settingsService.IsUsbSensorEnabled && _usbSensorService.IsConnected)
         {
             if (_usbSensorService.IsRgblCalibrationActive)
             {

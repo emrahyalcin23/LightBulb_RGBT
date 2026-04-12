@@ -982,6 +982,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             }
             var ok = TryParseDualLine(raw, out _);
 
+            // Feed the test reading into the normal display pipeline so that
+            // "Son Okuma" and "RGBL Profil Çıktısı" are updated immediately.
+            if (ok)
+                ParseAndDispatch(raw, InstantReadCommand);
+
             var result = new ConnectionTestResult(portName, baud, InstantReadCommand, ok, raw,
                 ok ? "" : "Yanıt formatı beklenenle eşleşmedi");
 
