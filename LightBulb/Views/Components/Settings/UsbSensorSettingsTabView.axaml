@@ -168,8 +168,9 @@
                     <Button
                         Command="{Binding ResetSimulationCommand}"
                         Content="Sıfırla"
+                        HotKey="Escape"
                         Theme="{DynamicResource MaterialOutlinedButton}"
-                        ToolTip.Tip="Tüm simülasyon değerlerini sıfırlar ve ekranı normal zamanlayıcıya döndürür" />
+                        ToolTip.Tip="Tüm simülasyon değerlerini sıfırlar ve ekranı normal zamanlayıcıya döndürür (kısayol: Esc)" />
                     <Button
                         Command="{Binding InjectSimulatedReadingCommand}"
                         Content="Inject"
