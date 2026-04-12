@@ -199,7 +199,7 @@
                     Command="{Binding ReadNowCommand}"
                     Content="Şimdi Oku"
                     Theme="{DynamicResource MaterialOutlinedButton}"
-                    ToolTip.Tip="Zamanlayıcıyı beklemeden sensörden hemen veri çeker. Sensör bağlı değilse buton pasif kalır." />
+                    ToolTip.Tip="Zamanlayıcıyı beklemeden sensörden hemen veri çeker. Toggle kapalı olsa bile çalışır; port geçici açılıp kapatılır." />
             </StackPanel>
         </Border>
 

@@ -61,9 +61,20 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
         AutoDetectPortCommand = new AsyncRelayCommand(AutoDetectPortAsync);
 
+        // "Şimdi Oku" is available whenever a port is configured, regardless of whether
+        // the toggle is on. When the port is closed it opens a temporary connection.
         ReadNowCommand = new RelayCommand(
             () => _usbSensorService.ReadNow(),
-            () => _usbSensorService.IsPortOpen
+            () => !string.IsNullOrWhiteSpace(SettingsService.UsbPortName)
+        );
+
+        // CanExecute depends on UsbPortName which is a settings property, not a sensor
+        // property, so notify separately when it changes.
+        _usbEventRoot.Add(
+            SettingsService.WatchProperty(
+                o => o.UsbPortName,
+                () => ReadNowCommand.NotifyCanExecuteChanged()
+            )
         );
 
         InjectSimulatedReadingCommand = new RelayCommand(() =>

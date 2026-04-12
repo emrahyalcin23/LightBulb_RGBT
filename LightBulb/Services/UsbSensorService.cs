@@ -692,10 +692,64 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Immediately performs a single sensor read without waiting for the next scheduled interval.
-    /// Only effective when the sensor is started and the port is open.
+    /// Immediately performs a single sensor read. If the port is already open (sensor running)
+    /// it reuses the open connection. If the port is closed but a port name is configured, it
+    /// opens the port temporarily for one read and closes it afterwards.
+    /// No-op when no port is configured.
     /// </summary>
-    public void ReadNow() => Task.Run(PerformRead);
+    public void ReadNow()
+    {
+        if (IsPortOpen)
+            Task.Run(PerformRead);
+        else
+            Task.Run(PerformOneTimeRead);
+    }
+
+    /// <summary>
+    /// Opens the configured port for a single read, calls ParseAndDispatch, then closes the port.
+    /// Used when the sensor is not started (toggle off) but the user wants to see live data.
+    /// </summary>
+    private void PerformOneTimeRead()
+    {
+        var portName = _settingsService.UsbPortName;
+        var baud     = _settingsService.UsbBaudRate;
+        if (string.IsNullOrWhiteSpace(portName)) return;
+
+        var tempPort = new SerialPort(portName, baud)
+        {
+            ReadTimeout  = 3000,
+            WriteTimeout = 1000,
+            DtrEnable    = true,
+        };
+
+        _portLock.Wait();
+        try
+        {
+            tempPort.Open();
+            // Give firmware time to boot after DTR rising edge (same as RunTest).
+            System.Threading.Thread.Sleep(2000);
+            tempPort.DiscardInBuffer();
+
+            var cmd = BuildReadCommand();
+            tempPort.WriteLine(cmd);
+            var raw = ReadResponseLine(tempPort).Trim();
+            ParseAndDispatch(raw, cmd);
+        }
+        catch (Exception ex)
+        {
+            var msg = ex.Message;
+            Dispatcher.UIThread.Post(() =>
+            {
+                LastReadError = $"Anlık okuma hatası: {msg}";
+            });
+        }
+        finally
+        {
+            _portLock.Release();
+            try { tempPort.Close(); } catch { }
+            tempPort.Dispose();
+        }
+    }
 
     /// <summary>
     /// Cancels the currently pending read timer and immediately reschedules it with the
