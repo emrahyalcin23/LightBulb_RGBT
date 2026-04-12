@@ -282,11 +282,34 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public string LastReadCommand => _usbSensorService.LastReadCommand;
 
+    /// <summary>The raw serial response line from the sensor (before parsing). Empty until first read attempt.</summary>
+    public string LastRawResponse => _usbSensorService.LastRawResponse;
+
+    /// <summary>Non-empty when the last read attempt failed. Shows why the read failed.</summary>
+    public string LastReadError => _usbSensorService.LastReadError;
+
+    /// <summary>True when LastReadError is non-empty — used by the UI to highlight the error row.</summary>
+    public bool HasReadError => !string.IsNullOrEmpty(_usbSensorService.LastReadError);
+
     public double LatestCct => _usbSensorService.LatestCct;
 
     public string LatestCctText => $"{_usbSensorService.LatestCct:F0} K";
 
     public double LatestLuminance => _usbSensorService.LatestLuminance;
+
+    // ── RGBL profile output ───────────────────────────────────────────────────
+
+    public string RgblLoadStatus => _usbSensorService.RgblLoadStatus;
+
+    public bool IsRgblCalibrationActive => _usbSensorService.IsRgblCalibrationActive;
+
+    public double LatestRgblR => _usbSensorService.LatestRgblR;
+    public double LatestRgblG => _usbSensorService.LatestRgblG;
+    public double LatestRgblB => _usbSensorService.LatestRgblB;
+
+    public string LatestRgblRText => $"{_usbSensorService.LatestRgblR:F1} %";
+    public string LatestRgblGText => $"{_usbSensorService.LatestRgblG:F1} %";
+    public string LatestRgblBText => $"{_usbSensorService.LatestRgblB:F1} %";
 
     // ── On-demand read ────────────────────────────────────────────────────────
 

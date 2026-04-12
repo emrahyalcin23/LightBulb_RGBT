@@ -108,6 +108,8 @@
             CornerRadius="4">
             <StackPanel Orientation="Vertical" Spacing="4">
                 <TextBlock FontWeight="SemiBold" Text="Son Okuma" />
+
+                <!--  Parsed values (shown after a successful read)  -->
                 <DockPanel LastChildFill="False">
                     <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Raw" />
                     <TextBlock DockPanel.Dock="Right" Text="{Binding LastRawReading}" />
@@ -131,12 +133,69 @@
                     <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Zaman" />
                     <TextBlock DockPanel.Dock="Right" Text="{Binding LastReadTime}" />
                 </DockPanel>
+
+                <!--  Diagnostic rows — always visible; show "—" until first read attempt  -->
+                <Separator Margin="0,4,0,4" Opacity="0.3" />
+                <DockPanel
+                    LastChildFill="False"
+                    ToolTip.Tip="Sensörden gelen ham seri yanıt (ayrıştırılmadan önce). Parse başarısızsa burada nedenini görebilirsiniz.">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Seri Yanıt" />
+                    <TextBlock
+                        DockPanel.Dock="Right"
+                        FontFamily="Monospace"
+                        FontSize="10"
+                        MaxWidth="260"
+                        TextWrapping="NoWrap"
+                        TextTrimming="CharacterEllipsis"
+                        Text="{Binding LastRawResponse}" />
+                </DockPanel>
+                <DockPanel
+                    LastChildFill="False"
+                    ToolTip.Tip="Son okuma denemesinde oluşan hata (başarılıysa boş)">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Hata" />
+                    <TextBlock
+                        DockPanel.Dock="Right"
+                        FontSize="11"
+                        Foreground="#EF5350"
+                        MaxWidth="260"
+                        TextWrapping="Wrap"
+                        Text="{Binding LastReadError}" />
+                </DockPanel>
+
                 <Button
+                    Margin="0,4,0,0"
                     HorizontalAlignment="Right"
                     Command="{Binding ReadNowCommand}"
                     Content="Şimdi Oku"
                     Theme="{DynamicResource MaterialOutlinedButton}"
-                    ToolTip.Tip="Zamanlayıcıyı beklemeden sensörden hemen veri çeker" />
+                    ToolTip.Tip="Zamanlayıcıyı beklemeden sensörden hemen veri çeker. Sensör bağlı değilse buton pasif kalır." />
+            </StackPanel>
+        </Border>
+
+        <!--  RGBL Profil Çıktısı — JSON dosyasından hesaplanan anlık çıkış değerleri  -->
+        <Border
+            Margin="0,8,0,0"
+            Padding="8"
+            Background="{DynamicResource MaterialCardBackgroundBrush}"
+            CornerRadius="4">
+            <StackPanel Orientation="Vertical" Spacing="4">
+                <TextBlock FontWeight="SemiBold" Text="RGBL Profil Çıktısı" />
+                <DockPanel LastChildFill="False" ToolTip.Tip="RGBL kalibrasyon JSON'unun yüklenme durumu">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Durum" />
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding RgblLoadStatus}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False" ToolTip.Tip="RGBL eğrisinin mevcut ambient seviyesinde hesapladığı kırmızı çıkış (0-100 %)">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="R çıkış" />
+                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblRText}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False" ToolTip.Tip="Yeşil kanal çıkışı (0-100 %)">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="G çıkış" />
+                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblGText}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False" ToolTip.Tip="Mavi kanal çıkışı (0-100 %)">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="B çıkış" />
+                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblBText}" />
+                </DockPanel>
             </StackPanel>
         </Border>
 

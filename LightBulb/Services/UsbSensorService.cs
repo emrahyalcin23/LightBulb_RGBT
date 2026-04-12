@@ -125,6 +125,21 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string LastReadCommand { get; private set; } = "—";
 
+    /// <summary>The raw serial response line received from the sensor (before parsing). Useful for diagnosing format mismatches.</summary>
+    [ObservableProperty]
+    public partial string LastRawResponse { get; private set; } = "—";
+
+    /// <summary>
+    /// Non-empty when the last read attempt failed (timeout, port error, parse failure).
+    /// Empty string means the last read succeeded.
+    /// </summary>
+    [ObservableProperty]
+    public partial string LastReadError { get; private set; } = "";
+
+    /// <summary>Human-readable status of the RGBL calibration JSON (e.g. "Yüklü — rgbl_calibration.json" or an error message).</summary>
+    [ObservableProperty]
+    public partial string RgblLoadStatus { get; private set; } = "Yükleniyor…";
+
     [ObservableProperty]
     public partial bool IsConnected { get; private set; }
 
@@ -249,6 +264,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             : _settingsService.RgblCalibrationJsonPath;
         _rgblEvaluator = RgblCurveEvaluator.Load(path);
 
+        var fileName = Path.GetFileName(path);
+
         // Immediately re-evaluate with the last known ambient so the new curves
         // are applied to the screen without waiting for the next sensor reading.
         if (_rgblEvaluator is { } evaluator)
@@ -256,10 +273,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             var (r, g, b) = evaluator.Evaluate(_lastAmbientPct);
             Dispatcher.UIThread.Post(() =>
             {
+                RgblLoadStatus = $"✓ Yüklü — {fileName}";
                 LatestRgblR = r;
                 LatestRgblG = g;
                 LatestRgblB = b;
             });
+        }
+        else
+        {
+            var status = File.Exists(path)
+                ? $"✗ Ayrıştırma hatası — {fileName}"
+                : $"✗ Bulunamadı — {fileName}";
+            Dispatcher.UIThread.Post(() => RgblLoadStatus = status);
         }
     }
 
@@ -599,18 +624,36 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         if (_port is not { IsOpen: true })
             return;
 
+        string? rawResponse = null;
+        var cmd = "—";
         _portLock.Wait();
         try
         {
-            var cmd = BuildReadCommand();
+            cmd = BuildReadCommand();
             _port.WriteLine(cmd);
-            var response = ReadResponseLine(_port).Trim();
-            ParseAndDispatch(response, cmd);
+            rawResponse = ReadResponseLine(_port).Trim();
+            ParseAndDispatch(rawResponse, cmd);
         }
-        catch
+        catch (TimeoutException)
         {
-            // On error, mark as disconnected and let the next scheduled read try again.
-            Dispatcher.UIThread.Post(() => IsConnected = false);
+            var snap = rawResponse;
+            Dispatcher.UIThread.Post(() =>
+            {
+                LastRawResponse = snap ?? "(yanıt yok)";
+                LastReadError   = "Zaman aşımı — sensör 2 sn içinde yanıt vermedi";
+                IsConnected     = false;
+            });
+        }
+        catch (Exception ex)
+        {
+            var snap = rawResponse;
+            var msg  = ex.Message;
+            Dispatcher.UIThread.Post(() =>
+            {
+                LastRawResponse = snap ?? "(yanıt yok)";
+                LastReadError   = $"Port hatası: {msg}";
+                IsConnected     = false;
+            });
         }
         finally
         {
@@ -1036,7 +1079,16 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private void ParseAndDispatch(string response, string cmd = "—")
     {
         if (!TryParseDualLine(response, out var dr))
+        {
+            // Store the raw bytes so the user can see what the sensor actually sent.
+            var truncated = response.Length > 100 ? response[..100] + "…" : response;
+            Dispatcher.UIThread.Post(() =>
+            {
+                LastRawResponse = response;
+                LastReadError   = $"Ayrıştırılamadı: \"{truncated}\"";
+            });
             return;
+        }
 
         // CCT — two variants: raw uint16 counts and firmware-processed 0-100 floats.
         var cctRaw  = ComputeCct(dr.RawR,  dr.RawG,  dr.RawB);
@@ -1088,10 +1140,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblR = rgblR;
             LatestRgblG = rgblG;
             LatestRgblB = rgblB;
-            LastRawReading = rawText;
-            LastReadTime = timeText;
+            LastRawReading  = rawText;
+            LastReadTime    = timeText;
             LastReadCommand = cmd;
-            IsConnected = true;
+            LastRawResponse = response;
+            LastReadError   = "";        // clear any previous error on success
+            IsConnected     = true;
         });
     }
 
@@ -1235,12 +1289,21 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Clears only the active simulation override so the next real (or periodic) read
-    /// uses the sensor's actual ambient light. Does not touch display properties.
+    /// Clears the active simulation override and resets the Son Okuma display rows back to "—",
+    /// indicating that no injection is active. Does NOT touch RGBL curve outputs, CCT, Luminance,
+    /// or connection state — those are only changed by real sensor reads or ResetSimulation().
     /// </summary>
     public void ClearInjection()
     {
         _simulatedAmbientOverride = null;
+        Dispatcher.UIThread.Post(() =>
+        {
+            LastRawReading  = "—";
+            LastReadTime    = "—";
+            LastReadCommand = "—";
+            LastRawResponse = "—";
+            LastReadError   = "";
+        });
     }
 
     /// <summary>
@@ -1267,6 +1330,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LastRawReading  = "—";
             LastReadTime    = "—";
             LastReadCommand = "—";
+            LastRawResponse = "—";
+            LastReadError   = "";
             IsConnected     = false;
         });
     }
