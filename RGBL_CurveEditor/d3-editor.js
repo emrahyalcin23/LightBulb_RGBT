@@ -865,10 +865,12 @@ function _loadProfile(p) {
         }
     }
     _invalidateLT();
-    // saveToLocalStorage'ı dirty flag'den önce çağır ki flag tetiklenmesin
     _activeProfileName = p.name;
-    _profileDirty = false;
+    // saveToLocalStorage hook'unun dirty tetiklemesini önlemek için:
+    // _profileDirty=true ile çağırıp, kayıt bittikten sonra temizle.
+    _profileDirty = true;
     saveToLocalStorage();
+    _profileDirty = false;
     renderAll();
     window._updateSimulation();
     _updateProfileBtn();
