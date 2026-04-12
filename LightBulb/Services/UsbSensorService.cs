@@ -1049,9 +1049,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>
     /// Parses a firmware output line into a <see cref="DualReading"/>.
-    /// Two formats are supported:
-    ///   Compact (type=1): timestamp;1;mode;proc_r;proc_g;proc_b          (6 fields)
-    ///   Dual    (type=6): timestamp;6;mode;raw_r;raw_g;raw_b;raw_c;proc_r;proc_g;proc_b[;meta]
+    /// Supported formats:
+    ///   Compact  (type=1): timestamp;1;mode;proc_r;proc_g;proc_b              (6 fields)
+    ///   Compact+ (type=2): timestamp;2;mode;proc_r;proc_g;proc_b;interval=N   (7 fields, trailing meta ignored)
+    ///   Dual     (type=6): timestamp;6;mode;raw_r;raw_g;raw_b;raw_c;proc_r;proc_g;proc_b[;meta]
     /// Returns false when the line is malformed or has too few fields.
     /// </summary>
     private static bool TryParseDualLine(string line, out DualReading reading)
@@ -1065,7 +1066,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             return false;
 
         // Compact format: timestamp;1;mode;proc_r;proc_g;proc_b
-        if (parts[1] == "1")
+        // Compact+ format: timestamp;2;mode;proc_r;proc_g;proc_b;interval=N  (trailing field ignored)
+        if (parts[1] == "1" || parts[1] == "2")
         {
             if (!float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var procR) ||
                 !float.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var procG) ||
@@ -1102,8 +1104,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             string reason;
             if (parts.Length < 6)
                 reason = $"yalnızca {parts.Length} alan (min. 6 gerekli)";
-            else if (parts.Length >= 2 && parts[1] == "1")
-                reason = $"tip-1 format — float ayrıştırma hatası";
+            else if (parts.Length >= 2 && (parts[1] == "1" || parts[1] == "2"))
+                reason = $"tip-{parts[1]} format — float ayrıştırma hatası";
             else if (parts.Length < 10)
                 reason = $"tip-{(parts.Length >= 2 ? parts[1] : "?")} — {parts.Length} alan (min. 10 gerekli)";
             else
