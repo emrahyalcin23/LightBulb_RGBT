@@ -41,6 +41,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     // Null when no path is configured or the file cannot be parsed.
     private RgblCurveEvaluator? _rgblEvaluator;
 
+    // Last ambient percentage fed into the RGBL curves as X-input (0-100).
+    // Stored so ReloadRgblEvaluator can immediately re-evaluate new curves.
+    private double _lastAmbientPct = 50.0;
+
+    // When set by InjectSimulatedReading, ParseAndDispatch uses this value
+    // directly as ambientPct instead of deriving it from rawC/_peakRawC.
+    // Cleared after a single use.
+    private double? _simulatedAmbientOverride;
+
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
     // Firmware now replies to KIMSIN with a semicolon-delimited line that embeds
@@ -131,6 +140,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     public partial string ConnectionTestMessage { get; private set; } = string.Empty;
+
+    /// <summary>True when the serial port is currently open (regardless of IsConnected).</summary>
+    public bool IsPortOpen => _port is { IsOpen: true };
 
     /// <summary>True when an RGBL calibration JSON is loaded; the display pipeline uses this to decide routing.</summary>
     public bool IsRgblCalibrationActive => _rgblEvaluator is not null;
@@ -232,6 +244,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             ? Path.Combine(AppContext.BaseDirectory, "rgbl_calibration.json")
             : _settingsService.RgblCalibrationJsonPath;
         _rgblEvaluator = RgblCurveEvaluator.Load(path);
+
+        // Immediately re-evaluate with the last known ambient so the new curves
+        // are applied to the screen without waiting for the next sensor reading.
+        if (_rgblEvaluator is { } evaluator)
+        {
+            var (r, g, b) = evaluator.Evaluate(_lastAmbientPct);
+            Dispatcher.UIThread.Post(() =>
+            {
+                LatestRgblR = r;
+                LatestRgblG = g;
+                LatestRgblB = b;
+            });
+        }
     }
 
     /// <summary>
@@ -1011,9 +1036,21 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         var luminance = ComputeLuminance(rawY);
         var (rBias, gBias, bBias, lBias) = InterpolateBiases(rawY);
 
-        // Ambient percentage from raw_c (Clear channel) — X input for all RGBL curves.
-        if (dr.RawC > _peakRawC) _peakRawC = dr.RawC;
-        var ambientPct = Math.Clamp(dr.RawC / _peakRawC * 100.0, 0, 100);
+        // Ambient percentage — X input for all RGBL curves.
+        // When InjectSimulatedReading provides an explicit ambient override, use it directly
+        // so the user can test any X position on the curves without affecting _peakRawC.
+        double ambientPct;
+        if (_simulatedAmbientOverride.HasValue)
+        {
+            ambientPct = Math.Clamp(_simulatedAmbientOverride.Value, 0, 100);
+            _simulatedAmbientOverride = null;
+        }
+        else
+        {
+            if (dr.RawC > _peakRawC) _peakRawC = dr.RawC;
+            ambientPct = Math.Clamp(dr.RawC / _peakRawC * 100.0, 0, 100);
+        }
+        _lastAmbientPct = ambientPct;
 
         // RGBL curve evaluation — only when a calibration JSON is loaded.
         double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB;
@@ -1022,7 +1059,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         var rawText = string.Create(
             CultureInfo.InvariantCulture,
-            $"R:{dr.RawR}  G:{dr.RawG}  B:{dr.RawB}  C:{dr.RawC}  pR:{dr.ProcR:F1}  pG:{dr.ProcG:F1}  pB:{dr.ProcB:F1}"
+            $"R:{dr.RawR}  G:{dr.RawG}  B:{dr.RawB}  C:{dr.RawC}  Amb:{ambientPct:F1}%  pR:{dr.ProcR:F1}  pG:{dr.ProcG:F1}  pB:{dr.ProcB:F1}"
         );
         var timeText = DateTime.Now.ToString("HH:mm:ss");
 
@@ -1164,10 +1201,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     /// <summary>
     /// Injects a fake sensor reading directly — for testing without hardware.
-    /// Builds a minimal dual-format line (type=6) and feeds it through the normal pipeline.
+    /// <paramref name="ambientPct"/> (0-100) sets the RGBL curve X-input directly,
+    /// bypassing the adaptive rawC/_peakRawC scaling so any curve position can be tested.
+    /// R/G/B are raw sensor counts (0-65535) used for CCT and luminance calculation.
     /// </summary>
-    public void InjectSimulatedReading(double r, double g, double b)
+    public void InjectSimulatedReading(double r, double g, double b, double ambientPct)
     {
+        _simulatedAmbientOverride = Math.Clamp(ambientPct, 0, 100);
         var rawR = (ushort)Math.Clamp(r, 0, 65535);
         var rawG = (ushort)Math.Clamp(g, 0, 65535);
         var rawB = (ushort)Math.Clamp(b, 0, 65535);
@@ -1180,6 +1220,33 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             $"0;6;0;{rawR};{rawG};{rawB};{rawC};{procR:F1};{procG:F1};{procB:F1}"
         );
         ParseAndDispatch(fakeResponse);
+    }
+
+    /// <summary>
+    /// Clears all injected/sensor state and resets observable properties to their defaults.
+    /// Use this to cancel a simulated reading and return the display to its normal schedule.
+    /// </summary>
+    public void ResetSimulation()
+    {
+        _simulatedAmbientOverride = null;
+        Dispatcher.UIThread.Post(() =>
+        {
+            LatestCct      = 6500;
+            LatestCctRaw   = 6500;
+            LatestCctProc  = 6500;
+            LatestLuminance = 1.0;
+            LatestRawY     = 0;
+            LatestRBias    = 0;
+            LatestGBias    = 0;
+            LatestBBias    = 0;
+            LatestLBias    = 0;
+            LatestRgblR    = 50.0;
+            LatestRgblG    = 50.0;
+            LatestRgblB    = 50.0;
+            LastRawReading = "—";
+            LastReadTime   = "—";
+            IsConnected    = false;
+        });
     }
 
     // ── Calibration HTTP server ───────────────────────────────────────────────

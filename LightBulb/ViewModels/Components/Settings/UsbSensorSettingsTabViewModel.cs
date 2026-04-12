@@ -22,6 +22,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     private double _simR = 1200;
     private double _simG = 800;
     private double _simB = 400;
+    private double _simAmbientPct = 50.0;
 
     public UsbSensorSettingsTabViewModel(
         SettingsService settingsService,
@@ -50,11 +51,14 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         ReadNowCommand = new RelayCommand(
             () => _usbSensorService.ReadNow(),
-            () => _usbSensorService.IsConnected
+            () => _usbSensorService.IsPortOpen
         );
 
         InjectSimulatedReadingCommand = new RelayCommand(() =>
-            _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB));
+            _usbSensorService.InjectSimulatedReading(SimulatedR, SimulatedG, SimulatedB, SimulatedAmbientPct));
+
+        ResetSimulationCommand = new RelayCommand(() =>
+            _usbSensorService.ResetSimulation());
 
         OpenCalibrationWindowCommand = new RelayCommand(() =>
         {
@@ -282,7 +286,12 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public double SimulatedG { get => _simG; set => SetProperty(ref _simG, value); }
     public double SimulatedB { get => _simB; set => SetProperty(ref _simB, value); }
 
+    /// <summary>Ambient light percentage (0-100) used as X-axis input to RGBL curves.</summary>
+    public double SimulatedAmbientPct { get => _simAmbientPct; set => SetProperty(ref _simAmbientPct, value); }
+
     public IRelayCommand InjectSimulatedReadingCommand { get; }
+
+    public IRelayCommand ResetSimulationCommand { get; }
 
     // ── RGBL Simulation ───────────────────────────────────────────────────────
 

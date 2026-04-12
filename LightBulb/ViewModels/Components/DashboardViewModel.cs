@@ -95,10 +95,16 @@ public partial class DashboardViewModel : ViewModelBase
             // Invalidate gamma when USB sensor delivers new readings so that
             // every change — including those below the significance threshold — is
             // applied to the screen immediately.
+            // LatestRgblR/G/B are also watched so that saving new RGBL curves in
+            // the editor (which re-evaluates and updates these properties) triggers
+            // an immediate gamma refresh without waiting for the next sensor read.
             usbSensorService.WatchProperties(
                 [
                     o => o.LatestCct,
                     o => o.LatestLuminance,
+                    o => o.LatestRgblR,
+                    o => o.LatestRgblG,
+                    o => o.LatestRgblB,
                 ],
                 _gammaService.InvalidateGamma
             )
