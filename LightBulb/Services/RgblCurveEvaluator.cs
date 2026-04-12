@@ -64,9 +64,10 @@ public sealed class RgblCurveEvaluator
 
     /// <summary>
     /// Evaluates the RGBL pipeline for the given ambient light percentage.
-    /// Returns (finalR, finalG, finalB) each in the 0-100 range.
+    /// Returns (finalR, finalG, finalB, ltVal) each in the 0-100 range.
+    /// ltVal is the pre-computed LT brightness multiplier at this ambient level.
     /// </summary>
-    public (double R, double G, double B) Evaluate(double ambientPct)
+    public (double R, double G, double B, double L) Evaluate(double ambientPct)
     {
         var ltVal = SampleAtX(_l, ambientPct);   // L = pre-computed LT
         var fR    = SampleAtX(_r, ambientPct);
@@ -74,13 +75,13 @@ public sealed class RgblCurveEvaluator
         var fB    = SampleAtX(_b, ambientPct);
 
         if (!_isRatio)
-            return (fR * ltVal / 100.0, fG * ltVal / 100.0, fB * ltVal / 100.0);
+            return (fR * ltVal / 100.0, fG * ltVal / 100.0, fB * ltVal / 100.0, ltVal);
 
         var sum = fR + fG + fB;
         if (sum > 0.001)
-            return (fR / sum * ltVal, fG / sum * ltVal, fB / sum * ltVal);
+            return (fR / sum * ltVal, fG / sum * ltVal, fB / sum * ltVal, ltVal);
 
-        return (ltVal / 3.0, ltVal / 3.0, ltVal / 3.0);
+        return (ltVal / 3.0, ltVal / 3.0, ltVal / 3.0, ltVal);
     }
 
     /// <summary>

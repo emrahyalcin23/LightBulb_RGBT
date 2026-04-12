@@ -222,6 +222,10 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
             OnPropertyChanged(nameof(IntervalLabel));
             OnPropertyChanged(nameof(FinalCommand));
+
+            // Cancel the pending timer and reschedule immediately with the new interval
+            // so the user doesn't have to wait for the old countdown to expire.
+            _usbSensorService.RescheduleRead();
         }
     }
 
@@ -310,6 +314,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string LatestRgblRText => $"{_usbSensorService.LatestRgblR:F1} %";
     public string LatestRgblGText => $"{_usbSensorService.LatestRgblG:F1} %";
     public string LatestRgblBText => $"{_usbSensorService.LatestRgblB:F1} %";
+    public string LatestRgblLText => $"{_usbSensorService.LatestRgblL:F1} %";
 
     // ── On-demand read ────────────────────────────────────────────────────────
 

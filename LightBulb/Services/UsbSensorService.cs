@@ -95,6 +95,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double LatestRgblB { get; private set; } = 50.0;
 
+    /// <summary>RGBL curve output: pre-computed LT brightness multiplier (0-100). Set only when a calibration JSON is loaded.</summary>
+    [ObservableProperty]
+    public partial double LatestRgblL { get; private set; } = 50.0;
+
     [ObservableProperty]
     public partial double LatestLuminance { get; private set; } = 1.0;
 
@@ -270,13 +274,14 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         // are applied to the screen without waiting for the next sensor reading.
         if (_rgblEvaluator is { } evaluator)
         {
-            var (r, g, b) = evaluator.Evaluate(_lastAmbientPct);
+            var (r, g, b, l) = evaluator.Evaluate(_lastAmbientPct);
             Dispatcher.UIThread.Post(() =>
             {
                 RgblLoadStatus = $"✓ Yüklü — {fileName}";
                 LatestRgblR = r;
                 LatestRgblG = g;
                 LatestRgblB = b;
+                LatestRgblL = l;
             });
         }
         else
@@ -666,6 +671,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// Only effective when the sensor is started and the port is open.
     /// </summary>
     public void ReadNow() => Task.Run(PerformRead);
+
+    /// <summary>
+    /// Cancels the currently pending read timer and immediately reschedules it with the
+    /// current <see cref="SettingsService.UsbReadIntervalMinutes"/> value.
+    /// Call this whenever the interval setting changes so the new interval takes effect
+    /// without waiting for the old countdown to expire. No-op when the sensor is not running.
+    /// </summary>
+    public void RescheduleRead()
+    {
+        if (IsPortOpen)
+            ScheduleNextRead();
+    }
 
     /// <summary>
     /// Scans all available serial ports and returns the first one that responds with a valid
@@ -1080,12 +1097,22 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         if (!TryParseDualLine(response, out var dr))
         {
-            // Store the raw bytes so the user can see what the sensor actually sent.
-            var truncated = response.Length > 100 ? response[..100] + "…" : response;
+            // Build a specific diagnostic so the user can see exactly WHY parsing failed.
+            var parts = response.Split(';');
+            string reason;
+            if (parts.Length < 6)
+                reason = $"yalnızca {parts.Length} alan (min. 6 gerekli)";
+            else if (parts.Length >= 2 && parts[1] == "1")
+                reason = $"tip-1 format — float ayrıştırma hatası";
+            else if (parts.Length < 10)
+                reason = $"tip-{(parts.Length >= 2 ? parts[1] : "?")} — {parts.Length} alan (min. 10 gerekli)";
+            else
+                reason = $"tip-{(parts.Length >= 2 ? parts[1] : "?")} — değer ayrıştırma hatası";
+
             Dispatcher.UIThread.Post(() =>
             {
                 LastRawResponse = response;
-                LastReadError   = $"Ayrıştırılamadı: \"{truncated}\"";
+                LastReadError   = $"Ayrıştırılamadı: {reason}";
             });
             return;
         }
@@ -1116,9 +1143,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _lastAmbientPct = ambientPct;
 
         // RGBL curve evaluation — only when a calibration JSON is loaded.
-        double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB;
+        double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB, rgblL = LatestRgblL;
         if (_rgblEvaluator is not null)
-            (rgblR, rgblG, rgblB) = _rgblEvaluator.Evaluate(ambientPct);
+            (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(ambientPct);
 
         var rawText = string.Create(
             CultureInfo.InvariantCulture,
@@ -1140,6 +1167,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblR = rgblR;
             LatestRgblG = rgblG;
             LatestRgblB = rgblB;
+            LatestRgblL = rgblL;
             LastRawReading  = rawText;
             LastReadTime    = timeText;
             LastReadCommand = cmd;
@@ -1327,6 +1355,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblR    = 50.0;
             LatestRgblG    = 50.0;
             LatestRgblB    = 50.0;
+            LatestRgblL    = 50.0;
             LastRawReading  = "—";
             LastReadTime    = "—";
             LastReadCommand = "—";
