@@ -171,11 +171,10 @@
                     LastChildFill="False"
                     ToolTip.Tip="Sensörden gelen ham seri yanıt (ayrıştırılmadan önce). Parse başarısızsa burada nedenini görebilirsiniz.">
                     <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Seri Yanıt" />
-                    <TextBlock
+                    <SelectableTextBlock
                         DockPanel.Dock="Right"
                         FontFamily="Monospace"
                         FontSize="10"
-                        IsTextSelectionEnabled="True"
                         MaxWidth="260"
                         TextWrapping="NoWrap"
                         TextTrimming="CharacterEllipsis"
@@ -185,11 +184,10 @@
                     LastChildFill="False"
                     ToolTip.Tip="Son okuma denemesinde oluşan hata (başarılıysa boş)">
                     <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Hata" />
-                    <TextBlock
+                    <SelectableTextBlock
                         DockPanel.Dock="Right"
                         FontSize="11"
                         Foreground="#EF5350"
-                        IsTextSelectionEnabled="True"
                         MaxWidth="260"
                         TextWrapping="Wrap"
                         Text="{Binding LastReadError}" />
