@@ -60,6 +60,16 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         ResetSimulationCommand = new RelayCommand(() =>
             _usbSensorService.ResetSimulation());
 
+        ResetInjectionCommand = new RelayCommand(() =>
+        {
+            _usbSensorService.ClearInjection();
+            _simR          = 1200;
+            _simG          = 800;
+            _simB          = 400;
+            _simAmbientPct = 50.0;
+            OnAllPropertiesChanged();
+        });
+
         OpenCalibrationWindowCommand = new RelayCommand(() =>
         {
             var port = _usbSensorService.CalibrationServerPort;
@@ -270,6 +280,8 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public string LastReadTime => _usbSensorService.LastReadTime;
 
+    public string LastReadCommand => _usbSensorService.LastReadCommand;
+
     public double LatestCct => _usbSensorService.LatestCct;
 
     public string LatestCctText => $"{_usbSensorService.LatestCct:F0} K";
@@ -293,7 +305,13 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public IRelayCommand ResetSimulationCommand { get; }
 
-    // ── RGBL Simulation ───────────────────────────────────────────────────────
+    /// <summary>
+    /// Clears only the active injection override and resets the input fields to defaults.
+    /// Does not disturb Last Reading display or connection state.
+    /// </summary>
+    public IRelayCommand ResetInjectionCommand { get; }
+
+    // ── RGBL Profile Editor ───────────────────────────────────────────────────
 
     public IRelayCommand OpenCalibrationWindowCommand { get; }
 

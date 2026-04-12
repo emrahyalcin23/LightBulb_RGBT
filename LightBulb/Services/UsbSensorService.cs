@@ -121,6 +121,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string LastReadTime { get; private set; } = "—";
 
+    /// <summary>The command string sent to the sensor that produced the last reading (e.g. "OKU_S30").</summary>
+    [ObservableProperty]
+    public partial string LastReadCommand { get; private set; } = "—";
+
     [ObservableProperty]
     public partial bool IsConnected { get; private set; }
 
@@ -432,11 +436,17 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 DtrEnable = true,  // Pico firmware ignores commands until DTR=HIGH
             };
             _port.Open();
-            IsConnected = true;
+            if (Dispatcher.UIThread.CheckAccess())
+                IsConnected = true;
+            else
+                Dispatcher.UIThread.Post(() => IsConnected = true);
         }
         catch
         {
-            IsConnected = false;
+            if (Dispatcher.UIThread.CheckAccess())
+                IsConnected = false;
+            else
+                Dispatcher.UIThread.Post(() => IsConnected = false);
             _port?.Dispose();
             _port = null;
             return;
@@ -592,9 +602,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _portLock.Wait();
         try
         {
-            _port.WriteLine(BuildReadCommand());
+            var cmd = BuildReadCommand();
+            _port.WriteLine(cmd);
             var response = ReadResponseLine(_port).Trim();
-            ParseAndDispatch(response);
+            ParseAndDispatch(response, cmd);
         }
         catch
         {
@@ -1022,7 +1033,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         return true;
     }
 
-    private void ParseAndDispatch(string response)
+    private void ParseAndDispatch(string response, string cmd = "—")
     {
         if (!TryParseDualLine(response, out var dr))
             return;
@@ -1079,6 +1090,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblB = rgblB;
             LastRawReading = rawText;
             LastReadTime = timeText;
+            LastReadCommand = cmd;
             IsConnected = true;
         });
     }
@@ -1219,7 +1231,16 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             CultureInfo.InvariantCulture,
             $"0;6;0;{rawR};{rawG};{rawB};{rawC};{procR:F1};{procG:F1};{procB:F1}"
         );
-        ParseAndDispatch(fakeResponse);
+        ParseAndDispatch(fakeResponse, "Simülasyon (Inject)");
+    }
+
+    /// <summary>
+    /// Clears only the active simulation override so the next real (or periodic) read
+    /// uses the sensor's actual ambient light. Does not touch display properties.
+    /// </summary>
+    public void ClearInjection()
+    {
+        _simulatedAmbientOverride = null;
     }
 
     /// <summary>
@@ -1243,9 +1264,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblR    = 50.0;
             LatestRgblG    = 50.0;
             LatestRgblB    = 50.0;
-            LastRawReading = "—";
-            LastReadTime   = "—";
-            IsConnected    = false;
+            LastRawReading  = "—";
+            LastReadTime    = "—";
+            LastReadCommand = "—";
+            IsConnected     = false;
         });
     }
 

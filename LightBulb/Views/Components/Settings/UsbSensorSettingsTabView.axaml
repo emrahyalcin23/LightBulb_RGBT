@@ -91,14 +91,23 @@
                 Text="{Binding FinalCommand}" />
         </DockPanel>
 
-        <!--  Live status  -->
-        <Border
+        <!--  RGBL Profil Editörü — bağımsız profil oluşturma aracı, sensör testi ile karıştırılmamalı  -->
+        <Button
             Margin="0,24,0,0"
+            HorizontalAlignment="Stretch"
+            Command="{Binding OpenCalibrationWindowCommand}"
+            Content="🎛️  RGBL Profil Editörü"
+            Theme="{DynamicResource MaterialOutlinedButton}"
+            ToolTip.Tip="Ortam ışığı seviyelerine karşı üretilecek gerçek RGBL çıktı değerlerini tanımlayan profil eğrilerini düzenler. Sensör simülasyonundan bağımsız bir işlemdir." />
+
+        <!--  Son Okuma (gerçek sensör verisi)  -->
+        <Border
+            Margin="0,16,0,0"
             Padding="8"
             Background="{DynamicResource MaterialCardBackgroundBrush}"
             CornerRadius="4">
             <StackPanel Orientation="Vertical" Spacing="4">
-                <TextBlock FontWeight="SemiBold" Text="Last Reading" />
+                <TextBlock FontWeight="SemiBold" Text="Son Okuma" />
                 <DockPanel LastChildFill="False">
                     <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Raw" />
                     <TextBlock DockPanel.Dock="Right" Text="{Binding LastRawReading}" />
@@ -112,7 +121,14 @@
                     <TextBlock DockPanel.Dock="Right" Text="{Binding LatestLuminance, Converter={x:Static converters:FractionToPercentageStringConverter.Instance}}" />
                 </DockPanel>
                 <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Time" />
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Komut" />
+                    <TextBlock
+                        DockPanel.Dock="Right"
+                        FontFamily="Monospace"
+                        Text="{Binding LastReadCommand}" />
+                </DockPanel>
+                <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Zaman" />
                     <TextBlock DockPanel.Dock="Right" Text="{Binding LastReadTime}" />
                 </DockPanel>
                 <Button
@@ -124,15 +140,20 @@
             </StackPanel>
         </Border>
 
-        <!--  Simulate Reading  -->
+        <!--  Sensör Simülasyonu — sahte değer enjekte ederek RGBL profilini test eder  -->
         <Border
             Margin="0,16,0,0"
             Padding="8"
             Background="{DynamicResource MaterialCardBackgroundBrush}"
             CornerRadius="4">
             <StackPanel Orientation="Vertical" Spacing="8">
-                <TextBlock FontWeight="SemiBold" Text="Simulate Reading" />
-                <DockPanel LastChildFill="False" ToolTip.Tip="Simulated Red channel (sensor count)">
+                <TextBlock FontWeight="SemiBold" Text="Sensör Simülasyonu" />
+                <TextBlock
+                    Opacity="0.6"
+                    TextWrapping="Wrap"
+                    FontSize="11"
+                    Text="Gerçek sensör yokken sahte R/G/B değerleri enjekte ederek RGBL profilinin bu değere nasıl tepki vereceğini test eder." />
+                <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek kırmızı kanal değeri (ham sensör sayımı, 0-65535)">
                     <TextBlock DockPanel.Dock="Left" Text="R" />
                     <TextBox
                         MinWidth="60"
@@ -140,7 +161,7 @@
                         Text="{Binding SimulatedR, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
                         Theme="{DynamicResource CompactTextBox}" />
                 </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="Simulated Green channel (sensor count)">
+                <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek yeşil kanal değeri (ham sensör sayımı, 0-65535)">
                     <TextBlock DockPanel.Dock="Left" Text="G" />
                     <TextBox
                         MinWidth="60"
@@ -148,7 +169,7 @@
                         Text="{Binding SimulatedG, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
                         Theme="{DynamicResource CompactTextBox}" />
                 </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="Simulated Blue channel (sensor count)">
+                <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek mavi kanal değeri (ham sensör sayımı, 0-65535)">
                     <TextBlock DockPanel.Dock="Left" Text="B" />
                     <TextBox
                         MinWidth="60"
@@ -166,27 +187,20 @@
                 </DockPanel>
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
                     <Button
-                        Command="{Binding ResetSimulationCommand}"
+                        Command="{Binding ResetInjectionCommand}"
                         Content="Sıfırla"
                         HotKey="Escape"
                         Theme="{DynamicResource MaterialOutlinedButton}"
-                        ToolTip.Tip="Tüm simülasyon değerlerini sıfırlar ve ekranı normal zamanlayıcıya döndürür (kısayol: Esc)" />
+                        ToolTip.Tip="Giriş alanlarını varsayılana döndürür ve aktif enjeksiyonu iptal eder. Son Okuma ve bağlantı durumunu etkilemez." />
                     <Button
                         Command="{Binding InjectSimulatedReadingCommand}"
                         Content="Inject"
-                        Theme="{DynamicResource MaterialOutlinedButton}" />
+                        Theme="{DynamicResource MaterialOutlinedButton}"
+                        ToolTip.Tip="Girilen sahte sensör değerini sisteme enjekte eder; Son Okuma paneli sonucu gösterir." />
                 </StackPanel>
             </StackPanel>
         </Border>
 
-        <!--  RGBL Simulation  -->
-        <Button
-            Margin="0,24,0,0"
-            HorizontalAlignment="Stretch"
-            Command="{Binding OpenCalibrationWindowCommand}"
-            Content="🎛️  RGBL Simülasyonu Aç"
-            Theme="{DynamicResource MaterialOutlinedButton}"
-            ToolTip.Tip="RGBL eğri editörünü tarayıcıda aç" />
 
     </StackPanel>
 </UserControl>
