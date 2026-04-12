@@ -24,6 +24,9 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     private double _simB = 400;
     private double _simAmbientPct = 50.0;
 
+    // Prevents showing the dark-reading warning more than once per sensor session.
+    private bool _darkWarningShownForCurrentSession;
+
     public UsbSensorSettingsTabViewModel(
         SettingsService settingsService,
         LocalizationManager localizationManager,
@@ -44,6 +47,15 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
                 OnAllPropertiesChanged();
                 ReadNowCommand.NotifyCanExecuteChanged();
             })
+        );
+
+        // Dark-reading guard: when the first valid data arrives and the ambient
+        // is very dark (LatestRawY < 200), ask the user before applying it to the screen.
+        _usbEventRoot.Add(
+            _usbSensorService.WatchProperty(
+                o => o.HasReceivedValidData,
+                () => _ = CheckDarkReadingAsync()
+            )
         );
 
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
@@ -173,9 +185,60 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             SettingsService.IsUsbSensorEnabled = value;
 
             if (value)
+            {
+                _darkWarningShownForCurrentSession = false; // reset for new session
                 _usbSensorService.Start();
+            }
             else
+            {
                 _usbSensorService.Stop();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called each time HasReceivedValidData changes. If the first valid reading of a new
+    /// session is very dark (LatestRawY &lt; 200), block gamma application and ask the user
+    /// whether to proceed. If the user declines, the toggle is turned off.
+    /// </summary>
+    private async Task CheckDarkReadingAsync()
+    {
+        if (!_usbSensorService.HasReceivedValidData) return;
+        if (_darkWarningShownForCurrentSession) return;
+        if (!SettingsService.IsUsbSensorEnabled) return;
+        if (_usbSensorService.LatestRawY >= 200) return;
+
+        _darkWarningShownForCurrentSession = true;
+
+        // Block gamma until the user confirms.
+        _usbSensorService.GammaApplyBlocked = true;
+
+        var rawY = _usbSensorService.LatestRawY;
+        var dialog = _viewModelManager.CreateMessageBoxViewModel(
+            title: "Çok Karanlık Ortam Uyarısı",
+            message:
+                $"Sensör çok düşük aydınlık değeri okudu (Ham L ≈ {rawY:F0}).\n" +
+                "Bu değer ekranı aşırı karartabilir.\n\n" +
+                "Yine de sensör moduna geçmek istiyor musunuz?",
+            okButtonText: "Evet, Geçir",
+            cancelButtonText: "Hayır, İptal"
+        );
+
+        var confirmed = await _dialogManager.ShowWindowDialogAsync(dialog);
+
+        if (confirmed == true)
+        {
+            // User accepted — unblock so the dark values are applied.
+            _usbSensorService.GammaApplyBlocked = false;
+        }
+        else
+        {
+            // User cancelled — turn off the toggle cleanly.
+            _usbSensorService.GammaApplyBlocked = false;
+            _usbSensorService.Stop();
+            SettingsService.IsUsbSensorEnabled = false;
+            _darkWarningShownForCurrentSession = false; // allow warning again next time
+            OnPropertyChanged(nameof(IsEnabled));
         }
     }
 

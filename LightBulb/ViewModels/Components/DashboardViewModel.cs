@@ -105,6 +105,8 @@ public partial class DashboardViewModel : ViewModelBase
                     o => o.LatestRgblR,
                     o => o.LatestRgblG,
                     o => o.LatestRgblB,
+                    o => o.HasReceivedValidData,
+                    o => o.GammaApplyBlocked,
                 ],
                 _gammaService.InvalidateGamma
             )
@@ -354,7 +356,9 @@ public partial class DashboardViewModel : ViewModelBase
     /// </summary>
     private ColorConfiguration GetEffectiveTarget()
     {
-        if (_settingsService.IsUsbSensorEnabled && _usbSensorService.IsConnected)
+        if (_settingsService.IsUsbSensorEnabled
+            && _usbSensorService.HasReceivedValidData
+            && !_usbSensorService.GammaApplyBlocked)
         {
             return new ColorConfiguration(
                 Math.Clamp(
@@ -432,7 +436,9 @@ public partial class DashboardViewModel : ViewModelBase
             _configurationSmoothingTarget = null;
         }
 
-        if (_settingsService.IsUsbSensorEnabled && _usbSensorService.IsConnected)
+        if (_settingsService.IsUsbSensorEnabled
+            && _usbSensorService.HasReceivedValidData
+            && !_usbSensorService.GammaApplyBlocked)
         {
             if (_usbSensorService.IsRgblCalibrationActive)
             {

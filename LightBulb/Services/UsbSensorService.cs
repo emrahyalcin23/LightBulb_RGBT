@@ -147,6 +147,20 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool IsConnected { get; private set; }
 
+    /// <summary>
+    /// True after the first successful ParseAndDispatch call in the current session.
+    /// Reset to false in Stop(). The display pipeline only uses sensor values when this is true.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasReceivedValidData { get; private set; }
+
+    /// <summary>
+    /// When true, the display pipeline skips applying sensor values to the screen.
+    /// Used externally (e.g. while a dark-reading confirmation dialog is open).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool GammaApplyBlocked { get; set; }
+
     [ObservableProperty]
     public partial bool IsTestingConnection { get; private set; }
 
@@ -507,9 +521,20 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         // When called from the UI thread (e.g. Start() calls Stop() first) set the property
         // synchronously so a later queued Post cannot overwrite it after Start() sets true.
         if (Dispatcher.UIThread.CheckAccess())
-            IsConnected = false;
+        {
+            IsConnected          = false;
+            HasReceivedValidData = false;
+            GammaApplyBlocked    = false;
+        }
         else
-            Dispatcher.UIThread.Post(() => IsConnected = false);
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected          = false;
+                HasReceivedValidData = false;
+                GammaApplyBlocked    = false;
+            });
+        }
     }
 
     private void ScheduleNextRead(TimeSpan? delay = null)
@@ -1179,8 +1204,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LastReadTime    = timeText;
             LastReadCommand = cmd;
             LastRawResponse = response;
-            LastReadError   = "";        // clear any previous error on success
-            IsConnected     = true;
+            LastReadError        = "";    // clear any previous error on success
+            IsConnected          = true;
+            HasReceivedValidData = true;
         });
     }
 
