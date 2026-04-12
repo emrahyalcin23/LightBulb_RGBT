@@ -37,6 +37,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     // Starts at 1.0 to avoid division-by-zero on the very first reading.
     private double _peakRawC = 1.0;
 
+    // Adaptive peak for CIE-Y derived from proc values (0-100 floats).
+    // Used when the firmware sends type-1/2 compact format (no raw counts).
+    // Starts at 0.01 to avoid division-by-zero on the first reading.
+    private double _peakProcY = 0.01;
+
     // RGBL curve evaluator loaded from rgbl_calibration.json.
     // Null when no path is configured or the file cannot be parsed.
     private RgblCurveEvaluator? _rgblEvaluator;
@@ -745,9 +750,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         finally
         {
-            _portLock.Release();
+            // Close port BEFORE releasing the lock so the next call cannot open
+            // the same COM port while it is still in the process of closing.
             try { tempPort.Close(); } catch { }
             tempPort.Dispose();
+            _portLock.Release();
         }
     }
 
@@ -1207,24 +1214,41 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         var cctRaw  = ComputeCct(dr.RawR,  dr.RawG,  dr.RawB);
         var cctProc = ComputeCct(dr.ProcR, dr.ProcG, dr.ProcB);
 
-        // Existing luminance pipeline (unchanged): uses CIE-Y from raw RGB.
-        var rawY = 0.2126 * dr.RawR + 0.7152 * dr.RawG + 0.0722 * dr.RawB;
+        // CIE-Y luminance. Type-6 (dual) format provides raw ADC counts; type-1/2 (compact)
+        // format sets raw counts to 0 and only supplies proc values (0-100 floats).
+        // When raw counts are absent, synthesise rawY by scaling proc CIE-Y to the same
+        // approximate ADC range (×655.35 maps 100 → 65535) so that downstream thresholds
+        // (e.g. the dark-reading guard at rawY < 200) behave correctly.
+        var hasRawCounts = dr.RawR > 0 || dr.RawG > 0 || dr.RawB > 0;
+        var rawY = hasRawCounts
+            ? 0.2126 * dr.RawR  + 0.7152 * dr.RawG  + 0.0722 * dr.RawB
+            : (0.2126 * dr.ProcR + 0.7152 * dr.ProcG + 0.0722 * dr.ProcB) * 655.35;
         var luminance = ComputeLuminance(rawY);
         var (rBias, gBias, bBias, lBias) = InterpolateBiases(rawY);
 
         // Ambient percentage — X input for all RGBL curves.
         // When InjectSimulatedReading provides an explicit ambient override, use it directly
-        // so the user can test any X position on the curves without affecting _peakRawC.
+        // so the user can test any X position on the curves without affecting peak trackers.
         double ambientPct;
         if (_simulatedAmbientOverride.HasValue)
         {
             ambientPct = Math.Clamp(_simulatedAmbientOverride.Value, 0, 100);
             _simulatedAmbientOverride = null;
         }
-        else
+        else if (dr.RawC > 0)
         {
+            // Type-6: Clear channel is present — use it (existing adaptive-peak logic).
             if (dr.RawC > _peakRawC) _peakRawC = dr.RawC;
             ambientPct = Math.Clamp(dr.RawC / _peakRawC * 100.0, 0, 100);
+        }
+        else
+        {
+            // Type-1/2: no Clear channel — derive ambient from proc CIE-Y with adaptive peak.
+            var procY = 0.2126 * dr.ProcR + 0.7152 * dr.ProcG + 0.0722 * dr.ProcB;
+            if (procY > _peakProcY) _peakProcY = procY;
+            ambientPct = _peakProcY > 0
+                ? Math.Clamp(procY / _peakProcY * 100.0, 0, 100)
+                : 0;
         }
         _lastAmbientPct = ambientPct;
 
