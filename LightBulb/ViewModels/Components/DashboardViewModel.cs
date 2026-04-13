@@ -442,10 +442,14 @@ public partial class DashboardViewModel : ViewModelBase
         {
             if (_usbSensorService.IsRgblCalibrationActive)
             {
+                // Gün döngüsü parlaklığı (0.0–1.0) zaman referansı olarak kullanılır.
+                // RGBL eğrileri sensör ambientine göre rengi ve göreli oranları belirler;
+                // TargetConfiguration.Brightness ise saate bağlı mutlak ölçeği verir.
+                var dayB = TargetConfiguration.Brightness;
                 _gammaService.SetGammaRgbl(
-                    _usbSensorService.LatestRgblR,
-                    _usbSensorService.LatestRgblG,
-                    _usbSensorService.LatestRgblB
+                    _usbSensorService.LatestRgblR * dayB,
+                    _usbSensorService.LatestRgblG * dayB,
+                    _usbSensorService.LatestRgblB * dayB
                 );
             }
             else
