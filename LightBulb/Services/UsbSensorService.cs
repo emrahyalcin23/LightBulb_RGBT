@@ -99,6 +99,32 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double LatestRgblL { get; private set; } = 50.0;
 
+    // ── Debug: Giren/Çıkan tablosu için modül proc değerleri ve ambient X girdi ──
+
+    /// <summary>Firmware-processed red channel (proc_r, 0-100). Raw input from the sensor module.</summary>
+    [ObservableProperty]
+    public partial double LatestProcR { get; private set; } = 0;
+
+    /// <summary>Firmware-processed green channel (proc_g, 0-100). Raw input from the sensor module.</summary>
+    [ObservableProperty]
+    public partial double LatestProcG { get; private set; } = 0;
+
+    /// <summary>Firmware-processed blue channel (proc_b, 0-100). Raw input from the sensor module.</summary>
+    [ObservableProperty]
+    public partial double LatestProcB { get; private set; } = 0;
+
+    /// <summary>Ambient light percentage (0-100) used as X input to the RGBL curves.</summary>
+    [ObservableProperty]
+    public partial double LatestAmbientPct { get; private set; } = 0;
+
+    /// <summary>L curve output at X=0 (minimum ambient). Updated when calibration JSON is loaded.</summary>
+    [ObservableProperty]
+    public partial double RgblBoundaryMinL { get; private set; } = 0;
+
+    /// <summary>L curve output at X=100 (maximum ambient). Updated when calibration JSON is loaded.</summary>
+    [ObservableProperty]
+    public partial double RgblBoundaryMaxL { get; private set; } = 100;
+
     [ObservableProperty]
     public partial double LatestLuminance { get; private set; } = 1.0;
 
@@ -288,14 +314,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         // are applied to the screen without waiting for the next sensor reading.
         if (_rgblEvaluator is { } evaluator)
         {
-            var (r, g, b, l) = evaluator.Evaluate(_lastAmbientPct);
+            var (r, g, b, l)       = evaluator.Evaluate(_lastAmbientPct);
+            var (_, _, _, lMin)    = evaluator.Evaluate(0.0);
+            var (_, _, _, lMax)    = evaluator.Evaluate(100.0);
             Dispatcher.UIThread.Post(() =>
             {
-                RgblLoadStatus = $"✓ Yüklü — {fileName}";
-                LatestRgblR = r;
-                LatestRgblG = g;
-                LatestRgblB = b;
-                LatestRgblL = l;
+                RgblLoadStatus    = $"✓ Yüklü — {fileName}";
+                LatestRgblR       = r;
+                LatestRgblG       = g;
+                LatestRgblB       = b;
+                LatestRgblL       = l;
+                RgblBoundaryMinL  = lMin;
+                RgblBoundaryMaxL  = lMax;
             });
         }
         else
@@ -1271,6 +1301,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblG = rgblG;
             LatestRgblB = rgblB;
             LatestRgblL = rgblL;
+            LatestProcR     = dr.ProcR;
+            LatestProcG     = dr.ProcG;
+            LatestProcB     = dr.ProcB;
+            LatestAmbientPct = ambientPct;
             LastRawReading  = rawText;
             LastReadTime    = timeText;
             LastReadCommand = cmd;

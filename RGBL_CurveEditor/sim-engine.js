@@ -222,19 +222,12 @@ window.updateEnvironment = function(ambientLight, finalR, finalG, finalB, finalL
     // 3. EFEKTİF PARLAKLIK (0-1 aralığında)
     const effectiveL = (passiveBrightness / 100) + (curve * (1 - (passiveBrightness / 100)));
 
-    // 1. Önce RGB'nin toplam gücünü ölç
-    const totalRGB = finalR + finalG + finalB;
-
-    // 2. Eğer toplam güç düşükse (renk değiştiyse), değerleri yukarı çek (Normalizasyon)
-    // Bu sayede renk ne olursa olsun 'ışık enerjisi' korunur.
-    const factor = totalRGB > 0 ? (300 / totalRGB) : 1; 
-
-    // 3. Şimdi L ile çarp (Orta değerleri kurtarmak için yine hafif bir eğri kullan)
-    const masterL = Math.sqrt(finalL / 100) * 2.55; 
-
-    const sR = Math.min(255, Math.round(finalR * factor * masterL));
-    const sG = Math.min(255, Math.round(finalG * factor * masterL));
-    const sB = Math.min(255, Math.round(finalB * factor * masterL));
+    // Ekran rengi — C# SetGammaRgbl ile birebir: finalR/G/B (0-100) → 0-255.
+    // gammaMultiplier = finalX / 100  →  cssColor = gammaMultiplier * 255
+    // (Eski sqrt+normalizasyon formülü → RgblMath.absoluteSimOld() olarak arşivlendi)
+    const sR = RgblMath.toRgb255(finalR);
+    const sG = RgblMath.toRgb255(finalG);
+    const sB = RgblMath.toRgb255(finalB);
 
     const scr = `rgb(${sR},${sG},${sB})`;
 

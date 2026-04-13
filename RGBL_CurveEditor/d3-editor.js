@@ -379,13 +379,9 @@ window._updateSimulation = function() {
 
     let fR, fG, fB;
     if (calcMode === 'ratio') {
-        const sum = cR + cG + cB;
-        if (sum > 0.001) { fR = cR/sum*cL; fG = cG/sum*cL; fB = cB/sum*cL; }
-        else { fR = fG = fB = cL / 3; }
+        [fR, fG, fB] = RgblMath.ratio(cR, cG, cB, cL);
     } else {
-        fR = cR * (cL / 100);
-        fG = cG * (cL / 100);
-        fB = cB * (cL / 100);
+        [fR, fG, fB] = RgblMath.maxNormalize(cR, cG, cB, cL);
     }
 
     if (typeof window.updateEnvironment === 'function') {

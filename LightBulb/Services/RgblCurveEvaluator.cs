@@ -75,13 +75,15 @@ public sealed class RgblCurveEvaluator
         var fB    = SampleAtX(_b, ambientPct);
 
         if (!_isRatio)
-            return (fR * ltVal / 100.0, fG * ltVal / 100.0, fB * ltVal / 100.0, ltVal);
+        {
+            var (r, g, b) = RgblPipeline.MaxNormalize(fR, fG, fB, ltVal);
+            return (r, g, b, ltVal);
+        }
 
-        var sum = fR + fG + fB;
-        if (sum > 0.001)
-            return (fR / sum * ltVal, fG / sum * ltVal, fB / sum * ltVal, ltVal);
-
-        return (ltVal / 3.0, ltVal / 3.0, ltVal / 3.0, ltVal);
+        {
+            var (r, g, b) = RgblPipeline.Ratio(fR, fG, fB, ltVal);
+            return (r, g, b, ltVal);
+        }
     }
 
     /// <summary>

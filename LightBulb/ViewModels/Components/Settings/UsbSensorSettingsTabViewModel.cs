@@ -390,6 +390,15 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string LatestRgblBText => $"{_usbSensorService.LatestRgblB:F1} %";
     public string LatestRgblLText => $"{_usbSensorService.LatestRgblL:F1} %";
 
+    // ── Giren/Çıkan debug tablosu — modül proc değerleri ve ambient girdi ─────
+
+    public string LatestProcRText     => $"{_usbSensorService.LatestProcR:F1} %";
+    public string LatestProcGText     => $"{_usbSensorService.LatestProcG:F1} %";
+    public string LatestProcBText     => $"{_usbSensorService.LatestProcB:F1} %";
+    public string LatestAmbientPctText => $"{_usbSensorService.LatestAmbientPct:F1} %";
+    public string RgblBoundaryMinLText => $"{_usbSensorService.RgblBoundaryMinL:F1} %";
+    public string RgblBoundaryMaxLText => $"{_usbSensorService.RgblBoundaryMaxL:F1} %";
+
     // ── On-demand read ────────────────────────────────────────────────────────
 
     public IRelayCommand ReadNowCommand { get; }
