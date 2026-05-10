@@ -128,6 +128,28 @@
                     <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="B çıkış" />
                     <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblBText}" />
                 </DockPanel>
+
+                <!--  Çıkış L Kısıtlaması (Post-curve)  -->
+                <Separator Margin="0,6,0,4" Opacity="0.3" />
+                <TextBlock
+                    FontSize="11"
+                    FontWeight="SemiBold"
+                    Opacity="0.8"
+                    Text="Çıkış L Kısıtlaması (Eğri Sonrası)"
+                    ToolTip.Tip="Eğri ne derse desin, L çıkışını bu aralıkla sınırlar. Örn: ekran asla %5 altına inmesin → min=5." />
+                <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
+                    <TextBox
+                        Grid.Column="1"
+                        Text="{Binding OutputMinL, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
+                    <TextBox
+                        Grid.Column="4"
+                        Text="{Binding OutputMaxL, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                </Grid>
             </StackPanel>
         </Border>
 
@@ -230,6 +252,28 @@
                     <TextBlock Grid.Row="6" Grid.Column="2" FontFamily="Monospace" Text="{Binding RgblBoundaryMinLText}" />
                 </Grid>
 
+                <!--  Eğri Girdi Aralığı (Pre-curve normalizasyon)  -->
+                <Separator Margin="0,6,0,4" Opacity="0.3" />
+                <TextBlock
+                    FontSize="11"
+                    FontWeight="SemiBold"
+                    Opacity="0.8"
+                    Text="Girdi Aralığı (Eğri Öncesi)"
+                    ToolTip.Tip="Modülden gelen ambient % değerini eğriye göndermeden önce bu aralığa normalize eder. Örn: sensör hiçbir zaman %5 altı veya %80 üstü üretmiyorsa min=5 max=80 yap." />
+                <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
+                    <TextBox
+                        Grid.Column="1"
+                        Text="{Binding AmbientMinPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
+                    <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
+                    <TextBox
+                        Grid.Column="4"
+                        Text="{Binding AmbientMaxPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Theme="{DynamicResource CompactTextBox}" />
+                </Grid>
+
                 <Button
                     Margin="0,4,0,0"
                     HorizontalAlignment="Right"
@@ -287,11 +331,11 @@
                 </DockPanel>
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
                     <Button
-                        Command="{Binding ResetInjectionCommand}"
-                        Content="Sıfırla"
+                        Command="{Binding EmergencyStopCommand}"
+                        Content="Durdur (Esc)"
                         HotKey="Escape"
                         Theme="{DynamicResource MaterialOutlinedButton}"
-                        ToolTip.Tip="Giriş alanlarını varsayılana döndürür ve aktif enjeksiyonu iptal eder. Son Okuma ve bağlantı durumunu etkilemez." />
+                        ToolTip.Tip="Sensörü durdurur ve toggle'ı kapatır. Ekran çok karardıysa kurtarma için kullanın. Kısayol: Esc" />
                     <Button
                         Command="{Binding InjectSimulatedReadingCommand}"
                         Content="Inject"

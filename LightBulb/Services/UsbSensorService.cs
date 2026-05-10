@@ -314,7 +314,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         // are applied to the screen without waiting for the next sensor reading.
         if (_rgblEvaluator is { } evaluator)
         {
-            var (r, g, b, l)       = evaluator.Evaluate(_lastAmbientPct);
+            var ambMin2 = _settingsService.UsbAmbientMinPct;
+            var ambMax2 = _settingsService.UsbAmbientMaxPct;
+            var lastCurveInput = ambMax2 > ambMin2
+                ? Math.Clamp((_lastAmbientPct - ambMin2) / (ambMax2 - ambMin2) * 100.0, 0, 100)
+                : _lastAmbientPct;
+            var (r, g, b, l)       = evaluator.Evaluate(lastCurveInput);
+            var outMin2 = _settingsService.UsbOutputMinL;
+            var outMax2 = _settingsService.UsbOutputMaxL;
+            if (outMax2 >= outMin2) l = Math.Clamp(l, outMin2, outMax2);
             var (_, _, _, lMin)    = evaluator.Evaluate(0.0);
             var (_, _, _, lMax)    = evaluator.Evaluate(100.0);
             Dispatcher.UIThread.Post(() =>
@@ -1275,10 +1283,24 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         _lastAmbientPct = ambientPct;
 
+        // Pre-curve normalization: [ambMin, ambMax] → [0, 100]
+        var ambMin = _settingsService.UsbAmbientMinPct;
+        var ambMax = _settingsService.UsbAmbientMaxPct;
+        var curveInput = ambMax > ambMin
+            ? Math.Clamp((ambientPct - ambMin) / (ambMax - ambMin) * 100.0, 0, 100)
+            : ambientPct;
+
         // RGBL curve evaluation — only when a calibration JSON is loaded.
         double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB, rgblL = LatestRgblL;
         if (_rgblEvaluator is not null)
-            (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(ambientPct);
+        {
+            (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(curveInput);
+            // Post-curve output clamping
+            var outMin = _settingsService.UsbOutputMinL;
+            var outMax = _settingsService.UsbOutputMaxL;
+            if (outMax >= outMin)
+                rgblL = Math.Clamp(rgblL, outMin, outMax);
+        }
 
         var rawText = string.Create(
             CultureInfo.InvariantCulture,

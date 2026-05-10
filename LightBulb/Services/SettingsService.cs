@@ -140,6 +140,24 @@ public partial class SettingsService()
     [JsonPropertyName("UsbReadCommand")]
     public partial string UsbReadCommand { get; set; } = "OKU";
 
+    // Pre-curve: modülden gelen ambient %'i eğriye göndermeden önce normalize eder
+    [ObservableProperty]
+    [JsonPropertyName("UsbAmbientMinPct")]
+    public partial double UsbAmbientMinPct { get; set; } = 0.0;
+
+    [ObservableProperty]
+    [JsonPropertyName("UsbAmbientMaxPct")]
+    public partial double UsbAmbientMaxPct { get; set; } = 100.0;
+
+    // Post-curve: eğri çıkışı L değerini bu aralıkla sınırlar
+    [ObservableProperty]
+    [JsonPropertyName("UsbOutputMinL")]
+    public partial double UsbOutputMinL { get; set; } = 0.0;
+
+    [ObservableProperty]
+    [JsonPropertyName("UsbOutputMaxL")]
+    public partial double UsbOutputMaxL { get; set; } = 100.0;
+
     // Calibration curve
     [ObservableProperty]
     public partial bool IsUsbCalibrationEnabled { get; set; } = false;

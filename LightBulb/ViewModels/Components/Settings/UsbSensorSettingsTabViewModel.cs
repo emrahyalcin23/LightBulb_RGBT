@@ -83,14 +83,11 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         ResetSimulationCommand = new RelayCommand(() =>
             _usbSensorService.ResetSimulation());
 
-        ResetInjectionCommand = new RelayCommand(() =>
+        EmergencyStopCommand = new RelayCommand(() =>
         {
-            _usbSensorService.ClearInjection();
-            _simR          = 1200;
-            _simG          = 800;
-            _simB          = 400;
-            _simAmbientPct = 50.0;
-            OnAllPropertiesChanged();
+            _usbSensorService.Stop();
+            SettingsService.IsUsbSensorEnabled = false;
+            OnPropertyChanged(nameof(IsEnabled));
         });
 
         OpenCalibrationWindowCommand = new RelayCommand(() =>
@@ -416,11 +413,40 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public IRelayCommand ResetSimulationCommand { get; }
 
-    /// <summary>
-    /// Clears only the active injection override and resets the input fields to defaults.
-    /// Does not disturb Last Reading display or connection state.
-    /// </summary>
-    public IRelayCommand ResetInjectionCommand { get; }
+    /// <summary>Sensörü durdurur ve toggle'ı kapatır. ESC kısayoluyla tetiklenir.</summary>
+    public IRelayCommand EmergencyStopCommand { get; }
+
+    // ── Min-Max (Pre-curve normalizasyon) ─────────────────────────────────────
+
+    /// <summary>Modülden gelen ambient %'in eğriye girmeden önce normalize edileceği alt sınır.</summary>
+    public double AmbientMinPct
+    {
+        get => SettingsService.UsbAmbientMinPct;
+        set => SettingsService.UsbAmbientMinPct = Math.Clamp(value, 0, 100);
+    }
+
+    /// <summary>Modülden gelen ambient %'in eğriye girmeden önce normalize edileceği üst sınır.</summary>
+    public double AmbientMaxPct
+    {
+        get => SettingsService.UsbAmbientMaxPct;
+        set => SettingsService.UsbAmbientMaxPct = Math.Clamp(value, 0, 100);
+    }
+
+    // ── Min-Max (Post-curve çıkış kısıtlama) ──────────────────────────────────
+
+    /// <summary>Eğri çıkışı L değerinin alt sınırı (%).</summary>
+    public double OutputMinL
+    {
+        get => SettingsService.UsbOutputMinL;
+        set => SettingsService.UsbOutputMinL = Math.Clamp(value, 0, 100);
+    }
+
+    /// <summary>Eğri çıkışı L değerinin üst sınırı (%).</summary>
+    public double OutputMaxL
+    {
+        get => SettingsService.UsbOutputMaxL;
+        set => SettingsService.UsbOutputMaxL = Math.Clamp(value, 0, 100);
+    }
 
     // ── RGBL Profile Editor ───────────────────────────────────────────────────
 
