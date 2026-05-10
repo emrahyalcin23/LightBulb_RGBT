@@ -218,14 +218,6 @@
                 <!--  Giren/Çıkan Debug Tablosu — modülden ne geldi, sisteme ne gitti  -->
                 <Separator Margin="0,4,0,4" Opacity="0.3" />
                 <TextBlock FontWeight="SemiBold" Text="Giren / Çıkan" />
-                <!--  Kolon açıklamaları  -->
-                <Grid ColumnDefinitions="Auto,*,*,*,*" Margin="0,1,0,2">
-                    <TextBlock Grid.Column="0" Opacity="0" FontSize="9" Text="——" Margin="0,0,10,0" />
-                    <TextBlock Grid.Column="1" Opacity="0.45" FontSize="9" Text="modülden gelen"    Margin="0,0,4,0" />
-                    <TextBlock Grid.Column="2" Opacity="0.45" FontSize="9" Text="eğri öncesi norm." Margin="0,0,4,0" />
-                    <TextBlock Grid.Column="3" Opacity="0.45" FontSize="9" Text="ham eğri çıktısı"  Margin="0,0,4,0" />
-                    <TextBlock Grid.Column="4" Opacity="0.45" FontSize="9" Text="eğri sonrası norm." />
-                </Grid>
                 <Grid ColumnDefinitions="Auto,*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <!--  Başlık satırı  -->
                     <TextBlock Grid.Row="0" Grid.Column="0" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="K"      Margin="0,0,10,2" />
@@ -270,6 +262,13 @@
                     <TextBlock Grid.Row="6" Grid.Column="3" FontFamily="Monospace" Text="{Binding RgblBoundaryMinLText}" Margin="0,0,8,1" />
                     <TextBlock Grid.Row="6" Grid.Column="4" FontFamily="Monospace" Opacity="0.4" Text="—" />
                 </Grid>
+                <!--  Kolon açıklamaları (tablodan bağımsız, alta)  -->
+                <TextBlock
+                    Margin="0,4,0,0"
+                    FontSize="9"
+                    Opacity="0.45"
+                    TextWrapping="Wrap"
+                    Text="Modül: modülden gelen  ·  Ön-N: eğri öncesi normalize  ·  Eğri: ham eğri çıktısı  ·  Çıktı: eğri sonrası normalize" />
 
                 <!--  Eğri Girdi Aralığı (Pre-curve normalizasyon)  -->
                 <Separator Margin="0,6,0,4" Opacity="0.3" />
