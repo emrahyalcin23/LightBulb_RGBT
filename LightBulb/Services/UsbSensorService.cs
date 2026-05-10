@@ -320,17 +320,14 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 ? Math.Clamp((_lastAmbientPct - ambMin2) / (ambMax2 - ambMin2) * 100.0, 0, 100)
                 : _lastAmbientPct;
             var (r, g, b, l) = evaluator.Evaluate(lastCurveInput);
-            var outMin2 = _settingsService.UsbOutputMinL;
-            var outMax2 = _settingsService.UsbOutputMaxL;
+            var outMin2 = _settingsService.UsbOutputMin;
+            var outMax2 = _settingsService.UsbOutputMax;
             if (outMax2 >= outMin2)
             {
-                var clampedL2 = Math.Clamp(l, outMin2, outMax2);
-                if (l > 0.001 && Math.Abs(clampedL2 - l) > 0.001)
-                {
-                    var scale2 = clampedL2 / l;
-                    r *= scale2; g *= scale2; b *= scale2;
-                }
-                l = clampedL2;
+                r = Math.Clamp(r, outMin2, outMax2);
+                g = Math.Clamp(g, outMin2, outMax2);
+                b = Math.Clamp(b, outMin2, outMax2);
+                l = Math.Clamp(l, outMin2, outMax2);
             }
             var (_, _, _, lMin)    = evaluator.Evaluate(0.0);
             var (_, _, _, lMax)    = evaluator.Evaluate(100.0);
@@ -1304,21 +1301,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         if (_rgblEvaluator is not null)
         {
             (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(curveInput);
-            // Post-curve output clamping: L kısıtlandığında R/G/B orantılı ölçeklenir.
-            // MaxNormalize garantisi: max(R,G,B) = L, bu yüzden scale = clampedL / L
-            var outMin = _settingsService.UsbOutputMinL;
-            var outMax = _settingsService.UsbOutputMaxL;
+            // Post-curve output clamping: eğriden çıkan R/G/B/L hepsi ayrı ayrı sınırlanır.
+            var outMin = _settingsService.UsbOutputMin;
+            var outMax = _settingsService.UsbOutputMax;
             if (outMax >= outMin)
             {
-                var clampedL = Math.Clamp(rgblL, outMin, outMax);
-                if (rgblL > 0.001 && Math.Abs(clampedL - rgblL) > 0.001)
-                {
-                    var scale = clampedL / rgblL;
-                    rgblR *= scale;
-                    rgblG *= scale;
-                    rgblB *= scale;
-                }
-                rgblL = clampedL;
+                rgblR = Math.Clamp(rgblR, outMin, outMax);
+                rgblG = Math.Clamp(rgblG, outMin, outMax);
+                rgblB = Math.Clamp(rgblB, outMin, outMax);
+                rgblL = Math.Clamp(rgblL, outMin, outMax);
             }
         }
 

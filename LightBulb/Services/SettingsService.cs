@@ -149,14 +149,14 @@ public partial class SettingsService()
     [JsonPropertyName("UsbAmbientMaxPct")]
     public partial double UsbAmbientMaxPct { get; set; } = 100.0;
 
-    // Post-curve: eğri çıkışı L değerini bu aralıkla sınırlar
+    // Post-curve: eğri çıkışı R/G/B/L değerlerini bu aralıkla sınırlar
     [ObservableProperty]
-    [JsonPropertyName("UsbOutputMinL")]
-    public partial double UsbOutputMinL { get; set; } = 0.0;
+    [JsonPropertyName("UsbOutputMin")]
+    public partial double UsbOutputMin { get; set; } = 0.0;
 
     [ObservableProperty]
-    [JsonPropertyName("UsbOutputMaxL")]
-    public partial double UsbOutputMaxL { get; set; } = 100.0;
+    [JsonPropertyName("UsbOutputMax")]
+    public partial double UsbOutputMax { get; set; } = 100.0;
 
     // Calibration curve
     [ObservableProperty]

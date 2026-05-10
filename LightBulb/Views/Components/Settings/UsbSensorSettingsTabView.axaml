@@ -129,25 +129,25 @@
                     <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblBText}" />
                 </DockPanel>
 
-                <!--  Çıkış L Kısıtlaması (Post-curve)  -->
+                <!--  Çıkış Kısıtlaması (Post-curve, R/G/B/L hepsi)  -->
                 <Separator Margin="0,6,0,4" Opacity="0.3" />
                 <TextBlock
                     FontSize="11"
                     FontWeight="SemiBold"
                     Opacity="0.8"
-                    Text="Çıkış L Kısıtlaması (Eğri Sonrası)"
-                    ToolTip.Tip="Eğri ne derse desin, L çıkışını bu aralıkla sınırlar. Örn: ekran asla %5 altına inmesin → min=5." />
+                    Text="Çıkış Aralığı (Eğri Sonrası)"
+                    ToolTip.Tip="Eğriden çıkan R/G/B/L değerlerinin tamamını bu aralıkla sınırlar. Örn: ekran asla %5 altına inmesin → min=5." />
                 <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
                     <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
                     <TextBox
                         Grid.Column="1"
-                        Text="{Binding OutputMinL, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Text="{Binding OutputMin, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
                         Theme="{DynamicResource CompactTextBox}" />
                     <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
                     <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
                     <TextBox
                         Grid.Column="4"
-                        Text="{Binding OutputMaxL, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                        Text="{Binding OutputMax, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
                         Theme="{DynamicResource CompactTextBox}" />
                 </Grid>
             </StackPanel>

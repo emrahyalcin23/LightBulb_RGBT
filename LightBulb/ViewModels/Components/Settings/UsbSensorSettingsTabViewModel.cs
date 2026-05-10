@@ -446,18 +446,18 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     // ── Min-Max (Post-curve çıkış kısıtlama) ──────────────────────────────────
 
-    /// <summary>Eğri çıkışı L değerinin alt sınırı (%).</summary>
-    public double OutputMinL
+    /// <summary>Eğri çıkışı R/G/B/L değerlerinin alt sınırı (%).</summary>
+    public double OutputMin
     {
-        get => SettingsService.UsbOutputMinL;
-        set => SettingsService.UsbOutputMinL = Math.Clamp(value, 0, 100);
+        get => SettingsService.UsbOutputMin;
+        set => SettingsService.UsbOutputMin = Math.Clamp(value, 0, 100);
     }
 
-    /// <summary>Eğri çıkışı L değerinin üst sınırı (%).</summary>
-    public double OutputMaxL
+    /// <summary>Eğri çıkışı R/G/B/L değerlerinin üst sınırı (%).</summary>
+    public double OutputMax
     {
-        get => SettingsService.UsbOutputMaxL;
-        set => SettingsService.UsbOutputMaxL = Math.Clamp(value, 0, 100);
+        get => SettingsService.UsbOutputMax;
+        set => SettingsService.UsbOutputMax = Math.Clamp(value, 0, 100);
     }
 
     // ── RGBL Profile Editor ───────────────────────────────────────────────────
