@@ -322,12 +322,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             var (r, g, b, l) = evaluator.Evaluate(lastCurveInput);
             var outMin2 = _settingsService.UsbOutputMin;
             var outMax2 = _settingsService.UsbOutputMax;
-            if (outMax2 >= outMin2)
+            if (outMax2 > outMin2)
             {
-                r = Math.Clamp(r, outMin2, outMax2);
-                g = Math.Clamp(g, outMin2, outMax2);
-                b = Math.Clamp(b, outMin2, outMax2);
-                l = Math.Clamp(l, outMin2, outMax2);
+                r = outMin2 + (r / 100.0) * (outMax2 - outMin2);
+                g = outMin2 + (g / 100.0) * (outMax2 - outMin2);
+                b = outMin2 + (b / 100.0) * (outMax2 - outMin2);
+                l = outMin2 + (l / 100.0) * (outMax2 - outMin2);
             }
             var (_, _, _, lMin)    = evaluator.Evaluate(0.0);
             var (_, _, _, lMax)    = evaluator.Evaluate(100.0);
@@ -1301,15 +1301,15 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         if (_rgblEvaluator is not null)
         {
             (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(curveInput);
-            // Post-curve output clamping: eğriden çıkan R/G/B/L hepsi ayrı ayrı sınırlanır.
+            // Post-curve normalization: [0, 100] → [outMin, outMax]
             var outMin = _settingsService.UsbOutputMin;
             var outMax = _settingsService.UsbOutputMax;
-            if (outMax >= outMin)
+            if (outMax > outMin)
             {
-                rgblR = Math.Clamp(rgblR, outMin, outMax);
-                rgblG = Math.Clamp(rgblG, outMin, outMax);
-                rgblB = Math.Clamp(rgblB, outMin, outMax);
-                rgblL = Math.Clamp(rgblL, outMin, outMax);
+                rgblR = outMin + (rgblR / 100.0) * (outMax - outMin);
+                rgblG = outMin + (rgblG / 100.0) * (outMax - outMin);
+                rgblB = outMin + (rgblB / 100.0) * (outMax - outMin);
+                rgblL = outMin + (rgblL / 100.0) * (outMax - outMin);
             }
         }
 
