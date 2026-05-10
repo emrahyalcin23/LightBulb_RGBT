@@ -117,6 +117,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double LatestAmbientPct { get; private set; } = 0;
 
+    /// <summary>Normalized ambient value after pre-curve min-max mapping. This is the actual X fed into the curve evaluator.</summary>
+    [ObservableProperty]
+    public partial double LatestCurveInput { get; private set; } = 0;
+
     /// <summary>L curve output at X=0 (minimum ambient). Updated when calibration JSON is loaded.</summary>
     [ObservableProperty]
     public partial double RgblBoundaryMinL { get; private set; } = 0;
@@ -1334,10 +1338,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestRgblG = rgblG;
             LatestRgblB = rgblB;
             LatestRgblL = rgblL;
-            LatestProcR     = dr.ProcR;
-            LatestProcG     = dr.ProcG;
-            LatestProcB     = dr.ProcB;
+            LatestProcR      = dr.ProcR;
+            LatestProcG      = dr.ProcG;
+            LatestProcB      = dr.ProcB;
             LatestAmbientPct = ambientPct;
+            LatestCurveInput = curveInput;
             LastRawReading  = rawText;
             LastReadTime    = timeText;
             LastReadCommand = cmd;
