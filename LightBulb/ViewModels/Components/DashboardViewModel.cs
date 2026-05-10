@@ -297,13 +297,7 @@ public partial class DashboardViewModel : ViewModelBase
         {
             _hotKeyService.RegisterHotKey(
                 _settingsService.IncreaseBrightnessOffsetHotKey,
-                () =>
-                {
-                    BrightnessOffset += Math.Min(
-                        0.05,
-                        _settingsService.MaximumBrightness - TargetConfiguration.Brightness
-                    );
-                }
+                () => BrightnessOffset = Math.Min(BrightnessOffset + 0.05, 0.9)
             );
         }
 
@@ -311,13 +305,7 @@ public partial class DashboardViewModel : ViewModelBase
         {
             _hotKeyService.RegisterHotKey(
                 _settingsService.DecreaseBrightnessOffsetHotKey,
-                () =>
-                {
-                    BrightnessOffset += Math.Max(
-                        -0.05,
-                        _settingsService.MinimumBrightness - TargetConfiguration.Brightness
-                    );
-                }
+                () => BrightnessOffset = Math.Max(BrightnessOffset - 0.05, -0.9)
             );
         }
 
@@ -442,10 +430,26 @@ public partial class DashboardViewModel : ViewModelBase
         {
             if (_usbSensorService.IsRgblCalibrationActive)
             {
-                // Gün döngüsü parlaklığı (0.0–1.0) zaman referansı olarak kullanılır.
-                // RGBL eğrileri sensör ambientine göre rengi ve göreli oranları belirler;
-                // TargetConfiguration.Brightness ise saate bağlı mutlak ölçeği verir.
-                var dayB = TargetConfiguration.Brightness;
+                // Gün döngüsünün ham parlaklığını (BrightnessOffset uygulanmadan) al.
+                // TargetConfiguration.Brightness [0.1, 1.0]'e kırpıldığından gündüz
+                // encoder adımları bloke olur. Bunun yerine döngü parlaklığına
+                // BrightnessOffset'i doğrudan ekleyerek encoder'ın her zaman etkili
+                // olmasını sağlarız; SetGammaRgbl içindeki /100 + Clamp zaten sınırlar.
+                var cycleB = IsActive
+                    ? Cycle.InterpolateConfiguration(
+                        SolarTimes,
+                        _settingsService.DayConfiguration,
+                        _settingsService.NightConfiguration,
+                        _settingsService.ConfigurationTransitionDuration,
+                        _settingsService.ConfigurationTransitionOffset,
+                        Instant
+                    ).Brightness
+                    : TargetConfiguration.Brightness;
+                var dayB = Math.Clamp(
+                    cycleB + BrightnessOffset,
+                    _settingsService.MinimumBrightness,
+                    2.0
+                );
                 _gammaService.SetGammaRgbl(
                     _usbSensorService.LatestRgblR * dayB,
                     _usbSensorService.LatestRgblG * dayB,
