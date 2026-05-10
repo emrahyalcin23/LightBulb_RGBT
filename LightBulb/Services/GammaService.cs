@@ -26,6 +26,11 @@ public partial class GammaService : IDisposable
     // Last RGBL curve values applied; -1 forces the first call to always write.
     private double _lastRgblR = -1, _lastRgblG = -1, _lastRgblB = -1;
 
+    // Son ekrana uygulanan değerler (0-100 arası, SetGammaRgbl'e gönderilen)
+    public double LastScreenR => _lastRgblR < 0 ? 0 : _lastRgblR;
+    public double LastScreenG => _lastRgblG < 0 ? 0 : _lastRgblG;
+    public double LastScreenB => _lastRgblB < 0 ? 0 : _lastRgblB;
+
     public GammaService(SettingsService settingsService)
     {
         _settingsService = settingsService;

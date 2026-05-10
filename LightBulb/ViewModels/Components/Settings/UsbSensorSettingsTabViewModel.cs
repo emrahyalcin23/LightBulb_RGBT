@@ -15,6 +15,7 @@ namespace LightBulb.ViewModels.Components.Settings;
 public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 {
     private readonly UsbSensorService _usbSensorService;
+    private readonly GammaService _gammaService;
     private readonly DialogManager _dialogManager;
     private readonly ViewModelManager _viewModelManager;
     private readonly DisposableCollector _usbEventRoot = new();
@@ -31,11 +32,13 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         SettingsService settingsService,
         LocalizationManager localizationManager,
         UsbSensorService usbSensorService,
+        GammaService gammaService,
         DialogManager dialogManager,
         ViewModelManager viewModelManager
     ) : base(settingsService, localizationManager, 5)
     {
         _usbSensorService = usbSensorService;
+        _gammaService = gammaService;
         _dialogManager = dialogManager;
         _viewModelManager = viewModelManager;
 
@@ -417,14 +420,13 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string OutputMinText      => $"{SettingsService.UsbOutputMin:F1} %";
     public string OutputMaxText      => $"{SettingsService.UsbOutputMax:F1} %";
 
-    // Ekran kolonu: eğri sonrası × gündüz parlaklığı (yaklaşık, geçiş etkisi hariç)
-    private double DayBrightness     => SettingsService.DayConfiguration.Brightness;
-    public string FinalScreenRText   => $"{_usbSensorService.LatestRgblR * DayBrightness:F1} %";
-    public string FinalScreenGText   => $"{_usbSensorService.LatestRgblG * DayBrightness:F1} %";
-    public string FinalScreenBText   => $"{_usbSensorService.LatestRgblB * DayBrightness:F1} %";
-    public string FinalScreenLText   => $"{_usbSensorService.LatestRgblL * DayBrightness:F1} %";
-    public string FinalScreenMaxText => $"{SettingsService.UsbOutputMax * DayBrightness:F1} %";
-    public string FinalScreenMinText => $"{SettingsService.UsbOutputMin * DayBrightness:F1} %";
+    // Ekran kolonu: GammaService'e son gönderilen gerçek ekran değerleri (0-100 %)
+    public string FinalScreenRText   => $"{_gammaService.LastScreenR:F1} %";
+    public string FinalScreenGText   => $"{_gammaService.LastScreenG:F1} %";
+    public string FinalScreenBText   => $"{_gammaService.LastScreenB:F1} %";
+    public string FinalScreenLText   => "—";
+    public string FinalScreenMaxText => "—";
+    public string FinalScreenMinText => "—";
 
     // ── On-demand read ────────────────────────────────────────────────────────
 
