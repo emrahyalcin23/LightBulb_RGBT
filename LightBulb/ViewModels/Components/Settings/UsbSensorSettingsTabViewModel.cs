@@ -402,8 +402,12 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string LatestProcRText      => $"{_usbSensorService.LatestProcR:F1} %";
     public string LatestProcGText      => $"{_usbSensorService.LatestProcG:F1} %";
     public string LatestProcBText      => $"{_usbSensorService.LatestProcB:F1} %";
-    public string LatestAmbientPctText => $"{_usbSensorService.LatestAmbientPct:F1} %";
-    public string LatestCurveInputText => $"{_usbSensorService.LatestCurveInput:F1} %";
+    public string LatestAmbientPctText  => $"{_usbSensorService.LatestAmbientPct:F1} %";
+    public string LatestCurveInputText  => $"{_usbSensorService.LatestCurveInput:F1} %";
+    public string LatestRawCurveRText   => $"{_usbSensorService.LatestRawCurveR:F1} %";
+    public string LatestRawCurveGText   => $"{_usbSensorService.LatestRawCurveG:F1} %";
+    public string LatestRawCurveBText   => $"{_usbSensorService.LatestRawCurveB:F1} %";
+    public string LatestRawCurveLText   => $"{_usbSensorService.LatestRawCurveL:F1} %";
     public string RgblBoundaryMinLText => $"{_usbSensorService.RgblBoundaryMinL:F1} %";
     public string RgblBoundaryMaxLText => $"{_usbSensorService.RgblBoundaryMaxL:F1} %";
 

@@ -121,6 +121,22 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double LatestCurveInput { get; private set; } = 0;
 
+    /// <summary>Raw curve evaluator output (R) before post-curve normalization.</summary>
+    [ObservableProperty]
+    public partial double LatestRawCurveR { get; private set; } = 0;
+
+    /// <summary>Raw curve evaluator output (G) before post-curve normalization.</summary>
+    [ObservableProperty]
+    public partial double LatestRawCurveG { get; private set; } = 0;
+
+    /// <summary>Raw curve evaluator output (B) before post-curve normalization.</summary>
+    [ObservableProperty]
+    public partial double LatestRawCurveB { get; private set; } = 0;
+
+    /// <summary>Raw curve evaluator output (L) before post-curve normalization.</summary>
+    [ObservableProperty]
+    public partial double LatestRawCurveL { get; private set; } = 0;
+
     /// <summary>L curve output at X=0 (minimum ambient). Updated when calibration JSON is loaded.</summary>
     [ObservableProperty]
     public partial double RgblBoundaryMinL { get; private set; } = 0;
@@ -1302,9 +1318,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         // RGBL curve evaluation — only when a calibration JSON is loaded.
         double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB, rgblL = LatestRgblL;
+        double rawCurveR = LatestRawCurveR, rawCurveG = LatestRawCurveG, rawCurveB = LatestRawCurveB, rawCurveL = LatestRawCurveL;
         if (_rgblEvaluator is not null)
         {
             (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(curveInput);
+            rawCurveR = rgblR; rawCurveG = rgblG; rawCurveB = rgblB; rawCurveL = rgblL;
             // Post-curve normalization: [0, 100] → [outMin, outMax]
             var outMin = _settingsService.UsbOutputMin;
             var outMax = _settingsService.UsbOutputMax;
@@ -1341,8 +1359,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestProcR      = dr.ProcR;
             LatestProcG      = dr.ProcG;
             LatestProcB      = dr.ProcB;
-            LatestAmbientPct = ambientPct;
-            LatestCurveInput = curveInput;
+            LatestAmbientPct  = ambientPct;
+            LatestCurveInput  = curveInput;
+            LatestRawCurveR   = rawCurveR;
+            LatestRawCurveG   = rawCurveG;
+            LatestRawCurveB   = rawCurveB;
+            LatestRawCurveL   = rawCurveL;
             LastRawReading  = rawText;
             LastReadTime    = timeText;
             LastReadCommand = cmd;

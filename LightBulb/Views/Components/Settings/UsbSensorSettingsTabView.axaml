@@ -218,44 +218,57 @@
                 <!--  Giren/Çıkan Debug Tablosu — modülden ne geldi, sisteme ne gitti  -->
                 <Separator Margin="0,4,0,4" Opacity="0.3" />
                 <TextBlock FontWeight="SemiBold" Text="Giren / Çıkan" />
-                <Grid ColumnDefinitions="Auto,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <!--  Kolon açıklamaları  -->
+                <Grid ColumnDefinitions="Auto,*,*,*,*" Margin="0,1,0,2">
+                    <TextBlock Grid.Column="0" Opacity="0" FontSize="9" Text="——" Margin="0,0,10,0" />
+                    <TextBlock Grid.Column="1" Opacity="0.45" FontSize="9" Text="modülden gelen"    Margin="0,0,4,0" />
+                    <TextBlock Grid.Column="2" Opacity="0.45" FontSize="9" Text="eğri öncesi norm." Margin="0,0,4,0" />
+                    <TextBlock Grid.Column="3" Opacity="0.45" FontSize="9" Text="ham eğri çıktısı"  Margin="0,0,4,0" />
+                    <TextBlock Grid.Column="4" Opacity="0.45" FontSize="9" Text="eğri sonrası norm." />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <!--  Başlık satırı  -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Opacity="0.5" FontSize="10" Text="Kanal"         Margin="0,0,10,2" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" Opacity="0.5" FontSize="10" Text="Modül"         Margin="0,0,8,2" />
-                    <TextBlock Grid.Row="0" Grid.Column="2" Opacity="0.5" FontSize="10" Text="Normalize"     Margin="0,0,8,2"
-                               ToolTip.Tip="Eğriye girmeden önce min-max normalizasyonu uygulanmış değer. Yalnızca L (ambient) satırı için geçerlidir." />
-                    <TextBlock Grid.Row="0" Grid.Column="3" Opacity="0.5" FontSize="10" Text="Çıkan (Sistem)" Margin="0,0,0,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="0" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="K"      Margin="0,0,10,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="Modül"  Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="Ön-N"   Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="3" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="Eğri"   Margin="0,0,8,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="Çıktı"  Margin="0,0,0,2" />
                     <!--  R  -->
                     <TextBlock Grid.Row="1" Grid.Column="0" Opacity="0.6" Text="R" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcRText}" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="1" Grid.Column="2" Opacity="0.3" FontFamily="Monospace" Text="—" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="1" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRgblRText}" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcRText}"    Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"             Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="1" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveRText}" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="1" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblRText}" />
                     <!--  G  -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Opacity="0.6" Text="G" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcGText}" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="2" Grid.Column="2" Opacity="0.3" FontFamily="Monospace" Text="—" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="2" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRgblGText}" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcGText}"    Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"             Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="2" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveGText}" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="2" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblGText}" />
                     <!--  B  -->
                     <TextBlock Grid.Row="3" Grid.Column="0" Opacity="0.6" Text="B" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="3" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcBText}" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="3" Grid.Column="2" Opacity="0.3" FontFamily="Monospace" Text="—" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="3" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRgblBText}" />
-                    <!--  L: Modül=raw ambient, Normalize=curveInput, Çıkan=L eğrisi çıktısı  -->
-                    <TextBlock Grid.Row="4" Grid.Column="0" Opacity="0.6" Text="L" Margin="0,0,10,1"
-                               ToolTip.Tip="Modül: sensörden gelen ham ambient %. Normalize: min-max sonrası eğriye giren değer. Çıkan: L eğrisi çıktısı." />
+                    <TextBlock Grid.Row="3" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcBText}"    Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="3" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"             Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="3" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveBText}" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="3" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblBText}" />
+                    <!--  L  -->
+                    <TextBlock Grid.Row="4" Grid.Column="0" Opacity="0.6" Text="L" Margin="0,0,10,1" />
                     <TextBlock Grid.Row="4" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestAmbientPctText}" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="4" Grid.Column="2" FontFamily="Monospace" FontWeight="SemiBold" Text="{Binding LatestCurveInputText}" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="4" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRgblLText}" />
+                    <TextBlock Grid.Row="4" Grid.Column="2" FontFamily="Monospace" FontWeight="SemiBold" Text="{Binding LatestCurveInputText}"  Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="4" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveLText}" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="4" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblLText}" />
                     <!--  max  -->
-                    <TextBlock Grid.Row="5" Grid.Column="0" Opacity="0.6" Text="max" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="5" Grid.Column="1" Opacity="0.5" FontFamily="Monospace" Text="100.0 %" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="5" Grid.Column="2" Opacity="0.5" FontFamily="Monospace" Text="100.0 %" Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="5" Grid.Column="3" FontFamily="Monospace" Text="{Binding RgblBoundaryMaxLText}" />
+                    <TextBlock Grid.Row="5" Grid.Column="0" Opacity="0.5" Text="max" Margin="0,0,10,1" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" FontFamily="Monospace" Opacity="0.4" Text="100.0 %" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="5" Grid.Column="2" FontFamily="Monospace" Opacity="0.4" Text="100.0 %" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="5" Grid.Column="3" FontFamily="Monospace" Text="{Binding RgblBoundaryMaxLText}" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="5" Grid.Column="4" FontFamily="Monospace" Opacity="0.4" Text="—" />
                     <!--  min  -->
-                    <TextBlock Grid.Row="6" Grid.Column="0" Opacity="0.6" Text="min" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="6" Grid.Column="1" Opacity="0.5" FontFamily="Monospace" Text="0.0 %"   Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="6" Grid.Column="2" Opacity="0.5" FontFamily="Monospace" Text="0.0 %"   Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="6" Grid.Column="3" FontFamily="Monospace" Text="{Binding RgblBoundaryMinLText}" />
+                    <TextBlock Grid.Row="6" Grid.Column="0" Opacity="0.5" Text="min" Margin="0,0,10,1" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" FontFamily="Monospace" Opacity="0.4" Text="0.0 %"   Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="6" Grid.Column="2" FontFamily="Monospace" Opacity="0.4" Text="0.0 %"   Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="6" Grid.Column="3" FontFamily="Monospace" Text="{Binding RgblBoundaryMinLText}" Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="6" Grid.Column="4" FontFamily="Monospace" Opacity="0.4" Text="—" />
                 </Grid>
 
                 <!--  Eğri Girdi Aralığı (Pre-curve normalizasyon)  -->
