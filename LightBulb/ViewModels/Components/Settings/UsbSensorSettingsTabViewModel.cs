@@ -83,6 +83,16 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         ResetSimulationCommand = new RelayCommand(() =>
             _usbSensorService.ResetSimulation());
 
+        ResetInjectionCommand = new RelayCommand(() =>
+        {
+            _usbSensorService.ClearInjection();
+            _simR          = 1200;
+            _simG          = 800;
+            _simB          = 400;
+            _simAmbientPct = 50.0;
+            OnAllPropertiesChanged();
+        });
+
         EmergencyStopCommand = new RelayCommand(() =>
         {
             _usbSensorService.Stop();
@@ -412,6 +422,8 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public IRelayCommand InjectSimulatedReadingCommand { get; }
 
     public IRelayCommand ResetSimulationCommand { get; }
+
+    public IRelayCommand ResetInjectionCommand { get; }
 
     /// <summary>Sensörü durdurur ve toggle'ı kapatır. ESC kısayoluyla tetiklenir.</summary>
     public IRelayCommand EmergencyStopCommand { get; }

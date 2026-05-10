@@ -331,8 +331,13 @@
                 </DockPanel>
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
                     <Button
+                        Command="{Binding ResetInjectionCommand}"
+                        Content="Sıfırla"
+                        Theme="{DynamicResource MaterialOutlinedButton}"
+                        ToolTip.Tip="Giriş alanlarını varsayılana döndürür ve aktif enjeksiyonu iptal eder. Son Okuma ve bağlantı durumunu etkilemez." />
+                    <Button
                         Command="{Binding EmergencyStopCommand}"
-                        Content="Durdur (Esc)"
+                        Content="Durdur"
                         HotKey="Escape"
                         Theme="{DynamicResource MaterialOutlinedButton}"
                         ToolTip.Tip="Sensörü durdurur ve toggle'ı kapatır. Ekran çok karardıysa kurtarma için kullanın. Kısayol: Esc" />
