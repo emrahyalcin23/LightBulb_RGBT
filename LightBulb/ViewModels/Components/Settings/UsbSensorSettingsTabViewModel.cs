@@ -411,6 +411,21 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     public string RgblBoundaryMinLText => $"{_usbSensorService.RgblBoundaryMinL:F1} %";
     public string RgblBoundaryMaxLText => $"{_usbSensorService.RgblBoundaryMaxL:F1} %";
 
+    // Tablo min/max satır bağlamaları
+    public string AmbientMinPctText  => $"{SettingsService.UsbAmbientMinPct:F1} %";
+    public string AmbientMaxPctText  => $"{SettingsService.UsbAmbientMaxPct:F1} %";
+    public string OutputMinText      => $"{SettingsService.UsbOutputMin:F1} %";
+    public string OutputMaxText      => $"{SettingsService.UsbOutputMax:F1} %";
+
+    // Ekran kolonu: eğri sonrası × gündüz parlaklığı (yaklaşık, geçiş etkisi hariç)
+    private double DayBrightness     => SettingsService.DayConfiguration.Brightness;
+    public string FinalScreenRText   => $"{_usbSensorService.LatestRgblR * DayBrightness:F1} %";
+    public string FinalScreenGText   => $"{_usbSensorService.LatestRgblG * DayBrightness:F1} %";
+    public string FinalScreenBText   => $"{_usbSensorService.LatestRgblB * DayBrightness:F1} %";
+    public string FinalScreenLText   => $"{_usbSensorService.LatestRgblL * DayBrightness:F1} %";
+    public string FinalScreenMaxText => $"{SettingsService.UsbOutputMax * DayBrightness:F1} %";
+    public string FinalScreenMinText => $"{SettingsService.UsbOutputMin * DayBrightness:F1} %";
+
     // ── On-demand read ────────────────────────────────────────────────────────
 
     public IRelayCommand ReadNowCommand { get; }
