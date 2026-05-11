@@ -119,57 +119,6 @@ public partial class SettingsService()
     [ObservableProperty]
     public partial IReadOnlyList<ExternalApplication>? WhitelistedApplications { get; set; }
 
-    // USB Sensor
-
-    [ObservableProperty]
-    public partial bool IsUsbSensorEnabled { get; set; } = false;
-
-    [ObservableProperty]
-    [JsonPropertyName("UsbPortName")]
-    public partial string UsbPortName { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    [JsonPropertyName("UsbBaudRate")]
-    public partial int UsbBaudRate { get; set; } = 115200;
-
-    [ObservableProperty]
-    [JsonPropertyName("UsbReadIntervalMinutes")]
-    public partial double UsbReadIntervalMinutes { get; set; } = 15;
-
-    [ObservableProperty]
-    [JsonPropertyName("UsbReadCommand")]
-    public partial string UsbReadCommand { get; set; } = "OKU";
-
-    // Pre-curve: modülden gelen ambient %'i eğriye göndermeden önce normalize eder
-    [ObservableProperty]
-    [JsonPropertyName("UsbAmbientMinPct")]
-    public partial double UsbAmbientMinPct { get; set; } = 0.0;
-
-    [ObservableProperty]
-    [JsonPropertyName("UsbAmbientMaxPct")]
-    public partial double UsbAmbientMaxPct { get; set; } = 100.0;
-
-    // Post-curve: eğri çıkışı R/G/B/L değerlerini bu aralıkla sınırlar
-    [ObservableProperty]
-    [JsonPropertyName("UsbOutputMin")]
-    public partial double UsbOutputMin { get; set; } = 0.0;
-
-    [ObservableProperty]
-    [JsonPropertyName("UsbOutputMax")]
-    public partial double UsbOutputMax { get; set; } = 100.0;
-
-    // Calibration curve
-    [ObservableProperty]
-    public partial bool IsUsbCalibrationEnabled { get; set; } = false;
-
-    [ObservableProperty]
-    public partial IReadOnlyList<UsbCalibrationPoint>? UsbCalibrationPoints { get; set; }
-
-    // RGBL curve editor calibration
-    [ObservableProperty]
-    [JsonPropertyName("RgblCalibrationJsonPath")]
-    public partial string RgblCalibrationJsonPath { get; set; } = string.Empty;
-
     // HotKeys
 
     [ObservableProperty]
@@ -251,11 +200,5 @@ public partial class SettingsService()
 public partial class SettingsService
 {
     [JsonSerializable(typeof(SettingsService))]
-    [JsonSerializable(typeof(UsbCalibrationPoint))]
-    [JsonSerializable(typeof(List<UsbCalibrationPoint>))]
-    [JsonSerializable(typeof(RgblCalibration))]
-    [JsonSerializable(typeof(CurvePoint))]
-    [JsonSerializable(typeof(List<CurvePoint>))]
-    [JsonSerializable(typeof(Dictionary<string, List<CurvePoint>>))]
     private partial class SerializerContext : JsonSerializerContext;
 }

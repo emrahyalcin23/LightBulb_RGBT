@@ -51,6 +51,7 @@ public class App : Application, IDisposable
         services.AddSingleton<SettingsService>();
         services.AddSingleton<UpdateService>();
         services.AddSingleton<UsbSensorService>();
+        services.AddSingleton<UsbGammaController>();
 
         // View models
         services.AddTransient<MainViewModel>();

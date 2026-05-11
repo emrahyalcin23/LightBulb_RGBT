@@ -22,7 +22,7 @@ public partial class DashboardViewModel : ViewModelBase
     private readonly GammaService _gammaService;
     private readonly HotKeyService _hotKeyService;
     private readonly ExternalApplicationService _externalApplicationService;
-    private readonly UsbSensorService _usbSensorService;
+    private readonly UsbGammaController _usbController;
 
     private readonly DisposableCollector _eventRoot = new();
 
@@ -40,7 +40,7 @@ public partial class DashboardViewModel : ViewModelBase
         GammaService gammaService,
         HotKeyService hotKeyService,
         ExternalApplicationService externalApplicationService,
-        UsbSensorService usbSensorService
+        UsbGammaController usbController
     )
     {
         _settingsService = settingsService;
@@ -48,7 +48,7 @@ public partial class DashboardViewModel : ViewModelBase
         _gammaService = gammaService;
         _hotKeyService = hotKeyService;
         _externalApplicationService = externalApplicationService;
-        _usbSensorService = usbSensorService;
+        _usbController = usbController;
 
         _eventRoot.Add(
             this.WatchProperty(
@@ -80,35 +80,6 @@ public partial class DashboardViewModel : ViewModelBase
                     o => o.ResetConfigurationOffsetHotKey,
                 ],
                 RegisterHotKeys
-            )
-        );
-
-        _eventRoot.Add(
-            // Invalidate gamma immediately when USB sensor enable state changes
-            settingsService.WatchProperties(
-                [o => o.IsUsbSensorEnabled],
-                _gammaService.InvalidateGamma
-            )
-        );
-
-        _eventRoot.Add(
-            // Invalidate gamma when USB sensor delivers new readings so that
-            // every change — including those below the significance threshold — is
-            // applied to the screen immediately.
-            // LatestRgblR/G/B are also watched so that saving new RGBL curves in
-            // the editor (which re-evaluates and updates these properties) triggers
-            // an immediate gamma refresh without waiting for the next sensor read.
-            usbSensorService.WatchProperties(
-                [
-                    o => o.LatestCct,
-                    o => o.LatestLuminance,
-                    o => o.LatestRgblR,
-                    o => o.LatestRgblG,
-                    o => o.LatestRgblB,
-                    o => o.HasReceivedValidData,
-                    o => o.GammaApplyBlocked,
-                ],
-                _gammaService.InvalidateGamma
             )
         );
 
@@ -337,33 +308,8 @@ public partial class DashboardViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Returns the effective target configuration.
-    /// When the USB sensor is enabled, replaces temperature and brightness
-    /// with the sensor-derived CCT and luminance values.
-    /// </summary>
-    private ColorConfiguration GetEffectiveTarget()
-    {
-        if (_settingsService.IsUsbSensorEnabled
-            && _usbSensorService.HasReceivedValidData
-            && !_usbSensorService.GammaApplyBlocked)
-        {
-            return new ColorConfiguration(
-                Math.Clamp(
-                    _usbSensorService.LatestCct,
-                    _settingsService.MinimumTemperature,
-                    _settingsService.MaximumTemperature
-                ),
-                Math.Clamp(
-                    _usbSensorService.LatestLuminance,
-                    _settingsService.MinimumBrightness,
-                    _settingsService.MaximumBrightness
-                )
-            );
-        }
-
-        return TargetConfiguration;
-    }
+    private ColorConfiguration GetEffectiveTarget() =>
+        _usbController.GetEffectiveTarget(TargetConfiguration);
 
     private void UpdateConfiguration()
     {
@@ -424,53 +370,18 @@ public partial class DashboardViewModel : ViewModelBase
             _configurationSmoothingTarget = null;
         }
 
-        if (_settingsService.IsUsbSensorEnabled
-            && _usbSensorService.HasReceivedValidData
-            && !_usbSensorService.GammaApplyBlocked)
-        {
-            if (_usbSensorService.IsRgblCalibrationActive)
-            {
-                // Gün döngüsünün ham parlaklığını (BrightnessOffset uygulanmadan) al.
-                // TargetConfiguration.Brightness [0.1, 1.0]'e kırpıldığından gündüz
-                // encoder adımları bloke olur. Bunun yerine döngü parlaklığına
-                // BrightnessOffset'i doğrudan ekleyerek encoder'ın her zaman etkili
-                // olmasını sağlarız; SetGammaRgbl içindeki /100 + Clamp zaten sınırlar.
-                var cycleB = IsActive
-                    ? Cycle.InterpolateConfiguration(
-                        SolarTimes,
-                        _settingsService.DayConfiguration,
-                        _settingsService.NightConfiguration,
-                        _settingsService.ConfigurationTransitionDuration,
-                        _settingsService.ConfigurationTransitionOffset,
-                        Instant
-                    ).Brightness
-                    : TargetConfiguration.Brightness;
-                var dayB = Math.Clamp(
-                    cycleB + BrightnessOffset,
-                    _settingsService.MinimumBrightness,
-                    2.0
-                );
-                _gammaService.SetGammaRgbl(
-                    _usbSensorService.LatestRgblR * dayB,
-                    _usbSensorService.LatestRgblG * dayB,
-                    _usbSensorService.LatestRgblB * dayB
-                );
-            }
-            else
-            {
-                _gammaService.SetGamma(
-                    CurrentConfiguration,
-                    _usbSensorService.LatestRBias,
-                    _usbSensorService.LatestGBias,
-                    _usbSensorService.LatestBBias,
-                    _usbSensorService.LatestLBias
-                );
-            }
-        }
-        else
-        {
-            _gammaService.SetGamma(CurrentConfiguration);
-        }
+        var cycleBrightness = IsActive
+            ? Cycle.InterpolateConfiguration(
+                SolarTimes,
+                _settingsService.DayConfiguration,
+                _settingsService.NightConfiguration,
+                _settingsService.ConfigurationTransitionDuration,
+                _settingsService.ConfigurationTransitionOffset,
+                Instant
+            ).Brightness
+            : TargetConfiguration.Brightness;
+
+        _usbController.ApplyGamma(CurrentConfiguration, cycleBrightness, BrightnessOffset);
     }
 
     private void UpdateIsPaused()

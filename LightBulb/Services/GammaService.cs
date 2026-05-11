@@ -23,14 +23,6 @@ public partial class GammaService : IDisposable
     private ColorConfiguration? _lastConfiguration;
     private DateTimeOffset _lastUpdateTimestamp = DateTimeOffset.MinValue;
 
-    // Last RGBL curve values applied; -1 forces the first call to always write.
-    private double _lastRgblR = -1, _lastRgblG = -1, _lastRgblB = -1;
-
-    // Son ekrana uygulanan değerler (0-100 arası, SetGammaRgbl'e gönderilen)
-    public double LastScreenR => _lastRgblR < 0 ? 0 : _lastRgblR;
-    public double LastScreenG => _lastRgblG < 0 ? 0 : _lastRgblG;
-    public double LastScreenB => _lastRgblB < 0 ? 0 : _lastRgblB;
-
     public GammaService(SettingsService settingsService)
     {
         _settingsService = settingsService;
@@ -162,22 +154,7 @@ public partial class GammaService : IDisposable
         InvalidateGamma();
     }
 
-    public void SetGamma(ColorConfiguration configuration) =>
-        SetGamma(configuration, 0, 0, 0, 0);
-
-    /// <summary>
-    /// Applies gamma to all monitors with optional per-channel RGBL bias coefficients.
-    /// Each bias is in [-1.0, +1.0]: at 0 no change, at +1.0 the channel is doubled
-    /// (clamped to 1), at -1.0 the channel is zeroed.
-    /// L bias scales effective brightness before channel calculations.
-    /// </summary>
-    public void SetGamma(
-        ColorConfiguration configuration,
-        double rBias,
-        double gBias,
-        double bBias,
-        double lBias
-    )
+    public void SetGamma(ColorConfiguration configuration)
     {
         // Avoid unnecessary changes as updating too often will cause stuttering
         if (!IsGammaStale() && !IsSignificantChange(configuration))
@@ -187,15 +164,12 @@ public partial class GammaService : IDisposable
 
         _isUpdatingGamma = true;
 
-        // L bias scales the overall brightness; then each channel gets its own multiplicative bias.
-        var effectiveBrightness = configuration.Brightness * (1.0 + lBias);
-
         foreach (var deviceContext in _deviceContexts)
         {
             deviceContext.SetGamma(
-                Math.Clamp(GetRed(configuration) * effectiveBrightness * (1.0 + rBias), 0, 1),
-                Math.Clamp(GetGreen(configuration) * effectiveBrightness * (1.0 + gBias), 0, 1),
-                Math.Clamp(GetBlue(configuration) * effectiveBrightness * (1.0 + bBias), 0, 1)
+                GetRed(configuration) * configuration.Brightness,
+                GetGreen(configuration) * configuration.Brightness,
+                GetBlue(configuration) * configuration.Brightness
             );
         }
 
@@ -203,43 +177,7 @@ public partial class GammaService : IDisposable
 
         _lastConfiguration = configuration;
         _lastUpdateTimestamp = DateTimeOffset.Now;
-        Debug.WriteLine(
-            $"Updated gamma to {configuration} (rBias={rBias:F2}, gBias={gBias:F2}, bBias={bBias:F2}, lBias={lBias:F2})."
-        );
-    }
-
-    /// <summary>
-    /// Applies gamma directly from RGBL curve output values (0-100 percent).
-    /// Bypasses Kelvin→RGB conversion. Skips write when values are unchanged
-    /// and gamma is not stale.
-    /// </summary>
-    public void SetGammaRgbl(double r, double g, double b)
-    {
-        if (!IsGammaStale()
-            && Math.Abs(r - _lastRgblR) < 0.1
-            && Math.Abs(g - _lastRgblG) < 0.1
-            && Math.Abs(b - _lastRgblB) < 0.1)
-            return;
-
-        EnsureValidDeviceContexts();
-        _isUpdatingGamma = true;
-
-        foreach (var deviceContext in _deviceContexts)
-        {
-            deviceContext.SetGamma(
-                Math.Clamp(r / 100.0, 0, 1),
-                Math.Clamp(g / 100.0, 0, 1),
-                Math.Clamp(b / 100.0, 0, 1)
-            );
-        }
-
-        _isUpdatingGamma = false;
-        _lastRgblR = r;
-        _lastRgblG = g;
-        _lastRgblB = b;
-        _lastConfiguration = null;   // clear so SetGamma re-applies on RGBL→normal switch
-        _lastUpdateTimestamp = DateTimeOffset.Now;
-        Debug.WriteLine($"RGBL gamma: R={r:F1} G={g:F1} B={b:F1}");
+        Debug.WriteLine($"Updated gamma to {configuration}.");
     }
 
     public void Dispose()
