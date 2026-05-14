@@ -196,9 +196,3 @@ public partial class SettingsService()
         return wasLoaded;
     }
 }
-
-public partial class SettingsService
-{
-    [JsonSerializable(typeof(SettingsService))]
-    private partial class SerializerContext : JsonSerializerContext;
-}

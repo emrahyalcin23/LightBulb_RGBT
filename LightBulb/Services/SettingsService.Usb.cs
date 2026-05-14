@@ -60,12 +60,18 @@ public partial class SettingsService
     [JsonPropertyName("RgblCalibrationJsonPath")]
     public partial string RgblCalibrationJsonPath { get; set; } = string.Empty;
 
-    // Extend the source-generated serializer context to include USB/RGBL types
+}
+
+// SerializerContext is owned entirely here so that all [JsonSerializable] attributes
+// are in one place — the source generator requires a single declaration per context.
+public partial class SettingsService
+{
+    [JsonSerializable(typeof(SettingsService))]
     [JsonSerializable(typeof(UsbCalibrationPoint))]
     [JsonSerializable(typeof(List<UsbCalibrationPoint>))]
     [JsonSerializable(typeof(RgblCalibration))]
     [JsonSerializable(typeof(CurvePoint))]
     [JsonSerializable(typeof(List<CurvePoint>))]
     [JsonSerializable(typeof(Dictionary<string, List<CurvePoint>>))]
-    private partial class SerializerContext;
+    private partial class SerializerContext : JsonSerializerContext;
 }
