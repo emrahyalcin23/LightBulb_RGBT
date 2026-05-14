@@ -1233,10 +1233,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         if (parts.Length < 10)
             return false;
 
-        if (!ushort.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawR) ||
-            !ushort.TryParse(parts[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawG) ||
-            !ushort.TryParse(parts[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawB) ||
-            !ushort.TryParse(parts[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rawC) ||
+        if (!float.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var rawR) ||
+            !float.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var rawG) ||
+            !float.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var rawB) ||
+            !float.TryParse(parts[6], NumberStyles.Float, CultureInfo.InvariantCulture, out var rawC) ||
             !float.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out var procR2) ||
             !float.TryParse(parts[8], NumberStyles.Float, CultureInfo.InvariantCulture, out var procG2) ||
             !float.TryParse(parts[9], NumberStyles.Float, CultureInfo.InvariantCulture, out var procB2))
@@ -1499,16 +1499,16 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     public void InjectSimulatedReading(double r, double g, double b, double ambientPct)
     {
         _simulatedAmbientOverride = Math.Clamp(ambientPct, 0, 100);
-        var rawR = (ushort)Math.Clamp(r, 0, 65535);
-        var rawG = (ushort)Math.Clamp(g, 0, 65535);
-        var rawB = (ushort)Math.Clamp(b, 0, 65535);
-        var rawC = (ushort)Math.Clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0, 65535);
+        var rawR = (float)Math.Clamp(r, 0, 65535);
+        var rawG = (float)Math.Clamp(g, 0, 65535);
+        var rawB = (float)Math.Clamp(b, 0, 65535);
+        var rawC = (float)Math.Clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0, 65535);
         var procR = (float)Math.Clamp(r / 655.35, 0, 100);
         var procG = (float)Math.Clamp(g / 655.35, 0, 100);
         var procB = (float)Math.Clamp(b / 655.35, 0, 100);
         var fakeResponse = string.Create(
             CultureInfo.InvariantCulture,
-            $"0;6;0;{rawR};{rawG};{rawB};{rawC};{procR:F1};{procG:F1};{procB:F1}"
+            $"0;6;0;{rawR:G};{rawG:G};{rawB:G};{rawC:G};{procR:F1};{procG:F1};{procB:F1}"
         );
         ParseAndDispatch(fakeResponse, "Simülasyon (Inject)");
     }
@@ -1756,13 +1756,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 /// Raw values are uint16 sensor counts; zero when the compact (type=1) format is used.
 /// </summary>
 internal readonly record struct DualReading(
-    ushort RawR,
-    ushort RawG,
-    ushort RawB,
-    ushort RawC,
-    float  ProcR,
-    float  ProcG,
-    float  ProcB
+    float RawR,
+    float RawG,
+    float RawB,
+    float RawC,
+    float ProcR,
+    float ProcG,
+    float ProcB
 );
 
 /// <summary>
