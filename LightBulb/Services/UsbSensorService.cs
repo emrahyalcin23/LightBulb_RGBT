@@ -241,6 +241,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _settingsService = settingsService;
         // Auto-reload when the user changes the calibration JSON path.
         _ = settingsService.WatchProperty(o => o.RgblCalibrationJsonPath, ReloadRgblEvaluator);
+        // Reschedule the read timer immediately when the interval setting changes.
+        _ = settingsService.WatchProperty(o => o.UsbReadIntervalMinutes, RescheduleRead);
         // Create default calibration file if it doesn't exist yet.
         WriteDefaultCalibrationIfMissing();
         // Load calibration immediately (regardless of whether the sensor is enabled).
@@ -788,8 +790,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         try
         {
             tempPort.Open();
-            // Give firmware time to boot after DTR rising edge (same as RunTest).
-            System.Threading.Thread.Sleep(2000);
+            // Give firmware time to boot after DTR rising edge. 1 s is sufficient
+            // for the Pico USB CDC stack to initialise; 2 s was unnecessarily long.
+            System.Threading.Thread.Sleep(1000);
             tempPort.DiscardInBuffer();
 
             var cmd = BuildReadCommand();
