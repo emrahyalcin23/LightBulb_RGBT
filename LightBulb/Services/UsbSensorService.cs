@@ -53,12 +53,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
     // New firmware replies to KIMSIN with a semicolon-delimited line that embeds
-    // "IDENTITY=PICOM" (e.g. "1685106;4;0;0;0;0;IDENTITY=PICOM_V1").
-    // The trailing underscore+version is intentionally NOT part of the prefix so that
-    // any version string (PICOM_V1, PICOM_V2, PICOMV1, PICOM …) is accepted.
+    // "IDENTITY=PICO" (e.g. "1685106;4;0;0;0;0;IDENTITY=PICOLOR_D5").
+    // The prefix stops at "PICO" so both PICOM_xxx and PICOLOR_xxx variants are accepted.
     // Old firmware replies with the bare string "BENIM_OZEL_PICOM_V1".
     // Both are accepted for backward compatibility.
-    private const string PicoIdentityPrefix = "IDENTITY=PICOM";
+    private const string PicoIdentityPrefix = "IDENTITY=PICO";
     private const string PicoIdentityLegacy = "BENIM_OZEL_PICOM_V1";
 
     // OKU_0 = single instantaneous reading (interval=0 means no periodic streaming)
@@ -955,15 +954,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                         p.DiscardInBuffer();
 
                         p.WriteLine(KimsinCommand);
-                        // Read up to 3 lines: firmware may echo the command or send a
-                        // streaming data packet before the actual KIMSIN identity reply.
                         var identity = ReadResponseLine(p).Trim();
-                        for (var li = 0; li < 2 && !IsKnownFirmware(identity); li++)
-                        {
-                            var next = ReadResponseLine(p).Trim();
-                            if (string.IsNullOrEmpty(next)) break;
-                            identity = next;
-                        }
                         if (!IsKnownFirmware(identity))
                         {
                             triedPorts.Add((portName, $"✗ Yabancı cihaz: '{Escape(identity)}'"));
@@ -1111,13 +1102,6 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 }
                 port.WriteLine(KimsinCommand);
                 identity = ReadResponseLine(port).Trim();
-                // Read up to 2 more lines in case firmware echoes command first.
-                for (var li = 0; li < 2 && !IsKnownFirmware(identity); li++)
-                {
-                    var next = ReadResponseLine(port).Trim();
-                    if (string.IsNullOrEmpty(next)) break;
-                    identity = next;
-                }
                 if (IsKnownFirmware(identity) || !string.IsNullOrEmpty(identity))
                     break;
             }
