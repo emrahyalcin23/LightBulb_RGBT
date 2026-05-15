@@ -117,7 +117,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         OpenAiSettingsCommand = new RelayCommand(() =>
         {
-            var vm  = new AiSettingsViewModel(_settingsService, _usbSensorService);
+            var vm  = new AiSettingsViewModel(SettingsService, _usbSensorService);
             var win = new AiSettingsWindow { DataContext = vm };
             win.Show();
         });
