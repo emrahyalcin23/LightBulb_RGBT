@@ -57,13 +57,19 @@
             TickFrequency="1"
             Value="{Binding SliderPosition}" />
 
-        <!--  Çıkış Modu: Eğri ↔ Sinir Ağı  -->
+        <!--  Çıkış Modu: Sinir Ağı ↔ RGBL Profil  -->
         <DockPanel
             Margin="0,20,0,0"
-            LastChildFill="False"
-            ToolTip.Tip="Kapalı: RGBL eğri editörü çıktısı kullanılır. Açık: eğitilmiş sinir ağı modeli çıktısı kullanılır.">
-            <TextBlock DockPanel.Dock="Left" Text="Sinir Ağı Modu" />
-            <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsNnModeActive}" />
+            ToolTip.Tip="Sinir Ağı: eğitilmiş NN modelinin RGBL çıktısını kullan. RGBL Profil: eğri editöründe tanımlanan profili kullan.">
+            <RadioButton
+                DockPanel.Dock="Left"
+                Content="Sinir Ağı"
+                IsChecked="{Binding IsNnModeActive}" />
+            <RadioButton
+                DockPanel.Dock="Right"
+                HorizontalAlignment="Right"
+                Content="RGBL Profil"
+                IsChecked="{Binding !IsNnModeActive}" />
         </DockPanel>
 
         <!--  AI Ayarları butonu  -->

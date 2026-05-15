@@ -127,6 +127,20 @@
                         <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold" Text="Eğitim Noktaları" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
                             <Button
+                                Command="{Binding ImportWaypointsCommand}"
+                                Content="⬆ İçe Aktar"
+                                FontSize="11"
+                                Padding="8,3"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Daha önce kaydedilmiş waypoint'leri JSON'dan yükle" />
+                            <Button
+                                Command="{Binding ExportWaypointsCommand}"
+                                Content="⬇ Dışa Aktar"
+                                FontSize="11"
+                                Padding="8,3"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Mevcut waypoint listesini JSON olarak kaydet" />
+                            <Button
                                 Command="{Binding ClearWaypointsCommand}"
                                 Content="Temizle"
                                 FontSize="11"
@@ -139,7 +153,7 @@
                                 FontSize="11"
                                 Padding="8,3"
                                 Theme="{DynamicResource MaterialOutlinedButton}"
-                                ToolTip.Tip="Şu anki sensör + RGBL çıktısını eğitim noktası olarak ekle" />
+                                ToolTip.Tip="Şu anki sensör + eğri çıktısını eğitim noktası olarak ekle" />
                         </StackPanel>
                     </DockPanel>
 

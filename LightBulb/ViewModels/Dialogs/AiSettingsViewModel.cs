@@ -2,9 +2,9 @@ using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Platform.Storage;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightBulb.Services;
@@ -112,11 +112,13 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
 
     // ── Commands ──────────────────────────────────────────────────────────────
 
-    public IRelayCommand       AddWaypointCommand  { get; }
-    public IAsyncRelayCommand  TrainCommand        { get; }
-    public IRelayCommand       ImportModelCommand  { get; }
-    public IRelayCommand       ExportModelCommand  { get; }
-    public IRelayCommand       ClearWaypointsCommand { get; }
+    public IRelayCommand       AddWaypointCommand      { get; }
+    public IRelayCommand       ImportWaypointsCommand  { get; }
+    public IRelayCommand       ExportWaypointsCommand  { get; }
+    public IRelayCommand       ClearWaypointsCommand   { get; }
+    public IAsyncRelayCommand  TrainCommand            { get; }
+    public IRelayCommand       ImportModelCommand      { get; }
+    public IRelayCommand       ExportModelCommand      { get; }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -127,12 +129,14 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         _latitude  = settings.GeoLatitude;
         _longitude = settings.GeoLongitude;
 
-        AddWaypointCommand    = new RelayCommand(AddCurrentWaypoint);
-        TrainCommand          = new AsyncRelayCommand(TrainAsync,
+        AddWaypointCommand     = new RelayCommand(AddCurrentWaypoint);
+        ImportWaypointsCommand = new RelayCommand(ImportWaypoints);
+        ExportWaypointsCommand = new RelayCommand(ExportWaypoints);
+        ClearWaypointsCommand  = new RelayCommand(ClearWaypoints);
+        TrainCommand           = new AsyncRelayCommand(TrainAsync,
             () => HasMinWaypoints && !IsTraining);
-        ImportModelCommand    = new RelayCommand(ImportModel);
-        ExportModelCommand    = new RelayCommand(ExportModel);
-        ClearWaypointsCommand = new RelayCommand(ClearWaypoints);
+        ImportModelCommand     = new RelayCommand(ImportModel);
+        ExportModelCommand     = new RelayCommand(ExportModel);
 
         _subs.Add(_sensor.WatchAllProperties(RefreshLiveState));
         RefreshLiveState();
@@ -165,13 +169,21 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
 
     private void AddCurrentWaypoint()
     {
-        var inputs  = _sensor.GetCurrentNnInputs();
+        var inputs = _sensor.GetCurrentNnInputs();
+
+        // Use curve evaluator outputs as training targets regardless of current mode.
+        // LatestRawCurveR/G/B/L are always the curve-based pre-norm values;
+        // applying the same post-norm clamp gives what the curve path would output.
+        double outMin = _settings.UsbOutputMin;
+        double outMax = _settings.UsbOutputMax;
+        double Clamp(double v) => Math.Clamp(v, outMin, outMax);
+
         var targets = new[]
         {
-            _sensor.LatestRgblR,
-            _sensor.LatestRgblG,
-            _sensor.LatestRgblB,
-            _sensor.LatestRgblL,
+            Clamp(_sensor.LatestRawCurveR),
+            Clamp(_sensor.LatestRawCurveG),
+            Clamp(_sensor.LatestRawCurveB),
+            Clamp(_sensor.LatestRawCurveL),
         };
 
         var label = string.Create(CultureInfo.InvariantCulture,
@@ -196,6 +208,80 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
     {
         Waypoints.Clear();
         WaypointCount = 0;
+    }
+
+    // ── Waypoint import / export ──────────────────────────────────────────────
+
+    private async void ExportWaypoints()
+    {
+        if (Waypoints.Count == 0) { TrainingStatus = "Dışa aktarılacak waypoint yok."; return; }
+
+        var file = await PickSaveFile("Eğitim Noktalarını Dışa Aktar", "waypoints.json");
+        if (file is null) return;
+
+        try
+        {
+            using var ms  = new MemoryStream();
+            using var w   = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true });
+            w.WriteStartArray();
+            foreach (var wp in Waypoints)
+            {
+                w.WriteStartObject();
+                w.WriteString("label", wp.Label);
+                w.WritePropertyName("inputs");
+                w.WriteStartArray();
+                foreach (var v in wp.Inputs) w.WriteNumberValue(v);
+                w.WriteEndArray();
+                w.WritePropertyName("targets");
+                w.WriteStartArray();
+                foreach (var v in wp.Targets) w.WriteNumberValue(v);
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.Flush();
+            await File.WriteAllBytesAsync(file, ms.ToArray());
+            TrainingStatus = $"Waypoints dışa aktarıldı ({Waypoints.Count} nokta).";
+        }
+        catch (Exception ex) { TrainingStatus = $"Dışa aktarma hatası: {ex.Message}"; }
+    }
+
+    private async void ImportWaypoints()
+    {
+        var path = await PickOpenFile("Eğitim Noktalarını İçe Aktar");
+        if (path is null) return;
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(path);
+            using var doc = JsonDocument.Parse(bytes);
+            int added = 0;
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                var label   = el.GetProperty("label").GetString() ?? "?";
+                var inArr   = el.GetProperty("inputs");
+                var tgtArr  = el.GetProperty("targets");
+
+                if (inArr.GetArrayLength() != 11 || tgtArr.GetArrayLength() != 4) continue;
+
+                var inputs  = new double[11];
+                var targets = new double[4];
+                for (int i = 0; i < 11; i++) inputs[i]  = inArr[i].GetDouble();
+                for (int i = 0; i < 4;  i++) targets[i] = tgtArr[i].GetDouble();
+
+                var entry = new WaypointEntryViewModel(inputs, targets, label);
+                entry.RemoveCommand = new RelayCommand(() =>
+                {
+                    Waypoints.Remove(entry);
+                    WaypointCount = Waypoints.Count;
+                });
+                Waypoints.Add(entry);
+                added++;
+            }
+            WaypointCount  = Waypoints.Count;
+            TrainingStatus = $"{added} waypoint içe aktarıldı.";
+        }
+        catch (Exception ex) { TrainingStatus = $"İçe aktarma hatası: {ex.Message}"; }
     }
 
     // ── Training ─────────────────────────────────────────────────────────────
@@ -239,73 +325,75 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ── Import / Export ───────────────────────────────────────────────────────
+    // ── Model import / export ─────────────────────────────────────────────────
 
     private async void ImportModel()
     {
-        var topLevel = Avalonia.Application.Current?.ApplicationLifetime
-            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime dt
-                ? dt.MainWindow
-                : null;
-        if (topLevel is null) return;
-
-        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title          = "Sinir Ağı Modeli İçe Aktar",
-            AllowMultiple  = false,
-            FileTypeFilter = [new FilePickerFileType("JSON Model") { Patterns = ["*.json"] }],
-        });
-
-        if (files.Count == 0) return;
+        var path = await PickOpenFile("Sinir Ağı Modeli İçe Aktar");
+        if (path is null) return;
 
         try
         {
-            var json = await File.ReadAllTextAsync(files[0].Path.LocalPath);
-            // Validate architecture via NnTrainer.FromJson
+            var json   = await File.ReadAllTextAsync(path);
             var loaded = NnTrainer.FromJson(json);
             if (loaded is null) { TrainingStatus = "İçe aktarma başarısız: geçersiz model."; return; }
 
             File.WriteAllText(ModelPath, json);
-            _trainer = loaded;
+            _trainer       = loaded;
             _sensor.LoadNnEvaluator();
             HasNnModel     = true;
             TrainingStatus = "Model içe aktarıldı.";
         }
-        catch (Exception ex)
-        {
-            TrainingStatus = $"İçe aktarma hatası: {ex.Message}";
-        }
+        catch (Exception ex) { TrainingStatus = $"İçe aktarma hatası: {ex.Message}"; }
     }
 
     private async void ExportModel()
     {
         if (!File.Exists(ModelPath)) { TrainingStatus = "Dışa aktarılacak model yok."; return; }
 
-        var topLevel = Avalonia.Application.Current?.ApplicationLifetime
-            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime dt
-                ? dt.MainWindow
-                : null;
-        if (topLevel is null) return;
-
-        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title               = "Sinir Ağı Modelini Dışa Aktar",
-            SuggestedFileName   = "nn_model.json",
-            FileTypeChoices     = [new FilePickerFileType("JSON Model") { Patterns = ["*.json"] }],
-        });
-
-        if (file is null) return;
+        var dest = await PickSaveFile("Sinir Ağı Modelini Dışa Aktar", "nn_model.json");
+        if (dest is null) return;
 
         try
         {
             var json = await File.ReadAllTextAsync(ModelPath);
-            await File.WriteAllTextAsync(file.Path.LocalPath, json);
+            await File.WriteAllTextAsync(dest, json);
             TrainingStatus = "Model dışa aktarıldı.";
         }
-        catch (Exception ex)
+        catch (Exception ex) { TrainingStatus = $"Dışa aktarma hatası: {ex.Message}"; }
+    }
+
+    // ── File picker helpers ───────────────────────────────────────────────────
+
+    private static Avalonia.Controls.Window? GetMainWindow() =>
+        Avalonia.Application.Current?.ApplicationLifetime
+            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime dt
+                ? dt.MainWindow : null;
+
+    private static async Task<string?> PickOpenFile(string title)
+    {
+        var win = GetMainWindow();
+        if (win is null) return null;
+        var files = await win.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            TrainingStatus = $"Dışa aktarma hatası: {ex.Message}";
-        }
+            Title          = title,
+            AllowMultiple  = false,
+            FileTypeFilter = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }],
+        });
+        return files.Count > 0 ? files[0].Path.LocalPath : null;
+    }
+
+    private static async Task<string?> PickSaveFile(string title, string suggestedName)
+    {
+        var win = GetMainWindow();
+        if (win is null) return null;
+        var file = await win.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title             = title,
+            SuggestedFileName = suggestedName,
+            FileTypeChoices   = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }],
+        });
+        return file?.Path.LocalPath;
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
