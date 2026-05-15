@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using LightBulb.ViewModels.Dialogs;
 using LightBulb.Views.Components;
