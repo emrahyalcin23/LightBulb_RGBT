@@ -147,72 +147,84 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     private async Task AutoDetectAndConnectAsync()
     {
-        // Phase 1: port tarama — mevcut diyalog içeriği korunur
+        // Phase 1: port tarama
         var detectResult = await _usbSensorService.AutoDetectPortAsync();
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"Baud Rate :  {detectResult.BaudRate}");
-        sb.AppendLine($"Komut     :  {detectResult.SentCommand}");
-        sb.AppendLine();
-        sb.AppendLine("── Taranan Portlar ──");
-
-        if (detectResult.TriedPorts.Count == 0)
-        {
-            sb.AppendLine("(sistemde seri port bulunamadı)");
-        }
-        else
-        {
-            foreach (var (port, outcome) in detectResult.TriedPorts)
-                sb.AppendLine($"{port,-8} {outcome}");
-        }
-
-        sb.AppendLine();
         if (detectResult.FoundPort is not null)
         {
-            sb.Append($"✓ Sensör bulundu → {detectResult.FoundPort} portuna geçildi");
             OnPropertyChanged(nameof(PortName));
             if (SettingsService.IsUsbSensorEnabled)
                 _usbSensorService.Start();
         }
         else
         {
+            // Port bulunamadı → sadece port hata diyaloğu
+            var sb = new StringBuilder();
+            sb.AppendLine($"Baud Rate :  {detectResult.BaudRate}");
+            sb.AppendLine($"Komut     :  {detectResult.SentCommand}");
+            sb.AppendLine();
+            sb.AppendLine("── Taranan Portlar ──");
+            if (detectResult.TriedPorts.Count == 0)
+                sb.AppendLine("(sistemde seri port bulunamadı)");
+            else
+                foreach (var (port, outcome) in detectResult.TriedPorts)
+                    sb.AppendLine($"{port,-8} {outcome}");
+            sb.AppendLine();
             sb.Append("✗ Sensör hiçbir portta bulunamadı");
+
+            await _dialogManager.ShowWindowDialogAsync(
+                _viewModelManager.CreateMessageBoxViewModel(
+                    title: "Otomatik Port Tarama",
+                    message: sb.ToString(),
+                    okButtonText: "Tamam",
+                    cancelButtonText: null
+                )
+            );
+            return;
         }
 
-        await _dialogManager.ShowWindowDialogAsync(
-            _viewModelManager.CreateMessageBoxViewModel(
-                title: "Otomatik Port Tarama",
-                message: sb.ToString(),
-                okButtonText: "Tamam",
-                cancelButtonText: null
-            )
-        );
-
-        // Port bulunamadıysa bağlantı aşamasına geçme
-        if (detectResult.FoundPort is null) return;
-
-        // Phase 2: bağlantı testi — mevcut diyalog içeriği korunur
+        // Phase 2: bağlantı testi
         var connectResult = await _usbSensorService.TestConnectionAsync();
 
         if (connectResult.Success && !_usbSensorService.IsConnected)
             _usbSensorService.Start();
 
-        var sb2 = new StringBuilder();
-        sb2.AppendLine($"Port      :  {connectResult.PortName}");
-        sb2.AppendLine($"Baud Rate :  {connectResult.BaudRate}");
-        sb2.AppendLine($"Komut     :  {connectResult.SentCommand}");
-        sb2.AppendLine();
-        sb2.AppendLine("── Alınan Yanıt ──");
-        sb2.AppendLine(string.IsNullOrEmpty(connectResult.RawResponse) ? "(yanıt yok)" : connectResult.RawResponse);
-        sb2.AppendLine();
-        sb2.Append(connectResult.Success
-            ? "✓ Bağlantı başarılı — RGB verisi alındı"
-            : $"✗ {connectResult.ErrorMessage}");
+        if (connectResult.Success) return; // her ikisi başarılı → diyalog yok
+
+        // Bağlantı başarısız → önce port tarama sonucu, ardından bağlantı hatası
+        var sbDetect = new StringBuilder();
+        sbDetect.AppendLine($"Baud Rate :  {detectResult.BaudRate}");
+        sbDetect.AppendLine($"Komut     :  {detectResult.SentCommand}");
+        sbDetect.AppendLine();
+        sbDetect.AppendLine("── Taranan Portlar ──");
+        foreach (var (port, outcome) in detectResult.TriedPorts)
+            sbDetect.AppendLine($"{port,-8} {outcome}");
+        sbDetect.AppendLine();
+        sbDetect.Append($"✓ Sensör bulundu → {detectResult.FoundPort} portuna geçildi");
+
+        await _dialogManager.ShowWindowDialogAsync(
+            _viewModelManager.CreateMessageBoxViewModel(
+                title: "Otomatik Port Tarama",
+                message: sbDetect.ToString(),
+                okButtonText: "Tamam",
+                cancelButtonText: null
+            )
+        );
+
+        var sbConnect = new StringBuilder();
+        sbConnect.AppendLine($"Port      :  {connectResult.PortName}");
+        sbConnect.AppendLine($"Baud Rate :  {connectResult.BaudRate}");
+        sbConnect.AppendLine($"Komut     :  {connectResult.SentCommand}");
+        sbConnect.AppendLine();
+        sbConnect.AppendLine("── Alınan Yanıt ──");
+        sbConnect.AppendLine(string.IsNullOrEmpty(connectResult.RawResponse) ? "(yanıt yok)" : connectResult.RawResponse);
+        sbConnect.AppendLine();
+        sbConnect.Append($"✗ {connectResult.ErrorMessage}");
 
         await _dialogManager.ShowWindowDialogAsync(
             _viewModelManager.CreateMessageBoxViewModel(
                 title: "USB Sensör Tanılama",
-                message: sb2.ToString(),
+                message: sbConnect.ToString(),
                 okButtonText: "Tamam",
                 cancelButtonText: null
             )
