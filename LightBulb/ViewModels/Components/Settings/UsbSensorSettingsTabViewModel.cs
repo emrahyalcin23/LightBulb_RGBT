@@ -63,6 +63,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
         AutoDetectPortCommand = new AsyncRelayCommand(AutoDetectPortAsync);
+        AutoDetectAndConnectCommand = new AsyncRelayCommand(AutoDetectAndConnectAsync);
 
         // "Şimdi Oku" is available whenever a port is configured, regardless of whether
         // the toggle is on. When the port is closed it opens a temporary connection.
@@ -138,6 +139,80 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             _viewModelManager.CreateMessageBoxViewModel(
                 title: "USB Sensör Tanılama",
                 message: sb.ToString(),
+                okButtonText: "Tamam",
+                cancelButtonText: null
+            )
+        );
+    }
+
+    private async Task AutoDetectAndConnectAsync()
+    {
+        // Phase 1: port tarama — mevcut diyalog içeriği korunur
+        var detectResult = await _usbSensorService.AutoDetectPortAsync();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Baud Rate :  {detectResult.BaudRate}");
+        sb.AppendLine($"Komut     :  {detectResult.SentCommand}");
+        sb.AppendLine();
+        sb.AppendLine("── Taranan Portlar ──");
+
+        if (detectResult.TriedPorts.Count == 0)
+        {
+            sb.AppendLine("(sistemde seri port bulunamadı)");
+        }
+        else
+        {
+            foreach (var (port, outcome) in detectResult.TriedPorts)
+                sb.AppendLine($"{port,-8} {outcome}");
+        }
+
+        sb.AppendLine();
+        if (detectResult.FoundPort is not null)
+        {
+            sb.Append($"✓ Sensör bulundu → {detectResult.FoundPort} portuna geçildi");
+            OnPropertyChanged(nameof(PortName));
+            if (SettingsService.IsUsbSensorEnabled)
+                _usbSensorService.Start();
+        }
+        else
+        {
+            sb.Append("✗ Sensör hiçbir portta bulunamadı");
+        }
+
+        await _dialogManager.ShowWindowDialogAsync(
+            _viewModelManager.CreateMessageBoxViewModel(
+                title: "Otomatik Port Tarama",
+                message: sb.ToString(),
+                okButtonText: "Tamam",
+                cancelButtonText: null
+            )
+        );
+
+        // Port bulunamadıysa bağlantı aşamasına geçme
+        if (detectResult.FoundPort is null) return;
+
+        // Phase 2: bağlantı testi — mevcut diyalog içeriği korunur
+        var connectResult = await _usbSensorService.TestConnectionAsync();
+
+        if (connectResult.Success && !_usbSensorService.IsConnected)
+            _usbSensorService.Start();
+
+        var sb2 = new StringBuilder();
+        sb2.AppendLine($"Port      :  {connectResult.PortName}");
+        sb2.AppendLine($"Baud Rate :  {connectResult.BaudRate}");
+        sb2.AppendLine($"Komut     :  {connectResult.SentCommand}");
+        sb2.AppendLine();
+        sb2.AppendLine("── Alınan Yanıt ──");
+        sb2.AppendLine(string.IsNullOrEmpty(connectResult.RawResponse) ? "(yanıt yok)" : connectResult.RawResponse);
+        sb2.AppendLine();
+        sb2.Append(connectResult.Success
+            ? "✓ Bağlantı başarılı — RGB verisi alındı"
+            : $"✗ {connectResult.ErrorMessage}");
+
+        await _dialogManager.ShowWindowDialogAsync(
+            _viewModelManager.CreateMessageBoxViewModel(
+                title: "USB Sensör Tanılama",
+                message: sb2.ToString(),
                 okButtonText: "Tamam",
                 cancelButtonText: null
             )
@@ -351,6 +426,8 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     }
 
     // ── Connection test & port scan ───────────────────────────────────────────
+
+    public IAsyncRelayCommand AutoDetectAndConnectCommand { get; }
 
     public IAsyncRelayCommand TestConnectionCommand { get; }
 

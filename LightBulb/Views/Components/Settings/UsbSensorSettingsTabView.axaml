@@ -13,7 +13,7 @@
             <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsEnabled}" />
         </DockPanel>
 
-        <!--  Port selection  -->
+        <!--  Port selection + merged Bağlan button  -->
         <DockPanel Margin="0,16,0,0" LastChildFill="False" ToolTip.Tip="Serial port the sensor is connected to (e.g. COM3)">
             <TextBlock DockPanel.Dock="Left" Text="Serial Port" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
@@ -22,41 +22,25 @@
                     ItemsSource="{Binding AvailablePortNames}"
                     SelectedItem="{Binding PortName}" />
                 <Button
-                    Command="{Binding AutoDetectPortCommand}"
-                    Content="Otomatik Bul"
+                    Command="{Binding AutoDetectAndConnectCommand}"
+                    Content="Bağlan"
                     IsEnabled="{Binding !IsTestingConnection}"
                     Theme="{DynamicResource MaterialOutlinedButton}"
-                    ToolTip.Tip="Tüm portları tarar ve sensörün bağlı olduğu portu otomatik seçer" />
+                    ToolTip.Tip="Portu otomatik bulur, ardından bağlantıyı test eder" />
             </StackPanel>
         </DockPanel>
 
-        <!--  Baud rate  -->
-        <DockPanel Margin="0,8,0,0" LastChildFill="False" ToolTip.Tip="Sensörün baud rate hızı (Arduino firmware ile aynı olmalı)">
-            <TextBlock DockPanel.Dock="Left" Text="Baud Rate" />
-            <ComboBox
-                DockPanel.Dock="Right"
-                IsEnabled="{Binding !IsEnabled}"
-                ItemsSource="{Binding AvailableBaudRates}"
-                SelectedItem="{Binding BaudRate}" />
-        </DockPanel>
-
-        <!--  Connection test  -->
-        <DockPanel Margin="0,8,0,0" LastChildFill="False" ToolTip.Tip="Sensöre test komutu gönderir ve geçerli bir RGB yanıtı alınırsa bağlantı kurulmuş sayılır">
-            <TextBlock
-                DockPanel.Dock="Left"
-                VerticalAlignment="Center"
-                Text="{Binding ConnectionStatusText}" />
-            <Button
-                DockPanel.Dock="Right"
-                Command="{Binding TestConnectionCommand}"
-                Content="Bağlantıyı Test Et"
-                IsEnabled="{Binding !IsTestingConnection}"
-                Theme="{DynamicResource MaterialOutlinedButton}" />
-        </DockPanel>
+        <!--  Connection status (small, below port row)  -->
+        <TextBlock
+            Margin="0,4,0,0"
+            HorizontalAlignment="Right"
+            FontSize="11"
+            Opacity="0.7"
+            Text="{Binding ConnectionStatusText}" />
 
         <!--  Read interval  -->
         <!--  Slider pozisyonu: 1-59 = saniye modu, 60-179 = dakika modu (1-120 dk)  -->
-        <DockPanel Margin="0,24,0,0" ToolTip.Tip="Sensörün ne sıklıkta okunacağı. 1-59: saniye aralığı (OKU_Sxx), 60+: dakika aralığı (OKU_xx)">
+        <DockPanel Margin="0,20,0,0" ToolTip.Tip="Sensörün ne sıklıkta okunacağı. 1-59: saniye aralığı (OKU_Sxx), 60+: dakika aralığı (OKU_xx)">
             <TextBlock DockPanel.Dock="Left" Text="Okuma Aralığı" />
             <TextBlock
                 DockPanel.Dock="Right"
@@ -73,150 +57,198 @@
             TickFrequency="1"
             Value="{Binding SliderPosition}" />
 
-        <!--  Read command  -->
-        <DockPanel Margin="0,16,0,0" LastChildFill="False" ToolTip.Tip="Sensöre gönderilecek komut ön eki (örn: OKU). Dakika değeriyle birleşerek final emri oluşturur.">
-            <TextBlock DockPanel.Dock="Left" Text="Okuma Komutu" />
-            <TextBox
-                MinWidth="80"
-                DockPanel.Dock="Right"
-                Text="{Binding ReadCommand, UpdateSourceTrigger=LostFocus}"
-                Theme="{DynamicResource CompactTextBox}" />
-        </DockPanel>
-        <DockPanel Margin="0,6,0,0" LastChildFill="False" ToolTip.Tip="Sensöre gönderilecek final emir">
-            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Gönderilecek Emir" />
-            <TextBlock
-                DockPanel.Dock="Right"
-                FontFamily="Monospace"
-                FontWeight="SemiBold"
-                Text="{Binding FinalCommand}" />
-        </DockPanel>
-
         <!--  RGBL Profil Editörü — bağımsız profil oluşturma aracı, sensör testi ile karıştırılmamalı  -->
         <Button
-            Margin="0,24,0,0"
+            Margin="0,20,0,0"
             HorizontalAlignment="Stretch"
             Command="{Binding OpenCalibrationWindowCommand}"
             Content="🎛️  RGBL Profil Editörü"
             Theme="{DynamicResource MaterialOutlinedButton}"
             ToolTip.Tip="Ortam ışığı seviyelerine karşı üretilecek gerçek RGBL çıktı değerlerini tanımlayan profil eğrilerini düzenler. Sensör simülasyonundan bağımsız bir işlemdir." />
 
-        <!--  RGBL Profil Çıktısı — JSON dosyasından hesaplanan anlık çıkış değerleri  -->
-        <Border
+        <!--  Durum — RGBL kalibrasyon JSON yüklenme durumu  -->
+        <DockPanel Margin="0,6,0,0" LastChildFill="False" ToolTip.Tip="RGBL kalibrasyon JSON'unun yüklenme durumu">
+            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Durum" />
+            <TextBlock DockPanel.Dock="Right" Text="{Binding RgblLoadStatus}" />
+        </DockPanel>
+
+        <!--  Gelişmiş Ayarlar butonu  -->
+        <Button
+            Margin="0,16,0,0"
+            HorizontalAlignment="Stretch"
+            Content="⚙️  Gelişmiş Ayarlar"
+            Theme="{DynamicResource MaterialOutlinedButton}">
+            <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedLeft">
+                    <StackPanel Width="320" Margin="12" Orientation="Vertical" Spacing="8">
+
+                        <TextBlock FontWeight="SemiBold" Text="Gelişmiş Ayarlar" />
+
+                        <!--  Baud Rate  -->
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Sensörün baud rate hızı (Arduino firmware ile aynı olmalı)">
+                            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Text="Baud Rate" />
+                            <ComboBox
+                                DockPanel.Dock="Right"
+                                IsEnabled="{Binding !IsEnabled}"
+                                ItemsSource="{Binding AvailableBaudRates}"
+                                SelectedItem="{Binding BaudRate}" />
+                        </DockPanel>
+
+                        <!--  Okuma Komutu  -->
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Sensöre gönderilecek komut ön eki (örn: OKU). Dakika değeriyle birleşerek final emri oluşturur.">
+                            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Text="Okuma Komutu" />
+                            <TextBox
+                                MinWidth="80"
+                                DockPanel.Dock="Right"
+                                Text="{Binding ReadCommand, UpdateSourceTrigger=LostFocus}"
+                                Theme="{DynamicResource CompactTextBox}" />
+                        </DockPanel>
+
+                        <!--  Gönderilecek Emir  -->
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Sensöre gönderilecek final emir">
+                            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Gönderilecek Emir" />
+                            <TextBlock
+                                DockPanel.Dock="Right"
+                                FontFamily="Monospace"
+                                FontWeight="SemiBold"
+                                Text="{Binding FinalCommand}" />
+                        </DockPanel>
+
+                        <!--  Komut — son gönderilen komut  -->
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Sensöre son gönderilen komut">
+                            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Komut" />
+                            <TextBlock
+                                DockPanel.Dock="Right"
+                                FontFamily="Monospace"
+                                Text="{Binding LastReadCommand}" />
+                        </DockPanel>
+
+                        <Separator Margin="0,4,0,4" Opacity="0.3" />
+
+                        <!--  Sensör Simülasyonu  -->
+                        <TextBlock FontWeight="SemiBold" Text="Sensör Simülasyonu" />
+                        <TextBlock
+                            FontSize="11"
+                            Opacity="0.6"
+                            TextWrapping="Wrap"
+                            Text="Gerçek sensör yokken sahte R/G/B değerleri enjekte ederek RGBL profilinin bu değere nasıl tepki vereceğini test eder." />
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek kırmızı kanal değeri (ham sensör sayımı, 0-65535)">
+                            <TextBlock DockPanel.Dock="Left" Text="R" />
+                            <TextBox
+                                MinWidth="60"
+                                DockPanel.Dock="Right"
+                                Text="{Binding SimulatedR, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                Theme="{DynamicResource CompactTextBox}" />
+                        </DockPanel>
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek yeşil kanal değeri (ham sensör sayımı, 0-65535)">
+                            <TextBlock DockPanel.Dock="Left" Text="G" />
+                            <TextBox
+                                MinWidth="60"
+                                DockPanel.Dock="Right"
+                                Text="{Binding SimulatedG, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                Theme="{DynamicResource CompactTextBox}" />
+                        </DockPanel>
+                        <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek mavi kanal değeri (ham sensör sayımı, 0-65535)">
+                            <TextBlock DockPanel.Dock="Left" Text="B" />
+                            <TextBox
+                                MinWidth="60"
+                                DockPanel.Dock="Right"
+                                Text="{Binding SimulatedB, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                Theme="{DynamicResource CompactTextBox}" />
+                        </DockPanel>
+                        <DockPanel LastChildFill="False" ToolTip.Tip="RGBL eğrisi X-ekseni girişi (0-100). Bu değer R/G/B/L kanallarının hangi noktada değerlendirileceğini belirler.">
+                            <TextBlock DockPanel.Dock="Left" Text="Ambient %" />
+                            <TextBox
+                                MinWidth="60"
+                                DockPanel.Dock="Right"
+                                Text="{Binding SimulatedAmbientPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                                Theme="{DynamicResource CompactTextBox}" />
+                        </DockPanel>
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+                            <Button
+                                Command="{Binding ResetInjectionCommand}"
+                                Content="Sıfırla"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Giriş alanlarını varsayılana döndürür ve aktif enjeksiyonu iptal eder. Son Okuma ve bağlantı durumunu etkilemez." />
+                            <Button
+                                Command="{Binding EmergencyStopCommand}"
+                                Content="Durdur"
+                                HotKey="Escape"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Sensörü durdurur ve toggle'ı kapatır. Ekran çok karardıysa kurtarma için kullanın. Kısayol: Esc" />
+                            <Button
+                                Command="{Binding InjectSimulatedReadingCommand}"
+                                Content="Inject"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Girilen sahte sensör değerini sisteme enjekte eder; Giren/Çıkan tablosu sonucu gösterir." />
+                        </StackPanel>
+
+                    </StackPanel>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+
+        <!--  Telemetri butonu  -->
+        <Button
             Margin="0,8,0,0"
-            Padding="8"
-            Background="{DynamicResource MaterialCardBackgroundBrush}"
-            CornerRadius="4">
-            <StackPanel Orientation="Vertical" Spacing="4">
-                <TextBlock FontWeight="SemiBold" Text="RGBL Profil Çıktısı" />
-                <DockPanel LastChildFill="False" ToolTip.Tip="RGBL kalibrasyon JSON'unun yüklenme durumu">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Durum" />
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding RgblLoadStatus}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="L = pre-computed LT brightness multiplier; ambient seviyesindeki parlaklık çarpanı (0-100 %)">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="L çıkış" />
-                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblLText}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="RGBL eğrisinin mevcut ambient seviyesinde hesapladığı kırmızı çıkış (0-100 %)">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="R çıkış" />
-                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblRText}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="Yeşil kanal çıkışı (0-100 %)">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="G çıkış" />
-                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblGText}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="Mavi kanal çıkışı (0-100 %)">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="B çıkış" />
-                    <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding LatestRgblBText}" />
-                </DockPanel>
+            HorizontalAlignment="Stretch"
+            Content="📡  Telemetri"
+            Theme="{DynamicResource MaterialOutlinedButton}">
+            <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedLeft">
+                    <StackPanel Width="320" Margin="12" Orientation="Vertical" Spacing="8">
 
-                <!--  Çıkış Kısıtlaması (Post-curve, R/G/B/L hepsi)  -->
-                <Separator Margin="0,6,0,4" Opacity="0.3" />
-                <TextBlock
-                    FontSize="11"
-                    FontWeight="SemiBold"
-                    Opacity="0.8"
-                    Text="Çıkış Aralığı (Eğri Sonrası)"
-                    ToolTip.Tip="Eğriden çıkan R/G/B/L değerlerinin tamamını bu aralıkla sınırlar. Örn: ekran asla %5 altına inmesin → min=5." />
-                <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
-                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
-                    <TextBox
-                        Grid.Column="1"
-                        Text="{Binding OutputMin, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
-                    <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
-                    <TextBox
-                        Grid.Column="4"
-                        Text="{Binding OutputMax, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                </Grid>
-            </StackPanel>
-        </Border>
+                        <TextBlock FontWeight="SemiBold" Text="Telemetri" />
 
-        <!--  Son Okuma (gerçek sensör verisi)  -->
+                        <!--  Son Okuma Zamanı  -->
+                        <DockPanel LastChildFill="False">
+                            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Son Okuma Zamanı" />
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding LastReadTime}" />
+                        </DockPanel>
+
+                        <Separator Margin="0,4,0,4" Opacity="0.3" />
+
+                        <!--  Seri Yanıt  -->
+                        <DockPanel
+                            LastChildFill="False"
+                            ToolTip.Tip="Sensörden gelen ham seri yanıt (ayrıştırılmadan önce). Parse başarısızsa burada nedenini görebilirsiniz.">
+                            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Seri Yanıt" />
+                            <SelectableTextBlock
+                                DockPanel.Dock="Right"
+                                FontFamily="Monospace"
+                                FontSize="10"
+                                MaxWidth="200"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap"
+                                Text="{Binding LastRawResponse}" />
+                        </DockPanel>
+
+                        <!--  Hata  -->
+                        <DockPanel
+                            LastChildFill="False"
+                            ToolTip.Tip="Son okuma denemesinde oluşan hata (başarılıysa boş)">
+                            <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Hata" />
+                            <SelectableTextBlock
+                                DockPanel.Dock="Right"
+                                FontSize="11"
+                                Foreground="#EF5350"
+                                MaxWidth="200"
+                                TextWrapping="Wrap"
+                                Text="{Binding LastReadError}" />
+                        </DockPanel>
+
+                    </StackPanel>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+
+        <!--  Giren/Çıkan debug tablosu — modülden ne geldi, sisteme ne gitti  -->
         <Border
             Margin="0,16,0,0"
             Padding="8"
             Background="{DynamicResource MaterialCardBackgroundBrush}"
             CornerRadius="4">
             <StackPanel Orientation="Vertical" Spacing="4">
-                <TextBlock FontWeight="SemiBold" Text="Son Okuma" />
-
-                <!--  Parsed values (shown after a successful read)  -->
-                <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Raw" />
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding LastRawReading}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="CCT" />
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding LatestCctText}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Luminance" />
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding LatestLuminance, Converter={x:Static converters:FractionToPercentageStringConverter.Instance}}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Komut" />
-                    <TextBlock
-                        DockPanel.Dock="Right"
-                        FontFamily="Monospace"
-                        Text="{Binding LastReadCommand}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Zaman" />
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding LastReadTime}" />
-                </DockPanel>
-
-                <!--  Diagnostic rows — always visible; show "—" until first read attempt  -->
-                <Separator Margin="0,4,0,4" Opacity="0.3" />
-                <DockPanel
-                    LastChildFill="False"
-                    ToolTip.Tip="Sensörden gelen ham seri yanıt (ayrıştırılmadan önce). Parse başarısızsa burada nedenini görebilirsiniz.">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Seri Yanıt" />
-                    <SelectableTextBlock
-                        DockPanel.Dock="Right"
-                        FontFamily="Monospace"
-                        FontSize="10"
-                        MaxWidth="260"
-                        TextWrapping="NoWrap"
-                        TextTrimming="CharacterEllipsis"
-                        Text="{Binding LastRawResponse}" />
-                </DockPanel>
-                <DockPanel
-                    LastChildFill="False"
-                    ToolTip.Tip="Son okuma denemesinde oluşan hata (başarılıysa boş)">
-                    <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Hata" />
-                    <SelectableTextBlock
-                        DockPanel.Dock="Right"
-                        FontSize="11"
-                        Foreground="#EF5350"
-                        MaxWidth="260"
-                        TextWrapping="Wrap"
-                        Text="{Binding LastReadError}" />
-                </DockPanel>
-
-                <!--  Giren/Çıkan Debug Tablosu — modülden ne geldi, sisteme ne gitti  -->
-                <Separator Margin="0,4,0,4" Opacity="0.3" />
                 <TextBlock FontWeight="SemiBold" Text="Giren / Çıkan" />
                 <Grid ColumnDefinitions="Auto,*,*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <!--  Başlık satırı  -->
@@ -228,28 +260,28 @@
                     <TextBlock Grid.Row="0" Grid.Column="5" Opacity="0.6" FontSize="10" FontWeight="SemiBold" Text="Ekran"  Margin="0,0,0,2" />
                     <!--  R  -->
                     <TextBlock Grid.Row="1" Grid.Column="0" Opacity="0.6" Text="R" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcRText}"     Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="1" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"              Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcRText}"      Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"               Margin="0,0,8,1" />
                     <TextBlock Grid.Row="1" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveRText}" Margin="0,0,8,1" />
                     <TextBlock Grid.Row="1" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblRText}"     Margin="0,0,8,1" />
                     <TextBlock Grid.Row="1" Grid.Column="5" FontFamily="Monospace" Text="{Binding FinalScreenRText}" />
                     <!--  G  -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Opacity="0.6" Text="G" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcGText}"     Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="2" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"              Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcGText}"      Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"               Margin="0,0,8,1" />
                     <TextBlock Grid.Row="2" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveGText}" Margin="0,0,8,1" />
                     <TextBlock Grid.Row="2" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblGText}"     Margin="0,0,8,1" />
                     <TextBlock Grid.Row="2" Grid.Column="5" FontFamily="Monospace" Text="{Binding FinalScreenGText}" />
                     <!--  B  -->
                     <TextBlock Grid.Row="3" Grid.Column="0" Opacity="0.6" Text="B" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="3" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcBText}"     Margin="0,0,8,1" />
-                    <TextBlock Grid.Row="3" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"              Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestProcBText}"      Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="3" Grid.Column="2" FontFamily="Monospace" Opacity="0.3" Text="—"               Margin="0,0,8,1" />
                     <TextBlock Grid.Row="3" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveBText}" Margin="0,0,8,1" />
                     <TextBlock Grid.Row="3" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblBText}"     Margin="0,0,8,1" />
                     <TextBlock Grid.Row="3" Grid.Column="5" FontFamily="Monospace" Text="{Binding FinalScreenBText}" />
                     <!--  L  -->
                     <TextBlock Grid.Row="4" Grid.Column="0" Opacity="0.6" Text="L" Margin="0,0,10,1" />
-                    <TextBlock Grid.Row="4" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestAmbientPctText}"                       Margin="0,0,8,1" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" FontFamily="Monospace" Text="{Binding LatestAmbientPctText}"                                       Margin="0,0,8,1" />
                     <TextBlock Grid.Row="4" Grid.Column="2" FontFamily="Monospace" FontWeight="SemiBold" Text="{Binding LatestCurveInputText}"  Margin="0,0,8,1" />
                     <TextBlock Grid.Row="4" Grid.Column="3" FontFamily="Monospace" Text="{Binding LatestRawCurveLText}"                        Margin="0,0,8,1" />
                     <TextBlock Grid.Row="4" Grid.Column="4" FontFamily="Monospace" Text="{Binding LatestRgblLText}"                            Margin="0,0,8,1" />
@@ -269,112 +301,67 @@
                     <TextBlock Grid.Row="6" Grid.Column="4" FontFamily="Monospace" Opacity="0.4" Text="{Binding OutputMinText}"           Margin="0,0,8,1" />
                     <TextBlock Grid.Row="6" Grid.Column="5" FontFamily="Monospace" Opacity="0.4" Text="{Binding FinalScreenMinText}" />
                 </Grid>
-                <!--  Kolon açıklamaları (tablodan bağımsız, alta)  -->
                 <TextBlock
                     Margin="0,4,0,0"
                     FontSize="9"
                     Opacity="0.45"
                     TextWrapping="Wrap"
                     Text="Modül: modülden gelen  ·  Ön-N: eğri öncesi normalize  ·  Eğri: ham eğri çıktısı  ·  SonrN: eğri sonrası normalize  ·  Ekran: gündüz parlaklığı uygulanmış (yaklaşık)" />
-
-                <!--  Eğri Girdi Aralığı (Pre-curve normalizasyon)  -->
-                <Separator Margin="0,6,0,4" Opacity="0.3" />
-                <TextBlock
-                    FontSize="11"
-                    FontWeight="SemiBold"
-                    Opacity="0.8"
-                    Text="Girdi Aralığı (Eğri Öncesi)"
-                    ToolTip.Tip="Modülden gelen ambient % değerini eğriye göndermeden önce bu aralığa normalize eder. Örn: sensör hiçbir zaman %5 altı veya %80 üstü üretmiyorsa min=5 max=80 yap." />
-                <Grid Margin="0,2,0,0" ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
-                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
-                    <TextBox
-                        Grid.Column="1"
-                        Text="{Binding AmbientMinPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
-                    <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
-                    <TextBox
-                        Grid.Column="4"
-                        Text="{Binding AmbientMaxPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                </Grid>
-
-                <Button
-                    Margin="0,4,0,0"
-                    HorizontalAlignment="Right"
-                    Command="{Binding ReadNowCommand}"
-                    Content="Şimdi Oku"
-                    Theme="{DynamicResource MaterialOutlinedButton}"
-                    ToolTip.Tip="Zamanlayıcıyı beklemeden sensörden hemen veri çeker. Toggle kapalı olsa bile çalışır; port geçici açılıp kapatılır." />
             </StackPanel>
         </Border>
 
-        <!--  Sensör Simülasyonu — sahte değer enjekte ederek RGBL profilini test eder  -->
-        <Border
-            Margin="0,16,0,0"
-            Padding="8"
-            Background="{DynamicResource MaterialCardBackgroundBrush}"
-            CornerRadius="4">
-            <StackPanel Orientation="Vertical" Spacing="8">
-                <TextBlock FontWeight="SemiBold" Text="Sensör Simülasyonu" />
-                <TextBlock
-                    Opacity="0.6"
-                    TextWrapping="Wrap"
-                    FontSize="11"
-                    Text="Gerçek sensör yokken sahte R/G/B değerleri enjekte ederek RGBL profilinin bu değere nasıl tepki vereceğini test eder." />
-                <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek kırmızı kanal değeri (ham sensör sayımı, 0-65535)">
-                    <TextBlock DockPanel.Dock="Left" Text="R" />
-                    <TextBox
-                        MinWidth="60"
-                        DockPanel.Dock="Right"
-                        Text="{Binding SimulatedR, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek yeşil kanal değeri (ham sensör sayımı, 0-65535)">
-                    <TextBlock DockPanel.Dock="Left" Text="G" />
-                    <TextBox
-                        MinWidth="60"
-                        DockPanel.Dock="Right"
-                        Text="{Binding SimulatedG, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="Simüle edilecek mavi kanal değeri (ham sensör sayımı, 0-65535)">
-                    <TextBlock DockPanel.Dock="Left" Text="B" />
-                    <TextBox
-                        MinWidth="60"
-                        DockPanel.Dock="Right"
-                        Text="{Binding SimulatedB, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                </DockPanel>
-                <DockPanel LastChildFill="False" ToolTip.Tip="RGBL eğrisi X-ekseni girişi (0-100). Bu değer R/G/B/L kanallarının hangi noktada değerlendirileceğini belirler.">
-                    <TextBlock DockPanel.Dock="Left" Text="Ambient %" />
-                    <TextBox
-                        MinWidth="60"
-                        DockPanel.Dock="Right"
-                        Text="{Binding SimulatedAmbientPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
-                        Theme="{DynamicResource CompactTextBox}" />
-                </DockPanel>
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
-                    <Button
-                        Command="{Binding ResetInjectionCommand}"
-                        Content="Sıfırla"
-                        Theme="{DynamicResource MaterialOutlinedButton}"
-                        ToolTip.Tip="Giriş alanlarını varsayılana döndürür ve aktif enjeksiyonu iptal eder. Son Okuma ve bağlantı durumunu etkilemez." />
-                    <Button
-                        Command="{Binding EmergencyStopCommand}"
-                        Content="Durdur"
-                        HotKey="Escape"
-                        Theme="{DynamicResource MaterialOutlinedButton}"
-                        ToolTip.Tip="Sensörü durdurur ve toggle'ı kapatır. Ekran çok karardıysa kurtarma için kullanın. Kısayol: Esc" />
-                    <Button
-                        Command="{Binding InjectSimulatedReadingCommand}"
-                        Content="Inject"
-                        Theme="{DynamicResource MaterialOutlinedButton}"
-                        ToolTip.Tip="Girilen sahte sensör değerini sisteme enjekte eder; Son Okuma paneli sonucu gösterir." />
-                </StackPanel>
-            </StackPanel>
-        </Border>
+        <!--  Girdi Aralığı (Eğri Öncesi)  -->
+        <TextBlock
+            Margin="0,16,0,4"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Opacity="0.8"
+            Text="Girdi Aralığı (Eğri Öncesi)"
+            ToolTip.Tip="Modülden gelen ambient % değerini eğriye göndermeden önce bu aralığa normalize eder. Örn: sensör hiçbir zaman %5 altı veya %80 üstü üretmiyorsa min=5 max=80 yap." />
+        <Grid ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
+            <TextBox
+                Grid.Column="1"
+                Text="{Binding AmbientMinPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
+            <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
+            <TextBox
+                Grid.Column="4"
+                Text="{Binding AmbientMaxPct, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </Grid>
 
+        <!--  Çıkış Aralığı (Eğri Sonrası)  -->
+        <TextBlock
+            Margin="0,12,0,4"
+            FontSize="11"
+            FontWeight="SemiBold"
+            Opacity="0.8"
+            Text="Çıkış Aralığı (Eğri Sonrası)"
+            ToolTip.Tip="Eğriden çıkan R/G/B/L değerlerinin tamamını bu aralıkla sınırlar. Örn: ekran asla %5 altına inmesin → min=5." />
+        <Grid ColumnDefinitions="Auto,60,16,Auto,60" RowDefinitions="Auto">
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.6" Text="Min" Margin="0,0,6,0" />
+            <TextBox
+                Grid.Column="1"
+                Text="{Binding OutputMin, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center" Opacity="0.4" Text="—" HorizontalAlignment="Center" />
+            <TextBlock Grid.Column="3" VerticalAlignment="Center" Opacity="0.6" Text="Max" Margin="0,0,6,0" />
+            <TextBox
+                Grid.Column="4"
+                Text="{Binding OutputMax, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                Theme="{DynamicResource CompactTextBox}" />
+        </Grid>
+
+        <!--  Şimdi Oku  -->
+        <Button
+            Margin="0,8,0,0"
+            HorizontalAlignment="Right"
+            Command="{Binding ReadNowCommand}"
+            Content="Şimdi Oku"
+            Theme="{DynamicResource MaterialOutlinedButton}"
+            ToolTip.Tip="Zamanlayıcıyı beklemeden sensörden hemen veri çeker. Toggle kapalı olsa bile çalışır; port geçici açılıp kapatılır." />
 
     </StackPanel>
 </UserControl>
