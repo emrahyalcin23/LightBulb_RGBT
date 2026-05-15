@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>AI Ayarları — Sinir Ağı</title>
+<style>
+:root {
+  --bg: #080c18;
+  --card: #0e1628;
+  --border: rgba(255,255,255,0.08);
+  --text: #c8d8f0;
+  --accent: #3b82f6;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  min-height: 100vh;
+}
+body {
+  padding: 20px 16px 40px;
+}
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.card-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #3a5a88;
+  margin-bottom: 12px;
+}
+h1 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6b7280;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.active { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+input[type="number"], input[type="text"] {
+  background: #131c2f;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+input[type="number"]:focus, input[type="text"]:focus {
+  border-color: var(--accent);
+}
+button {
+  background: #1a2d4d;
+  border: 1px solid rgba(59,130,246,0.4);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+button:hover { background: #1e3a60; border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+button.primary:hover { background: #2563eb; }
+button.danger {
+  background: #3d1414;
+  border-color: rgba(239,68,68,0.4);
+  color: #fca5a5;
+}
+button.danger:hover { background: #5a1d1d; }
+
+#map-svg {
+  width: 100%;
+  height: 200px;
+  display: block;
+  border-radius: 6px;
+  cursor: crosshair;
+  border: 1px solid var(--border);
+}
+.map-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.map-inputs label { color: #7a9cc4; font-size: 12px; }
+.map-inputs input { width: 90px; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.col-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #3a5a88;
+  margin-bottom: 8px;
+}
+table.inputs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+table.inputs-table td {
+  padding: 2px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+table.inputs-table td:first-child { color: #7a9cc4; font-family: monospace; }
+table.inputs-table td:last-child {
+  text-align: right;
+  font-family: monospace;
+  color: #a0c4e8;
+}
+.outputs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.outputs-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.outputs-table .lbl { color: #7a9cc4; width: 28px; }
+.outputs-table .nn-val { font-family: monospace; font-weight: 700; width: 60px; text-align: right; }
+.outputs-table .cv-val { font-family: monospace; color: #8aa8cc; width: 60px; text-align: right; }
+.outputs-table .diff-val { font-family: monospace; font-size: 11px; width: 70px; text-align: right; }
+.diff-pos { color: #4ade80; }
+.diff-neg { color: #f87171; }
+.diff-zero { color: #6b7280; }
+
+.waypoint-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.badge {
+  background: #1a2d4d;
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.add-wp-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.add-wp-row label { color: #7a9cc4; font-size: 12px; }
+.ambient-panel {
+  background: #101e30;
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  display: none;
+}
+.ambient-panel.visible { display: block; }
+.ambient-panel .panel-msg {
+  color: #93c5fd;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.rgbl-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.rgbl-inputs label { font-size: 12px; color: #7a9cc4; }
+.rgbl-inputs input { width: 70px; }
+.panel-btns { display: flex; gap: 6px; }
+.manual-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.manual-row label { color: #7a9cc4; font-size: 12px; }
+.manual-row input { width: 70px; }
+.wp-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.wp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #101e30;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: monospace;
+}
+.wp-item .wp-text { color: #a0c4e8; }
+.wp-item button {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.wp-item button:hover { color: #fca5a5; }
+.train-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.train-status {
+  font-size: 12px;
+  color: #4ade80;
+  font-family: monospace;
+}
+.mode-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.mode-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.model-status-line {
+  font-size: 12px;
+  color: #7a9cc4;
+  margin-bottom: 10px;
+  font-family: monospace;
+}
+.model-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+</style>
+</head>
+<body>
+<script src="nn-engine.js"></script>
+<div class="page">
+
+  <div class="card">
+    <h1>🤖 AI Ayarları — Sinir Ağı Modeli (11→16→4) <span class="status-dot" id="status-dot"></span></h1>
+  </div>
+
+  <div class="card" id="section-location">
+    <div class="card-title">Konum</div>
+    <svg id="map-svg" viewBox="0 0 360 180" preserveAspectRatio="xMidYMid meet">
+      <rect width="360" height="180" fill="#0d1b2a"/>
+      <g id="grid-lines"></g>
+      <path d="M 12 19 L 41 21 L 85 20 L 115 22 L 128 43 L 115 52 L 98 65 L 90 75 L 75 80 L 65 68 L 60 52 L 56 41 L 40 32 Z" fill="#1e4d2b"/>
+      <path d="M 100 8 L 120 5 L 128 18 L 115 22 L 100 18 Z" fill="#1e4d2b"/>
+      <path d="M 100 78 L 118 78 L 145 95 L 146 145 L 116 145 L 98 100 Z" fill="#1e4d2b"/>
+      <path d="M 170 46 L 172 54 L 205 50 L 218 36 L 212 28 L 198 28 L 193 38 Z" fill="#1e4d2b"/>
+      <path d="M 162 52 L 232 52 L 232 80 L 218 125 L 196 125 L 162 78 Z" fill="#1e4d2b"/>
+      <path d="M 196 46 L 204 54 L 212 54 L 220 66 L 240 88 L 280 98 L 360 90 L 360 15 L 300 10 L 240 12 L 210 22 L 198 28 L 196 38 Z" fill="#1e4d2b"/>
+      <path d="M 294 112 L 334 112 L 340 128 L 334 134 L 308 138 L 294 128 Z" fill="#1e4d2b"/>
+      <path d="M 0 164 L 360 164 L 360 180 L 0 180 Z" fill="#c8d0d8"/>
+      <g id="pin-group">
+        <line id="pin-hline" x1="0" y1="0" x2="0" y2="0" stroke="#ef4444" stroke-width="0.8"/>
+        <line id="pin-vline" x1="0" y1="0" x2="0" y2="0" stroke="#ef4444" stroke-width="0.8"/>
+        <circle id="pin-dot" cx="0" cy="0" r="4" fill="#ef4444" stroke="#fff" stroke-width="1"/>
+      </g>
+    </svg>
+    <div class="map-inputs">
+      <label>Enlem</label>
+      <input type="number" id="inp-lat" min="-90" max="90" step="0.1" value="41.0">
+      <label>Boylam</label>
+      <input type="number" id="inp-lon" min="-180" max="180" step="0.1" value="29.0">
+      <button id="btn-save-loc">Konumu Kaydet</button>
+    </div>
+  </div>
+
+  <div class="card" id="section-status">
+    <div class="card-title">Gerçek Zamanlı Durum</div>
+    <div class="two-col">
+      <div>
+        <div class="col-title">Girdiler (11)</div>
+        <table class="inputs-table" id="inputs-table">
+          <tr><td>lat_n</td><td id="iv0">—</td></tr>
+          <tr><td>sin_lon</td><td id="iv1">—</td></tr>
+          <tr><td>cos_lon</td><td id="iv2">—</td></tr>
+          <tr><td>sin_doy</td><td id="iv3">—</td></tr>
+          <tr><td>cos_doy</td><td id="iv4">—</td></tr>
+          <tr><td>sin_h</td><td id="iv5">—</td></tr>
+          <tr><td>cos_h</td><td id="iv6">—</td></tr>
+          <tr><td>procR%</td><td id="iv7">—</td></tr>
+          <tr><td>procG%</td><td id="iv8">—</td></tr>
+          <tr><td>procB%</td><td id="iv9">—</td></tr>
+          <tr><td>ambient%</td><td id="iv10">—</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="col-title">Çıktılar</div>
+        <table class="outputs-table" id="outputs-table">
+          <thead>
+            <tr>
+              <td class="lbl"></td>
+              <td style="color:#3a5a88;font-size:10px;text-align:right">NN</td>
+              <td style="color:#3a5a88;font-size:10px;text-align:right">Eğri</td>
+              <td style="color:#3a5a88;font-size:10px;text-align:right">Fark</td>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="lbl" style="color:#f87171">R</td>
+              <td class="nn-val" id="ov-nn-R" style="color:#f87171">—</td>
+              <td class="cv-val" id="ov-cv-R">—</td>
+              <td class="diff-val" id="ov-df-R">—</td>
+            </tr>
+            <tr>
+              <td class="lbl" style="color:#4ade80">G</td>
+              <td class="nn-val" id="ov-nn-G" style="color:#4ade80">—</td>
+              <td class="cv-val" id="ov-cv-G">—</td>
+              <td class="diff-val" id="ov-df-G">—</td>
+            </tr>
+            <tr>
+              <td class="lbl" style="color:#60a5fa">B</td>
+              <td class="nn-val" id="ov-nn-B" style="color:#60a5fa">—</td>
+              <td class="cv-val" id="ov-cv-B">—</td>
+              <td class="diff-val" id="ov-df-B">—</td>
+            </tr>
+            <tr>
+              <td class="lbl" style="color:#e2e8f0">L</td>
+              <td class="nn-val" id="ov-nn-L" style="color:#e2e8f0">—</td>
+              <td class="cv-val" id="ov-cv-L">—</td>
+              <td class="diff-val" id="ov-df-L">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="section-waypoints">
+    <div class="waypoint-header">
+      <div class="card-title" style="margin-bottom:0">Eğitim Noktaları</div>
+      <span class="badge" id="wp-count-badge">0/2 nokta</span>
+    </div>
+
+    <div class="add-wp-row">
+      <label>Hedef Ambient %:</label>
+      <input type="number" id="inp-target-ambient" min="0" max="100" step="1" value="50" style="width:80px">
+      <button id="btn-add-wp">＋ Ekle</button>
+      <button id="btn-manual-mode" style="margin-left:8px">El ile Gir</button>
+    </div>
+
+    <div class="ambient-panel" id="ambient-panel">
+      <div class="panel-msg" id="ambient-panel-msg">Ambient algılanıyor…</div>
+      <div class="rgbl-inputs">
+        <label>R:</label><input type="number" id="cap-R" min="0" max="100" step="0.1" value="50">
+        <label>G:</label><input type="number" id="cap-G" min="0" max="100" step="0.1" value="50">
+        <label>B:</label><input type="number" id="cap-B" min="0" max="100" step="0.1" value="50">
+        <label>L:</label><input type="number" id="cap-L" min="0" max="100" step="0.1" value="50">
+      </div>
+      <div class="panel-btns">
+        <button class="primary" id="btn-cap-save">✓ Kaydet</button>
+        <button id="btn-cap-cancel">✕ İptal</button>
+      </div>
+    </div>
+
+    <div class="ambient-panel" id="manual-panel">
+      <div class="panel-msg">El ile giriş — tüm değerleri doldurun:</div>
+      <div class="manual-row">
+        <label>Ambient %:</label><input type="number" id="man-ambient" min="0" max="100" step="0.1" value="50">
+        <label>R:</label><input type="number" id="man-R" min="0" max="100" step="0.1" value="50">
+        <label>G:</label><input type="number" id="man-G" min="0" max="100" step="0.1" value="50">
+        <label>B:</label><input type="number" id="man-B" min="0" max="100" step="0.1" value="50">
+        <label>L:</label><input type="number" id="man-L" min="0" max="100" step="0.1" value="50">
+      </div>
+      <div class="panel-btns" style="margin-top:8px">
+        <button class="primary" id="btn-man-save">✓ Kaydet</button>
+        <button id="btn-man-cancel">✕ İptal</button>
+      </div>
+    </div>
+
+    <div class="wp-list" id="wp-list"></div>
+
+    <div class="train-row">
+      <button class="primary" id="btn-train" disabled>⚡ Eğitimi Başlat</button>
+      <span class="train-status" id="train-status"></span>
+    </div>
+  </div>
+
+  <div class="card" id="section-model">
+    <div class="card-title">Model &amp; Mod</div>
+    <div class="mode-row">
+      <label><input type="radio" name="nn-mode" id="radio-curve" value="curve"> RGBL Eğri</label>
+      <label><input type="radio" name="nn-mode" id="radio-nn" value="nn"> Sinir Ağı</label>
+    </div>
+    <div class="model-status-line" id="model-status-line">nn_model.json: Yüklü Değil</div>
+    <div class="model-btns">
+      <button id="btn-export">⬇ Dışa Aktar</button>
+      <button id="btn-import">⬆ İçe Aktar</button>
+      <input type="file" id="file-import" accept=".json" style="display:none">
+      <button class="danger" id="btn-reset">🗑 Modeli Sıfırla</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+
+  let _lat = 41.0;
+  let _lon = 29.0;
+  let _lastState = null;
+  let _waypoints = [];
+  let _watchingTarget = null;
+  let _captureAmbientTarget = null;
+  let _manualMode = false;
+  let _modelLoaded = false;
+
+  window._nn = new NeuralNetwork();
+
+  function getDoy() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const diff = now - start;
+    return Math.floor(diff / 86400000);
+  }
+
+  function getHour() {
+    const now = new Date();
+    return now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+  }
+
+  function buildGridLines() {
+    const g = document.getElementById('grid-lines');
+    for (let lon = 0; lon <= 360; lon += 30) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', lon); line.setAttribute('y1', 0);
+      line.setAttribute('x2', lon); line.setAttribute('y2', 180);
+      line.setAttribute('stroke', '#1a2d40'); line.setAttribute('stroke-width', '0.5');
+      g.appendChild(line);
+    }
+    for (let lat = 0; lat <= 180; lat += 30) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', 0); line.setAttribute('y1', lat);
+      line.setAttribute('x2', 360); line.setAttribute('y2', lat);
+      line.setAttribute('stroke', '#1a2d40'); line.setAttribute('stroke-width', '0.5');
+      g.appendChild(line);
+    }
+  }
+
+  function updatePin(lat, lon) {
+    const svgEl = document.getElementById('map-svg');
+    const vbW = 360, vbH = 180;
+    const x = ((lon + 180) / 360) * vbW;
+    const y = ((90 - lat) / 180) * vbH;
+    const r = 6;
+    document.getElementById('pin-dot').setAttribute('cx', x);
+    document.getElementById('pin-dot').setAttribute('cy', y);
+    document.getElementById('pin-hline').setAttribute('x1', x - r);
+    document.getElementById('pin-hline').setAttribute('y1', y);
+    document.getElementById('pin-hline').setAttribute('x2', x + r);
+    document.getElementById('pin-hline').setAttribute('y2', y);
+    document.getElementById('pin-vline').setAttribute('x1', x);
+    document.getElementById('pin-vline').setAttribute('y1', y - r);
+    document.getElementById('pin-vline').setAttribute('x2', x);
+    document.getElementById('pin-vline').setAttribute('y2', y + r);
+  }
+
+  function mapClick(e) {
+    const svg = document.getElementById('map-svg');
+    const rect = svg.getBoundingClientRect();
+    const scaleX = 360 / rect.width;
+    const scaleY = 180 / rect.height;
+    const px = (e.clientX - rect.left) * scaleX;
+    const py = (e.clientY - rect.top) * scaleY;
+    _lat = Math.round((90 - (py / 180) * 180) * 10) / 10;
+    _lon = Math.round(((px / 360) * 360 - 180) * 10) / 10;
+    _lat = Math.max(-90, Math.min(90, _lat));
+    _lon = Math.max(-180, Math.min(180, _lon));
+    document.getElementById('inp-lat').value = _lat;
+    document.getElementById('inp-lon').value = _lon;
+    updatePin(_lat, _lon);
+  }
+
+  function setupMapDrag() {
+    const svg = document.getElementById('map-svg');
+    let dragging = false;
+    svg.addEventListener('mousedown', e => { dragging = true; mapClick(e); });
+    svg.addEventListener('mousemove', e => { if (dragging) mapClick(e); });
+    svg.addEventListener('mouseup', () => { dragging = false; });
+    svg.addEventListener('mouseleave', () => { dragging = false; });
+    svg.addEventListener('click', mapClick);
+  }
+
+  document.getElementById('inp-lat').addEventListener('change', function() {
+    _lat = parseFloat(this.value) || 0;
+    updatePin(_lat, _lon);
+  });
+  document.getElementById('inp-lon').addEventListener('change', function() {
+    _lon = parseFloat(this.value) || 0;
+    updatePin(_lat, _lon);
+  });
+
+  document.getElementById('btn-save-loc').addEventListener('click', function() {
+    fetch('/nn-location', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lat: _lat, lon: _lon})
+    }).catch(() => {});
+  });
+
+  function fmt(v, d) {
+    return (typeof v === 'number') ? v.toFixed(d ?? 2) : '—';
+  }
+
+  function updateInputsTable(enc) {
+    const labels = ['iv0','iv1','iv2','iv3','iv4','iv5','iv6','iv7','iv8','iv9','iv10'];
+    for (let i = 0; i < 11; i++) {
+      document.getElementById(labels[i]).textContent = fmt(enc[i], 4);
+    }
+  }
+
+  function updateOutputsTable(state, enc) {
+    const chLabels = ['R','G','B','L'];
+    const nnVals = _modelLoaded
+      ? window._nn.forward(Array.from(enc))
+      : null;
+    const curveVals = [
+      state.curveR ?? null,
+      state.curveG ?? null,
+      state.curveB ?? null,
+      state.curveL ?? null
+    ];
+    const nnApiVals = [state.nnR ?? null, state.nnG ?? null, state.nnB ?? null, state.nnL ?? null];
+
+    chLabels.forEach((ch, i) => {
+      const nnEl = document.getElementById('ov-nn-' + ch);
+      const cvEl = document.getElementById('ov-cv-' + ch);
+      const dfEl = document.getElementById('ov-df-' + ch);
+
+      const nnV = nnVals ? nnVals[i] : (nnApiVals[i] !== null ? nnApiVals[i] : null);
+      const cvV = curveVals[i];
+
+      nnEl.textContent = nnV !== null ? fmt(nnV, 1) : '—';
+      cvEl.textContent = cvV !== null ? fmt(cvV, 1) : '—';
+
+      if (nnV !== null && cvV !== null) {
+        const diff = nnV - cvV;
+        dfEl.textContent = (diff >= 0 ? '+' : '') + fmt(diff, 1);
+        dfEl.className = 'diff-val ' + (Math.abs(diff) < 0.1 ? 'diff-zero' : diff > 0 ? 'diff-pos' : 'diff-neg');
+      } else {
+        dfEl.textContent = '—';
+        dfEl.className = 'diff-val diff-zero';
+      }
+    });
+  }
+
+  function poll() {
+    fetch('/nn-state')
+      .then(r => r.json())
+      .then(state => {
+        _lastState = state;
+
+        const dot = document.getElementById('status-dot');
+        dot.className = 'status-dot' + (state.nnModeActive ? ' active' : '');
+
+        const doy = getDoy();
+        const hour = getHour();
+        const enc = encodeInputs({
+          lat: _lat,
+          lon: _lon,
+          doy,
+          hour,
+          procR: state.procR ?? 0,
+          procG: state.procG ?? 0,
+          procB: state.procB ?? 0,
+          ambientPct: state.ambientPct ?? 0
+        });
+
+        updateInputsTable(enc);
+        updateOutputsTable(state, enc);
+
+        if (document.getElementById('radio-nn').checked !== state.nnModeActive) {
+          if (state.nnModeActive) {
+            document.getElementById('radio-nn').checked = true;
+          } else {
+            document.getElementById('radio-curve').checked = true;
+          }
+        }
+
+        if (_watchingTarget !== null) {
+          const diff = Math.abs((state.ambientPct ?? 0) - _watchingTarget);
+          if (diff <= 3) {
+            showCapturePanel(state);
+          }
+        }
+      })
+      .catch(() => {});
+  }
+
+  function showCapturePanel(state) {
+    _captureAmbientTarget = _watchingTarget;
+    _watchingTarget = null;
+    const panel = document.getElementById('ambient-panel');
+    document.getElementById('ambient-panel-msg').textContent =
+      'Ambient ' + fmt(state.ambientPct, 1) + '% algılandı! İstediğiniz RGBL değerlerini girin:';
+    document.getElementById('cap-R').value = fmt(state.curveR ?? 50, 1);
+    document.getElementById('cap-G').value = fmt(state.curveG ?? 50, 1);
+    document.getElementById('cap-B').value = fmt(state.curveB ?? 50, 1);
+    document.getElementById('cap-L').value = fmt(state.curveL ?? 50, 1);
+    panel.classList.add('visible');
+  }
+
+  document.getElementById('btn-add-wp').addEventListener('click', function() {
+    const target = parseFloat(document.getElementById('inp-target-ambient').value);
+    if (isNaN(target)) return;
+    _watchingTarget = target;
+    const panel = document.getElementById('ambient-panel');
+    document.getElementById('ambient-panel-msg').textContent =
+      'Ambient ' + target + '% bekleniyor…';
+    panel.classList.add('visible');
+  });
+
+  document.getElementById('btn-cap-save').addEventListener('click', function() {
+    if (_captureAmbientTarget === null && _lastState) {
+      _captureAmbientTarget = _lastState.ambientPct ?? 0;
+    }
+    const ambPct = _captureAmbientTarget ?? parseFloat(document.getElementById('inp-target-ambient').value) ?? 50;
+    const r = parseFloat(document.getElementById('cap-R').value);
+    const g = parseFloat(document.getElementById('cap-G').value);
+    const b = parseFloat(document.getElementById('cap-B').value);
+    const l = parseFloat(document.getElementById('cap-L').value);
+    addWaypoint(ambPct, r, g, b, l);
+    document.getElementById('ambient-panel').classList.remove('visible');
+    _captureAmbientTarget = null;
+    _watchingTarget = null;
+  });
+
+  document.getElementById('btn-cap-cancel').addEventListener('click', function() {
+    document.getElementById('ambient-panel').classList.remove('visible');
+    _captureAmbientTarget = null;
+    _watchingTarget = null;
+  });
+
+  document.getElementById('btn-manual-mode').addEventListener('click', function() {
+    const panel = document.getElementById('manual-panel');
+    if (panel.classList.contains('visible')) {
+      panel.classList.remove('visible');
+    } else {
+      if (_lastState) {
+        document.getElementById('man-ambient').value = fmt(_lastState.ambientPct ?? 50, 1);
+        document.getElementById('man-R').value = fmt(_lastState.curveR ?? 50, 1);
+        document.getElementById('man-G').value = fmt(_lastState.curveG ?? 50, 1);
+        document.getElementById('man-B').value = fmt(_lastState.curveB ?? 50, 1);
+        document.getElementById('man-L').value = fmt(_lastState.curveL ?? 50, 1);
+      }
+      panel.classList.add('visible');
+    }
+  });
+
+  document.getElementById('btn-man-save').addEventListener('click', function() {
+    const ambPct = parseFloat(document.getElementById('man-ambient').value);
+    const r = parseFloat(document.getElementById('man-R').value);
+    const g = parseFloat(document.getElementById('man-G').value);
+    const b = parseFloat(document.getElementById('man-B').value);
+    const l = parseFloat(document.getElementById('man-L').value);
+    if (!isNaN(ambPct) && !isNaN(r) && !isNaN(g) && !isNaN(b) && !isNaN(l)) {
+      addWaypoint(ambPct, r, g, b, l);
+      document.getElementById('manual-panel').classList.remove('visible');
+    }
+  });
+
+  document.getElementById('btn-man-cancel').addEventListener('click', function() {
+    document.getElementById('manual-panel').classList.remove('visible');
+  });
+
+  function addWaypoint(ambPct, r, g, b, l) {
+    const doy = getDoy();
+    const hour = getHour();
+    const inputs = Array.from(encodeInputs({
+      lat: _lat, lon: _lon, doy, hour,
+      procR: _lastState ? (_lastState.procR ?? 0) : 0,
+      procG: _lastState ? (_lastState.procG ?? 0) : 0,
+      procB: _lastState ? (_lastState.procB ?? 0) : 0,
+      ambientPct
+    }));
+    _waypoints.push({ambPct, r, g, b, l, inputs});
+    renderWaypoints();
+  }
+
+  function renderWaypoints() {
+    const list = document.getElementById('wp-list');
+    list.innerHTML = '';
+    _waypoints.forEach((wp, idx) => {
+      const item = document.createElement('div');
+      item.className = 'wp-item';
+      item.innerHTML =
+        '<span class="wp-text">Ambient: ' + fmt(wp.ambPct, 1) +
+        '%  →  R:' + fmt(wp.r, 1) +
+        '  G:' + fmt(wp.g, 1) +
+        '  B:' + fmt(wp.b, 1) +
+        '  L:' + fmt(wp.l, 1) + '</span>' +
+        '<button data-idx="' + idx + '">✕</button>';
+      list.appendChild(item);
+    });
+    list.querySelectorAll('button[data-idx]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const i = parseInt(this.getAttribute('data-idx'));
+        _waypoints.splice(i, 1);
+        renderWaypoints();
+      });
+    });
+    const n = _waypoints.length;
+    document.getElementById('wp-count-badge').textContent = n + '/2 nokta';
+    document.getElementById('btn-train').disabled = n < 2;
+  }
+
+  document.getElementById('btn-train').addEventListener('click', function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Eğitiliyor…';
+    document.getElementById('train-status').textContent = '';
+
+    const samples = _waypoints.map(wp => ({
+      inputs: wp.inputs,
+      targets: [wp.r, wp.g, wp.b, wp.l]
+    }));
+
+    setTimeout(function() {
+      try {
+        const loss = window._nn.train(samples, {epochs: 8000, lr: 0.01, lambda: 0.001});
+        _modelLoaded = true;
+        updateModelStatus(true);
+        document.getElementById('train-status').textContent =
+          'Eğitim tamamlandı — Loss: ' + loss.toFixed(4);
+        saveModel();
+      } catch(e) {
+        document.getElementById('train-status').textContent = 'Hata: ' + e.message;
+      }
+      btn.disabled = _waypoints.length < 2;
+      btn.textContent = '⚡ Eğitimi Başlat';
+    }, 20);
+  });
+
+  function saveModel() {
+    const json = JSON.stringify(window._nn.toJSON());
+    fetch('/nn-save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: json
+    }).catch(() => {});
+  }
+
+  function updateModelStatus(loaded) {
+    _modelLoaded = loaded;
+    document.getElementById('model-status-line').textContent =
+      'nn_model.json: ' + (loaded ? 'Yüklü' : 'Yüklü Değil');
+  }
+
+  document.querySelectorAll('input[name="nn-mode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      fetch('/nn-mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({active: this.value === 'nn'})
+      }).catch(() => {});
+    });
+  });
+
+  document.getElementById('btn-export').addEventListener('click', function() {
+    if (!_modelLoaded) return;
+    const json = JSON.stringify(window._nn.toJSON(), null, 2);
+    const blob = new Blob([json], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'nn_model.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  document.getElementById('btn-import').addEventListener('click', function() {
+    document.getElementById('file-import').click();
+  });
+
+  document.getElementById('file-import').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        const arch = data.arch;
+        if (!arch || arch[0] !== 11 || arch[1] !== 16 || arch[2] !== 4) {
+          alert('Geçersiz model: beklenen mimari [11,16,4]');
+          return;
+        }
+        window._nn = new NeuralNetwork();
+        window._nn.fromJSON(data);
+        _modelLoaded = true;
+        updateModelStatus(true);
+        saveModel();
+      } catch(ex) {
+        alert('JSON ayrıştırma hatası: ' + ex.message);
+      }
+    };
+    reader.readAsText(file);
+    this.value = '';
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', function() {
+    if (!confirm('Model sıfırlansın mı? Bu işlem geri alınamaz.')) return;
+    window._nn = new NeuralNetwork();
+    _modelLoaded = false;
+    updateModelStatus(false);
+    saveModel();
+  });
+
+  function init() {
+    buildGridLines();
+    updatePin(_lat, _lon);
+    setupMapDrag();
+
+    fetch('/nn-model')
+      .then(r => {
+        if (!r.ok) throw new Error('no model');
+        return r.json();
+      })
+      .then(data => {
+        const arch = data.arch;
+        if (!arch || arch[0] !== 11 || arch[1] !== 16 || arch[2] !== 4) return;
+        window._nn = new NeuralNetwork();
+        window._nn.fromJSON(data);
+        _modelLoaded = true;
+        updateModelStatus(true);
+      })
+      .catch(() => {
+        updateModelStatus(false);
+      });
+
+    fetch('/nn-state')
+      .then(r => r.json())
+      .then(state => {
+        if (typeof state.lat === 'number' && typeof state.lon === 'number') {
+          _lat = state.lat;
+          _lon = state.lon;
+          document.getElementById('inp-lat').value = _lat;
+          document.getElementById('inp-lon').value = _lon;
+          updatePin(_lat, _lon);
+        }
+        if (state.nnModeActive) {
+          document.getElementById('radio-nn').checked = true;
+        } else {
+          document.getElementById('radio-curve').checked = true;
+        }
+      })
+      .catch(() => {
+        document.getElementById('radio-curve').checked = true;
+      });
+
+    poll();
+    setInterval(poll, 2000);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>

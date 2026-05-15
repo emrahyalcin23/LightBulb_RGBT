@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LightBulb.Models;
@@ -40,6 +41,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     // RGBL curve evaluator loaded from rgbl_calibration.json.
     // Null when no path is configured or the file cannot be parsed.
     private RgblCurveEvaluator? _rgblEvaluator;
+
+    // Neural network evaluator loaded from nn_model.json.
+    private NnModelEvaluator? _nnEvaluator;
+
+    // Last proc values from sensor — used by NN input builder and /nn-state endpoint.
+    private double _lastProcR, _lastProcG, _lastProcB;
 
     // Last ambient percentage fed into the RGBL curves as X-input (0-100).
     // Stored so ReloadRgblEvaluator can immediately re-evaluate new curves.
@@ -250,6 +257,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         WriteDefaultCalibrationIfMissing();
         // Load calibration immediately (regardless of whether the sensor is enabled).
         ReloadRgblEvaluator();
+        // Load NN model if present.
+        LoadNnEvaluator();
         // HTTP calibration server starts with the app; runs for the app's lifetime.
         StartCalibrationHttpServer();
     }
@@ -372,6 +381,81 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 : $"✗ Bulunamadı — {fileName}";
             Dispatcher.UIThread.Post(() => RgblLoadStatus = status);
         }
+    }
+
+    /// <summary>Loads the NN model from nn_model.json in the application base directory.</summary>
+    public void LoadNnEvaluator()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "nn_model.json");
+        _nnEvaluator = NnModelEvaluator.Load(path);
+    }
+
+    /// <summary>
+    /// Builds the 11-element input vector for the NN, matching encodeInputs() in nn-engine.js.
+    /// Order: lat_n, sin_lon, cos_lon, sin_doy, cos_doy, sin_h, cos_h, pR, pG, pB, ambient.
+    /// </summary>
+    private double[] BuildNnInputs(double procR, double procG, double procB, double ambientPct)
+    {
+        var now  = DateTime.Now;
+        var doy  = now.DayOfYear;
+        var hour = now.Hour + now.Minute / 60.0 + now.Second / 3600.0;
+        var lat  = _settingsService.GeoLatitude;
+        var lon  = _settingsService.GeoLongitude;
+        const double Pi2 = 2.0 * Math.PI;
+
+        return
+        [
+            lat  / 90.0,
+            Math.Sin(Pi2 * lon  / 360.0),
+            Math.Cos(Pi2 * lon  / 360.0),
+            Math.Sin(Pi2 * doy  / 365.0),
+            Math.Cos(Pi2 * doy  / 365.0),
+            Math.Sin(Pi2 * hour / 24.0),
+            Math.Cos(Pi2 * hour / 24.0),
+            procR      / 100.0,
+            procG      / 100.0,
+            procB      / 100.0,
+            ambientPct / 100.0,
+        ];
+    }
+
+    /// <summary>Returns the current NN state as a JSON string for the /nn-state endpoint.</summary>
+    private string GetNnStateJson()
+    {
+        var now  = DateTime.Now;
+        var doy  = now.DayOfYear;
+        var hour = now.Hour + now.Minute / 60.0 + now.Second / 3600.0;
+        var lat  = _settingsService.GeoLatitude;
+        var lon  = _settingsService.GeoLongitude;
+
+        double nnR = 0, nnG = 0, nnB = 0, nnL = 0;
+        var hasModel = _nnEvaluator is not null;
+        if (hasModel)
+        {
+            var inp = BuildNnInputs(_lastProcR, _lastProcG, _lastProcB, _lastAmbientPct);
+            (nnR, nnG, nnB, nnL) = _nnEvaluator!.Predict(inp);
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $@"{{
+  ""lat"": {lat:F4},
+  ""lon"": {lon:F4},
+  ""doy"": {doy},
+  ""hour"": {hour:F4},
+  ""procR"": {_lastProcR:F2},
+  ""procG"": {_lastProcG:F2},
+  ""procB"": {_lastProcB:F2},
+  ""ambientPct"": {_lastAmbientPct:F2},
+  ""nnModeActive"": {(_settingsService.IsNnModeActive ? "true" : "false")},
+  ""hasNnModel"": {(hasModel ? "true" : "false")},
+  ""nnR"": {nnR:F2},
+  ""nnG"": {nnG:F2},
+  ""nnB"": {nnB:F2},
+  ""nnL"": {nnL:F2},
+  ""curveR"": {LatestRawCurveR:F2},
+  ""curveG"": {LatestRawCurveG:F2},
+  ""curveB"": {LatestRawCurveB:F2},
+  ""curveL"": {LatestRawCurveL:F2}
+}}");
     }
 
     /// <summary>
@@ -534,6 +618,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         Stop();
         ReloadRgblEvaluator();
+        LoadNnEvaluator();
 
         if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName))
             return; // No port configured yet — wait for auto-detect
@@ -1356,6 +1441,28 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             }
         }
 
+        // Track last proc values for NN state endpoint and input builder.
+        _lastProcR = dr.ProcR;
+        _lastProcG = dr.ProcG;
+        _lastProcB = dr.ProcB;
+
+        // NN evaluation — overrides curve output when NN mode is active.
+        if (_settingsService.IsNnModeActive && _nnEvaluator is not null)
+        {
+            var nnInputs = BuildNnInputs(dr.ProcR, dr.ProcG, dr.ProcB, ambientPct);
+            var (nnR, nnG, nnB, nnL) = _nnEvaluator.Predict(nnInputs);
+            var outMinNn = _settingsService.UsbOutputMin;
+            var outMaxNn = _settingsService.UsbOutputMax;
+            if (outMaxNn > outMinNn)
+            {
+                nnR = outMinNn + (nnR / 100.0) * (outMaxNn - outMinNn);
+                nnG = outMinNn + (nnG / 100.0) * (outMaxNn - outMinNn);
+                nnB = outMinNn + (nnB / 100.0) * (outMaxNn - outMinNn);
+                nnL = outMinNn + (nnL / 100.0) * (outMaxNn - outMinNn);
+            }
+            rgblR = nnR; rgblG = nnG; rgblB = nnB; rgblL = nnL;
+        }
+
         var rawText = string.Create(
             CultureInfo.InvariantCulture,
             $"R:{dr.RawR}  G:{dr.RawG}  B:{dr.RawB}  C:{dr.RawC}  Amb:{ambientPct:F1}%  pR:{dr.ProcR:F1}  pG:{dr.ProcG:F1}  pB:{dr.ProcB:F1}"
@@ -1647,6 +1754,125 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
 
         var urlPath = req.Url?.AbsolutePath ?? "/";
+
+        // ── GET /nn-state ─────────────────────────────────────────────────────
+        if (req.HttpMethod == "GET" && urlPath == "/nn-state")
+        {
+            var body = System.Text.Encoding.UTF8.GetBytes(GetNnStateJson());
+            resp.ContentType     = "application/json; charset=utf-8";
+            resp.ContentLength64 = body.Length;
+            await resp.OutputStream.WriteAsync(body, ct);
+            resp.Close();
+            return;
+        }
+
+        // ── GET /nn-model ─────────────────────────────────────────────────────
+        if (req.HttpMethod == "GET" && urlPath == "/nn-model")
+        {
+            var modelPath = Path.Combine(AppContext.BaseDirectory, "nn_model.json");
+            if (File.Exists(modelPath))
+            {
+                var bytes = await File.ReadAllBytesAsync(modelPath, ct);
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = bytes.Length;
+                await resp.OutputStream.WriteAsync(bytes, ct);
+            }
+            else
+            {
+                resp.StatusCode = 404;
+            }
+            resp.Close();
+            return;
+        }
+
+        // ── POST /nn-save ─────────────────────────────────────────────────────
+        if (req.HttpMethod == "POST" && urlPath == "/nn-save")
+        {
+            try
+            {
+                using var sr  = new StreamReader(req.InputStream, req.ContentEncoding);
+                var json      = await sr.ReadToEndAsync();
+                var dest      = Path.Combine(AppContext.BaseDirectory, "nn_model.json");
+                await File.WriteAllTextAsync(dest, json, ct);
+                LoadNnEvaluator();
+                var ok = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = ok.Length;
+                await resp.OutputStream.WriteAsync(ok, ct);
+            }
+            catch (Exception ex)
+            {
+                resp.StatusCode = 500;
+                var msg = ex.Message.Replace("\"", "'");
+                var err = System.Text.Encoding.UTF8.GetBytes($"{{\"ok\":false,\"error\":\"{msg}\"}}");
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = err.Length;
+                await resp.OutputStream.WriteAsync(err, ct);
+            }
+            finally { resp.Close(); }
+            return;
+        }
+
+        // ── POST /nn-mode ─────────────────────────────────────────────────────
+        if (req.HttpMethod == "POST" && urlPath == "/nn-mode")
+        {
+            try
+            {
+                using var sr = new StreamReader(req.InputStream, req.ContentEncoding);
+                var json     = await sr.ReadToEndAsync();
+                var doc      = JsonDocument.Parse(json);
+                var active   = doc.RootElement.GetProperty("active").GetBoolean();
+                Dispatcher.UIThread.Post(() => _settingsService.IsNnModeActive = active);
+                var ok = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = ok.Length;
+                await resp.OutputStream.WriteAsync(ok, ct);
+            }
+            catch (Exception ex)
+            {
+                resp.StatusCode = 500;
+                var msg = ex.Message.Replace("\"", "'");
+                var err = System.Text.Encoding.UTF8.GetBytes($"{{\"ok\":false,\"error\":\"{msg}\"}}");
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = err.Length;
+                await resp.OutputStream.WriteAsync(err, ct);
+            }
+            finally { resp.Close(); }
+            return;
+        }
+
+        // ── POST /nn-location ─────────────────────────────────────────────────
+        if (req.HttpMethod == "POST" && urlPath == "/nn-location")
+        {
+            try
+            {
+                using var sr = new StreamReader(req.InputStream, req.ContentEncoding);
+                var json     = await sr.ReadToEndAsync();
+                var doc      = JsonDocument.Parse(json);
+                var lat      = doc.RootElement.GetProperty("lat").GetDouble();
+                var lon      = doc.RootElement.GetProperty("lon").GetDouble();
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _settingsService.GeoLatitude  = Math.Clamp(lat, -90,   90);
+                    _settingsService.GeoLongitude = Math.Clamp(lon, -180, 180);
+                });
+                var ok = System.Text.Encoding.UTF8.GetBytes("{\"ok\":true}");
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = ok.Length;
+                await resp.OutputStream.WriteAsync(ok, ct);
+            }
+            catch (Exception ex)
+            {
+                resp.StatusCode = 500;
+                var msg = ex.Message.Replace("\"", "'");
+                var err = System.Text.Encoding.UTF8.GetBytes($"{{\"ok\":false,\"error\":\"{msg}\"}}");
+                resp.ContentType     = "application/json; charset=utf-8";
+                resp.ContentLength64 = err.Length;
+                await resp.OutputStream.WriteAsync(err, ct);
+            }
+            finally { resp.Close(); }
+            return;
+        }
 
         // ── POST /rgbl-save ───────────────────────────────────────────────────
         if (req.HttpMethod == "POST" && urlPath == "/rgbl-save")

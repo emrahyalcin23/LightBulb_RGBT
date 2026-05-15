@@ -112,6 +112,15 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
                 : new Uri(Path.Combine(AppContext.BaseDirectory, "RGBL_curve_editor.html")).AbsoluteUri;
             Process.StartShellExecute(uri);
         });
+
+        OpenAiSettingsCommand = new RelayCommand(() =>
+        {
+            var port = _usbSensorService.CalibrationServerPort;
+            var uri  = port > 0
+                ? $"http://127.0.0.1:{port}/ai-settings.html"
+                : new Uri(Path.Combine(AppContext.BaseDirectory, "ai-settings.html")).AbsoluteUri;
+            Process.StartShellExecute(uri);
+        });
     }
 
     private async Task TestConnectionAsync()
@@ -578,6 +587,20 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     // ── RGBL Profile Editor ───────────────────────────────────────────────────
 
     public IRelayCommand OpenCalibrationWindowCommand { get; }
+
+    // ── Neural Network Mode ───────────────────────────────────────────────────
+
+    public bool IsNnModeActive
+    {
+        get => SettingsService.IsNnModeActive;
+        set
+        {
+            SettingsService.IsNnModeActive = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public IRelayCommand OpenAiSettingsCommand { get; }
 
     protected override void Dispose(bool disposing)
     {

@@ -60,6 +60,20 @@ public partial class SettingsService
     [JsonPropertyName("RgblCalibrationJsonPath")]
     public partial string RgblCalibrationJsonPath { get; set; } = string.Empty;
 
+    // Neural network output mode
+    [ObservableProperty]
+    [JsonPropertyName("IsNnModeActive")]
+    public partial bool IsNnModeActive { get; set; } = false;
+
+    // Geographic location for NN inputs
+    [ObservableProperty]
+    [JsonPropertyName("GeoLatitude")]
+    public partial double GeoLatitude { get; set; } = 41.0;
+
+    [ObservableProperty]
+    [JsonPropertyName("GeoLongitude")]
+    public partial double GeoLongitude { get; set; } = 29.0;
+
 }
 
 // SerializerContext is owned entirely here so that all [JsonSerializable] attributes
