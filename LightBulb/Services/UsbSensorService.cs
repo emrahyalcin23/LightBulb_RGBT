@@ -390,6 +390,17 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _nnEvaluator = NnModelEvaluator.Load(path);
     }
 
+    /// <summary>Returns the 11-element encoded NN input vector for the current sensor state.</summary>
+    public double[] GetCurrentNnInputs()
+        => BuildNnInputs(_lastProcR, _lastProcG, _lastProcB, _lastAmbientPct);
+
+    /// <summary>Returns (R, G, B, L) prediction from the loaded model, or null if no model is loaded.</summary>
+    public (double R, double G, double B, double L)? GetCurrentNnPrediction()
+    {
+        if (_nnEvaluator is null) return null;
+        return _nnEvaluator.Predict(GetCurrentNnInputs());
+    }
+
     /// <summary>
     /// Builds the 11-element input vector for the NN, matching encodeInputs() in nn-engine.js.
     /// Order: lat_n, sin_lon, cos_lon, sin_doy, cos_doy, sin_h, cos_h, pR, pG, pB, ambient.

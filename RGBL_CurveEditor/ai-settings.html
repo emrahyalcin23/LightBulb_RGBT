@@ -1,8 +1,23 @@
 <!DOCTYPE html>
+<!-- PASIF: Bu sayfa artık kullanılmıyor. AI ayarları uygulama içi pencere olarak açılır. -->
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
 <title>AI Ayarları — Sinir Ağı</title>
+<style>
+#passive-banner {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(8,12,24,0.93);
+  display: flex; align-items: center; justify-content: center;
+}
+#passive-banner div {
+  max-width: 420px; padding: 32px 28px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: #0e1628; text-align: center; color: #c8d8f0;
+}
+#passive-banner h2 { font-size: 18px; margin-bottom: 12px; }
+#passive-banner p  { font-size: 13px; opacity: 0.75; line-height: 1.6; }
+</style>
 <style>
 :root {
   --bg: #080c18;
@@ -279,6 +294,13 @@ table.inputs-table td:last-child {
 </style>
 </head>
 <body>
+<div id="passive-banner">
+  <div>
+    <h2>🤖 Bu sayfa artık kullanılmıyor</h2>
+    <p>AI ayarları artık doğrudan uygulama içinde açılmaktadır.<br>
+    Ayarlar sekmesindeki <strong>"AI Ayarları"</strong> butonuna basın.</p>
+  </div>
+</div>
 <script src="nn-engine.js"></script>
 <div class="page">
 

@@ -1,0 +1,296 @@
+<Window
+    x:Class="LightBulb.Views.Dialogs.AiSettingsWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:components="clr-namespace:LightBulb.Views.Components"
+    xmlns:converters="clr-namespace:LightBulb.Converters"
+    xmlns:dialogs="clr-namespace:LightBulb.ViewModels.Dialogs"
+    x:DataType="dialogs:AiSettingsViewModel"
+    Title="AI Ayarları — Sinir Ağı"
+    Width="520"
+    MinWidth="420"
+    SizeToContent="Height"
+    MaxHeight="820"
+    CanResize="True"
+    WindowStartupLocation="CenterOwner"
+    Background="{DynamicResource MaterialCardBackgroundBrush}">
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16" Orientation="Vertical" Spacing="0">
+
+            <!--  Header + mode toggle  -->
+            <DockPanel Margin="0,0,0,16" LastChildFill="False">
+                <TextBlock
+                    DockPanel.Dock="Left"
+                    VerticalAlignment="Center"
+                    FontSize="17"
+                    FontWeight="Light"
+                    Text="🤖  Sinir Ağı Ayarları" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock VerticalAlignment="Center" Opacity="0.7" Text="NN Modu" />
+                    <ToggleSwitch IsChecked="{Binding IsNnModeActive}" OffContent="" OnContent="" />
+                </StackPanel>
+            </DockPanel>
+
+            <!--  ══════════  KONUM  ══════════  -->
+            <Border
+                Margin="0,0,0,12"
+                Padding="12"
+                Background="{DynamicResource MaterialCardBackgroundBrush}"
+                BorderBrush="{DynamicResource MaterialDividerBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Orientation="Vertical" Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Konum" />
+                    <TextBlock
+                        FontSize="11"
+                        Opacity="0.6"
+                        Text="Haritaya tıkla veya değerleri manuel gir. Konum, NN girdisindeki gün/saat döngülerini etkiler." />
+
+                    <!--  World map  -->
+                    <Border
+                        BorderBrush="{DynamicResource MaterialDividerBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <components:WorldMapPickerControl
+                            Height="160"
+                            Cursor="Hand"
+                            Latitude="{Binding Latitude}"
+                            Longitude="{Binding Longitude}" />
+                    </Border>
+
+                    <!--  Numeric inputs  -->
+                    <Grid ColumnDefinitions="Auto,80,24,Auto,80">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Enlem (lat)" Margin="0,0,8,0" />
+                        <TextBox
+                            Grid.Column="1"
+                            Text="{Binding Latitude, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                            Theme="{DynamicResource CompactTextBox}"
+                            ToolTip.Tip="-90 … +90" />
+                        <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="Boylam (lon)" Margin="0,0,8,0" />
+                        <TextBox
+                            Grid.Column="4"
+                            Text="{Binding Longitude, Converter={x:Static converters:DoubleToStringConverter.Instance}, UpdateSourceTrigger=LostFocus}"
+                            Theme="{DynamicResource CompactTextBox}"
+                            ToolTip.Tip="-180 … +180" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!--  ══════════  CANLI DURUM  ══════════  -->
+            <Border
+                Margin="0,0,0,12"
+                Padding="12"
+                Background="{DynamicResource MaterialCardBackgroundBrush}"
+                BorderBrush="{DynamicResource MaterialDividerBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Orientation="Vertical" Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Anlık Durum" />
+
+                    <!--  11 inputs  -->
+                    <TextBlock
+                        FontSize="10"
+                        Opacity="0.55"
+                        Text="Girdiler (11)" />
+                    <SelectableTextBlock
+                        FontFamily="Monospace"
+                        FontSize="10"
+                        Text="{Binding InputsText}"
+                        TextWrapping="Wrap" />
+
+                    <Separator Opacity="0.3" />
+
+                    <!--  4 outputs  -->
+                    <TextBlock
+                        FontSize="10"
+                        Opacity="0.55"
+                        Text="NN Çıktıları (R / G / B / L)" />
+                    <SelectableTextBlock
+                        FontFamily="Monospace"
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Text="{Binding OutputsText}" />
+                </StackPanel>
+            </Border>
+
+            <!--  ══════════  WAYPOINTS  ══════════  -->
+            <Border
+                Margin="0,0,0,12"
+                Padding="12"
+                Background="{DynamicResource MaterialCardBackgroundBrush}"
+                BorderBrush="{DynamicResource MaterialDividerBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Orientation="Vertical" Spacing="8">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold" Text="Eğitim Noktaları" />
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                            <Button
+                                Command="{Binding ClearWaypointsCommand}"
+                                Content="Temizle"
+                                FontSize="11"
+                                Padding="8,3"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Tüm waypoint'leri sil" />
+                            <Button
+                                Command="{Binding AddWaypointCommand}"
+                                Content="+ Şimdi Kaydet"
+                                FontSize="11"
+                                Padding="8,3"
+                                Theme="{DynamicResource MaterialOutlinedButton}"
+                                ToolTip.Tip="Şu anki sensör + RGBL çıktısını eğitim noktası olarak ekle" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <TextBlock
+                        FontSize="11"
+                        Opacity="0.6"
+                        TextWrapping="Wrap"
+                        Text="Her nokta, o andaki sensör okuması (procR/G/B, ambient) + konum + zaman → mevcut RGBL çıktısı eşleşmesini kaydeder." />
+
+                    <!--  Waypoint list  -->
+                    <Border
+                        IsVisible="{Binding HasWaypoints}"
+                        MaxHeight="160"
+                        Padding="4"
+                        Background="{DynamicResource MaterialCardBackgroundBrush}"
+                        BorderBrush="{DynamicResource MaterialDividerBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Waypoints}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="dialogs:WaypointEntryViewModel">
+                                        <DockPanel Margin="0,2" LastChildFill="False">
+                                            <Button
+                                                DockPanel.Dock="Right"
+                                                Padding="4,2"
+                                                Command="{Binding RemoveCommand}"
+                                                Content="✕"
+                                                FontSize="10"
+                                                Theme="{DynamicResource MaterialFlatButton}" />
+                                            <TextBlock
+                                                DockPanel.Dock="Left"
+                                                VerticalAlignment="Center"
+                                                FontFamily="Monospace"
+                                                FontSize="10"
+                                                Text="{Binding Label}" />
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <TextBlock
+                        FontSize="11"
+                        Opacity="0.5"
+                        Text="{Binding WaypointCount, StringFormat='Toplam: {0} nokta  (min 2 gerekli)'}" />
+                </StackPanel>
+            </Border>
+
+            <!--  ══════════  EĞİTİM  ══════════  -->
+            <Border
+                Margin="0,0,0,12"
+                Padding="12"
+                Background="{DynamicResource MaterialCardBackgroundBrush}"
+                BorderBrush="{DynamicResource MaterialDividerBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Orientation="Vertical" Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Eğitim" />
+
+                    <Grid ColumnDefinitions="Auto,*,60,24,Auto,*,80" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Epoch" Margin="0,0,8,0" />
+                        <Slider
+                            Grid.Column="1"
+                            Minimum="100"
+                            Maximum="5000"
+                            SmallChange="100"
+                            LargeChange="500"
+                            IsSnapToTickEnabled="True"
+                            TickFrequency="100"
+                            Value="{Binding TrainingEpochs}"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontFamily="Monospace"
+                            FontWeight="SemiBold"
+                            HorizontalAlignment="Right"
+                            Margin="4,0,0,0"
+                            Text="{Binding TrainingEpochs, StringFormat=\{0:F0\}}" />
+
+                        <TextBlock Grid.Column="4" VerticalAlignment="Center" Text="LR" Margin="16,0,8,0" />
+                        <Slider
+                            Grid.Column="5"
+                            Minimum="0.0001"
+                            Maximum="0.01"
+                            SmallChange="0.0001"
+                            LargeChange="0.001"
+                            Value="{Binding LearningRate}"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Grid.Column="6"
+                            VerticalAlignment="Center"
+                            FontFamily="Monospace"
+                            FontWeight="SemiBold"
+                            HorizontalAlignment="Right"
+                            Margin="4,0,0,0"
+                            Text="{Binding LearningRate, StringFormat=\{0:F4\}}" />
+                    </Grid>
+
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding TrainCommand}"
+                        Content="⚡  Eğit"
+                        Theme="{DynamicResource MaterialOutlinedButton}"
+                        ToolTip.Tip="Adam optimizer ile sinir ağını eğit ve modeli kaydet. Minimum 2 waypoint gerekli." />
+
+                    <TextBlock
+                        FontFamily="Monospace"
+                        FontSize="11"
+                        Opacity="0.8"
+                        Text="{Binding TrainingStatus}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!--  ══════════  MODEL  ══════════  -->
+            <Border
+                Margin="0,0,0,8"
+                Padding="12"
+                Background="{DynamicResource MaterialCardBackgroundBrush}"
+                BorderBrush="{DynamicResource MaterialDividerBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Orientation="Vertical" Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Model" />
+
+                    <DockPanel LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Opacity="0.6" Text="Durum" />
+                        <TextBlock
+                            DockPanel.Dock="Right"
+                            FontFamily="Monospace"
+                            Text="{Binding NnModelStatusText}" />
+                    </DockPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button
+                            Command="{Binding ImportModelCommand}"
+                            Content="⬆  İçe Aktar"
+                            Theme="{DynamicResource MaterialOutlinedButton}"
+                            ToolTip.Tip="nn_model.json dosyasını içe aktar (mevcut modelin üzerine yazar)" />
+                        <Button
+                            Command="{Binding ExportModelCommand}"
+                            Content="⬇  Dışa Aktar"
+                            Theme="{DynamicResource MaterialOutlinedButton}"
+                            ToolTip.Tip="Mevcut modeli JSON dosyası olarak dışa aktar" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</Window>

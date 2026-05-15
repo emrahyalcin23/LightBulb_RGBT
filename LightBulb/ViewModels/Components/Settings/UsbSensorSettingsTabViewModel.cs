@@ -9,6 +9,8 @@ using LightBulb.Localization;
 using LightBulb.Services;
 using LightBulb.Utils;
 using LightBulb.Utils.Extensions;
+using LightBulb.ViewModels.Dialogs;
+using LightBulb.Views.Dialogs;
 
 namespace LightBulb.ViewModels.Components.Settings;
 
@@ -115,11 +117,9 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
         OpenAiSettingsCommand = new RelayCommand(() =>
         {
-            var port = _usbSensorService.CalibrationServerPort;
-            var uri  = port > 0
-                ? $"http://127.0.0.1:{port}/ai-settings.html"
-                : new Uri(Path.Combine(AppContext.BaseDirectory, "ai-settings.html")).AbsoluteUri;
-            Process.StartShellExecute(uri);
+            var vm  = new AiSettingsViewModel(_settingsService, _usbSensorService);
+            var win = new AiSettingsWindow { DataContext = vm };
+            win.Show();
         });
     }
 
