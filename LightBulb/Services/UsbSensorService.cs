@@ -637,7 +637,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             // Blocking serial I/O on background thread — intentional.
             PerformRead();
 
-            if (!_isDisposed)
+            // Only reschedule if the port is still open; if Stop() was called while this
+            // callback was running the port will be null/closed, so we let the chain end.
+            if (!_isDisposed && IsPortOpen)
                 ScheduleNextRead();
         });
     }
@@ -830,7 +832,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// </summary>
     public void RescheduleRead()
     {
-        if (IsPortOpen)
+        // Use IsPortOpen as the primary guard. Also check for a pending registration so
+        // that a brief IsPortOpen==false transient (e.g. during Start/Stop) does not
+        // silently drop the interval change while a timer chain is still active.
+        if (IsPortOpen || _readTimerRegistration is not null)
             ScheduleNextRead();
     }
 
