@@ -169,6 +169,10 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         {
             sb.Append($"✓ Sensör bulundu → {result.FoundPort} portuna geçildi");
             OnPropertyChanged(nameof(PortName));
+            // Port bulundu; toggle açıksa zamanlayıcı zincirini başlat.
+            // Start() daha önce port adı yokken çağrılmış ve timer kurulmamış olabilir.
+            if (SettingsService.IsUsbSensorEnabled)
+                _usbSensorService.Start();
         }
         else
         {
