@@ -1753,7 +1753,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 /// <summary>
 /// Parsed representation of a firmware output line.
 /// Proc values are firmware-normalised 0-100 floats (always present).
-/// Raw values are uint16 sensor counts; zero when the compact (type=1) format is used.
+/// Raw values are sensor counts parsed as float (firmware may send decimals); zero when the compact (type=1) format is used.
 /// </summary>
 internal readonly record struct DualReading(
     float RawR,
