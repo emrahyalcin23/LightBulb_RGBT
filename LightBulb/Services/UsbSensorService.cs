@@ -52,10 +52,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     // PiColor firmware identity handshake
     private const string KimsinCommand = "KIMSIN";
-    // Firmware now replies to KIMSIN with a semicolon-delimited line that embeds
+    // New firmware replies to KIMSIN with a semicolon-delimited line that embeds
     // "IDENTITY=PICOM_<version>" (e.g. "1685106;4;0;0;0;0;IDENTITY=PICOM_V1").
-    // We match on the prefix so any firmware version is accepted.
+    // Old firmware replies with the bare string "BENIM_OZEL_PICOM_V1".
+    // Both are accepted for backward compatibility.
     private const string PicoIdentityPrefix = "IDENTITY=PICOM_";
+    private const string PicoIdentityLegacy = "BENIM_OZEL_PICOM_V1";
 
     // OKU_0 = single instantaneous reading (interval=0 means no periodic streaming)
     private const string InstantReadCommand = "OKU_0";
@@ -652,6 +654,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// </summary>
     private static bool IsKnownFirmware(string response) =>
         response.Contains(PicoIdentityPrefix, StringComparison.OrdinalIgnoreCase) ||
+        response.Contains(PicoIdentityLegacy, StringComparison.OrdinalIgnoreCase) ||
         (response.Contains("OKU", StringComparison.OrdinalIgnoreCase) &&
          response.Contains("RAW", StringComparison.OrdinalIgnoreCase)) ||
         TryParseDualLine(response, out _); // firmware responds to any command with sensor data
@@ -1104,7 +1107,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             if (!IsKnownFirmware(identity))
             {
                 var badResult = new ConnectionTestResult(portName, baud, KimsinCommand, false, identity,
-                    $"Kimlik doğrulanamadı — beklenen: '...{PicoIdentityPrefix}...' veya firmware yardım mesajı, gelen: '{identity}'");
+                    $"Kimlik doğrulanamadı — beklenen: '{PicoIdentityLegacy}' veya '...{PicoIdentityPrefix}...', gelen: '{identity}'");
                 Dispatcher.UIThread.Post(() =>
                 {
                     IsConnected = false;
