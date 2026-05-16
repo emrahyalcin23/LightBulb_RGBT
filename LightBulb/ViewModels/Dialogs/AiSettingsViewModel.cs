@@ -186,8 +186,9 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
             Clamp(_sensor.LatestRawCurveL),
         };
 
+        var now = DateTime.Now;
         var label = string.Create(CultureInfo.InvariantCulture,
-            $"{DateTime.Now:HH:mm:ss}  " +
+            $"{now:HH:mm:ss}  DOY={now.DayOfYear}  " +
             $"R={targets[0]:F0}% G={targets[1]:F0}% B={targets[2]:F0}% L={targets[3]:F0}%  " +
             $"amb={inputs[10]*100:F0}%");
 
@@ -223,6 +224,40 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         {
             using var ms  = new MemoryStream();
             using var w   = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true });
+            w.WriteStartObject();
+
+            w.WriteString("version", "V1.0");
+
+            // Schema: her girdi ve hedef elemanının ne anlama geldiği
+            w.WritePropertyName("schema");
+            w.WriteStartObject();
+
+            w.WritePropertyName("inputs");
+            w.WriteStartArray();
+            WriteSchemaField(w, 0,  "lat_n",    "Coğrafi enlem (latitude / 90), aralık [0, 1]");
+            WriteSchemaField(w, 1,  "sin_lon",  "Boylam sinüsü sin(lon × 2π / 360), aralık [-1, 1]");
+            WriteSchemaField(w, 2,  "cos_lon",  "Boylam kosinüsü cos(lon × 2π / 360), aralık [-1, 1]");
+            WriteSchemaField(w, 3,  "sin_doy",  "Yıl günü sinüsü sin(DOY × 2π / 365), aralık [-1, 1]; mevsimsel döngü");
+            WriteSchemaField(w, 4,  "cos_doy",  "Yıl günü kosinüsü cos(DOY × 2π / 365), aralık [-1, 1]; mevsimsel döngü");
+            WriteSchemaField(w, 5,  "sin_hour", "Saat sinüsü sin(saat × 2π / 24), aralık [-1, 1]; günlük döngü");
+            WriteSchemaField(w, 6,  "cos_hour", "Saat kosinüsü cos(saat × 2π / 24), aralık [-1, 1]; günlük döngü");
+            WriteSchemaField(w, 7,  "procR",    "Sensör kırmızı kanal (procR / 100), aralık [0, 1]");
+            WriteSchemaField(w, 8,  "procG",    "Sensör yeşil kanal (procG / 100), aralık [0, 1]");
+            WriteSchemaField(w, 9,  "procB",    "Sensör mavi kanal (procB / 100), aralık [0, 1]");
+            WriteSchemaField(w, 10, "ambient",  "Ortam ışığı (ambientPct / 100), aralık [0, 1]");
+            w.WriteEndArray();
+
+            w.WritePropertyName("targets");
+            w.WriteStartArray();
+            WriteSchemaField(w, 0, "R", "Kırmızı kanal çıkış değeri, aralık [0, 100]");
+            WriteSchemaField(w, 1, "G", "Yeşil kanal çıkış değeri, aralık [0, 100]");
+            WriteSchemaField(w, 2, "B", "Mavi kanal çıkış değeri, aralık [0, 100]");
+            WriteSchemaField(w, 3, "L", "Parlaklık (luminance) çıkış değeri, aralık [0, 100]");
+            w.WriteEndArray();
+
+            w.WriteEndObject(); // schema
+
+            w.WritePropertyName("waypoints");
             w.WriteStartArray();
             foreach (var wp in Waypoints)
             {
@@ -230,15 +265,17 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
                 w.WriteString("label", wp.Label);
                 w.WritePropertyName("inputs");
                 w.WriteStartArray();
-                foreach (var v in wp.Inputs) w.WriteNumberValue(v);
+                foreach (var v in wp.Inputs)  w.WriteNumberValue(Math.Round(v, 4));
                 w.WriteEndArray();
                 w.WritePropertyName("targets");
                 w.WriteStartArray();
-                foreach (var v in wp.Targets) w.WriteNumberValue(v);
+                foreach (var v in wp.Targets) w.WriteNumberValue(Math.Round(v, 1));
                 w.WriteEndArray();
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+
+            w.WriteEndObject(); // root
             w.Flush();
             await File.WriteAllBytesAsync(file, ms.ToArray());
             TrainingStatus = $"Waypoints dışa aktarıldı ({Waypoints.Count} nokta).";
@@ -256,7 +293,12 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
             var bytes = await File.ReadAllBytesAsync(path);
             using var doc = JsonDocument.Parse(bytes);
             int added = 0;
-            foreach (var el in doc.RootElement.EnumerateArray())
+            // V1.0+: { "version":..., "schema":..., "waypoints":[...] }
+            // Eski format: direkt dizi [...]
+            var waypointsEl = doc.RootElement.ValueKind == JsonValueKind.Object
+                ? doc.RootElement.GetProperty("waypoints")
+                : doc.RootElement;
+            foreach (var el in waypointsEl.EnumerateArray())
             {
                 var label   = el.GetProperty("label").GetString() ?? "?";
                 var inArr   = el.GetProperty("inputs");
@@ -394,6 +436,17 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
             FileTypeChoices   = [new FilePickerFileType("JSON") { Patterns = ["*.json"] }],
         });
         return file?.Path.LocalPath;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static void WriteSchemaField(Utf8JsonWriter w, int index, string name, string description)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("index", index);
+        w.WriteString("name", name);
+        w.WriteString("description", description);
+        w.WriteEndObject();
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
