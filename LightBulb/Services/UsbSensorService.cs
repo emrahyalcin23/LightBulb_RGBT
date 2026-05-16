@@ -74,7 +74,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     private SerialPort? _port;
     private IDisposable? _readTimerRegistration;
+    private IDisposable? _watchdogRegistration;
     private bool _isDisposed;
+    // True while a session is open (after successful KIMSIN, before user-initiated Stop()).
+    // Used to distinguish user-stop from unexpected disconnection.
+    private volatile bool _sessionActive;
     // Serialises all blocking port I/O so PerformRead and RunTest never race.
     private readonly System.Threading.SemaphoreSlim _portLock = new(1, 1);
 
@@ -749,19 +753,108 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         if (initOk)
         {
-            // Session is now open — mark connected and start OKU timer.
+            // Session is now open — mark connected, start watchdog and OKU timer.
+            _sessionActive = true;
             Dispatcher.UIThread.Post(() =>
             {
                 IsConnected   = true;
                 LastReadError = "";
             });
+            StartConnectionWatchdog();
             ScheduleNextRead(delay: TimeSpan.Zero);
         }
+    }
+
+    // ── Connection watchdog ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Starts a 3-second periodic check that verifies the COM port is still present
+    /// in the system. Detects USB disconnection without waiting for the next OKU cycle.
+    /// </summary>
+    private void StartConnectionWatchdog()
+    {
+        _watchdogRegistration?.Dispose();
+        _watchdogRegistration = Timer.QueueDelayedAction(TimeSpan.FromSeconds(3), WatchdogTick);
+    }
+
+    private void StopConnectionWatchdog()
+    {
+        _watchdogRegistration?.Dispose();
+        _watchdogRegistration = null;
+    }
+
+    /// <summary>
+    /// Checks every 3 s whether the configured COM port still exists in the OS port list.
+    /// When a USB device is physically disconnected Windows removes its COM port from
+    /// HARDWARE\DEVICEMAP\SERIALCOMM almost immediately, so this gives near-real-time
+    /// detection independent of the OKU read interval.
+    /// </summary>
+    private void WatchdogTick()
+    {
+        if (_isDisposed || !_sessionActive) return;
+
+        var portName = _settingsService.UsbPortName;
+        bool portGone;
+        try
+        {
+            portGone = !SerialPort.GetPortNames()
+                .Contains(portName, StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            portGone = false; // Cannot determine — assume still present
+        }
+
+        if (portGone)
+        {
+            ReportUnexpectedDisconnect("Bağlantı hatası — USB cihazı bağlantısı kesildi, oturum sonlandırıldı");
+            return;
+        }
+
+        // Port still present — reschedule.
+        if (!_isDisposed && _sessionActive)
+            _watchdogRegistration = Timer.QueueDelayedAction(TimeSpan.FromSeconds(3), WatchdogTick);
+    }
+
+    /// <summary>
+    /// Terminates the active session with an error. Safe to call from any thread.
+    /// Idempotent — only the first call has effect (guarded by _sessionActive).
+    /// </summary>
+    private void ReportUnexpectedDisconnect(string errorMessage)
+    {
+        if (!_sessionActive) return;
+        _sessionActive = false;
+
+        StopConnectionWatchdog();
+        _readTimerRegistration?.Dispose();
+        _readTimerRegistration = null;
+
+        // Close port best-effort; PerformRead may concurrently hold _portLock.
+        // Closing the port while a read is in progress will cause an IOException
+        // inside PerformRead, which is caught and handled safely.
+        if (_port is not null)
+        {
+            try { if (_port.IsOpen) _port.Close(); } catch { }
+            try { _port.Dispose(); } catch { }
+            _port = null;
+        }
+
+        var msg = errorMessage;
+        Dispatcher.UIThread.Post(() =>
+        {
+            LastReadError        = msg;
+            IsConnected          = false;
+            HasReceivedValidData = false;
+            GammaApplyBlocked    = false;
+        });
     }
 
     /// <summary>Stops the periodic reads and closes the serial port.</summary>
     public void Stop()
     {
+        _sessionActive = false;  // Mark as user-initiated — watchdog/PerformRead must not report error
+        _watchdogRegistration?.Dispose();
+        _watchdogRegistration = null;
         _readTimerRegistration?.Dispose();
         _readTimerRegistration = null;
 
@@ -914,7 +1007,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private void PerformRead()
     {
         if (_port is not { IsOpen: true })
+        {
+            // Port closed unexpectedly (not by user Stop()) — report as error.
+            ReportUnexpectedDisconnect("Bağlantı hatası — USB port beklenmedik şekilde kapandı, oturum sonlandırıldı");
             return;
+        }
 
         string? rawResponse = null;
         var cmd = "—";
@@ -929,7 +1026,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
             // Empty response means ReadByte() timed out inside ReadResponseLine without
             // receiving any data — the device did not reply within the timeout window.
-            // This is the primary signal for a dropped USB connection.
+            // This is indistinguishable from physical USB disconnection.
             if (string.IsNullOrEmpty(rawResponse))
             {
                 sessionError = "Bağlantı hatası — sensör yanıt vermedi, oturum sonlandırıldı";
@@ -956,22 +1053,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
 
         if (sessionError is not null)
-        {
-            // User did not initiate this stop — terminate session with error.
-            _readTimerRegistration?.Dispose();
-            _readTimerRegistration = null;
-
-            var errorMsg = sessionError;
-            var snap     = rawResponse;
-            Dispatcher.UIThread.Post(() =>
-            {
-                LastRawResponse      = snap ?? "(yanıt yok)";
-                LastReadError        = errorMsg;
-                IsConnected          = false;
-                HasReceivedValidData = false;
-                GammaApplyBlocked    = false;
-            });
-        }
+            ReportUnexpectedDisconnect(sessionError);
     }
 
     /// <summary>
@@ -2120,6 +2202,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             return;
 
         _isDisposed = true;
+        StopConnectionWatchdog();
         Stop();
         StopCalibrationHttpServer();
         _portLock.Dispose();
