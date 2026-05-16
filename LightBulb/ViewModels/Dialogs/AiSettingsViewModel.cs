@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Platform.Storage;
@@ -223,7 +224,7 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         try
         {
             using var ms  = new MemoryStream();
-            using var w   = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true });
+            using var w   = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             w.WriteStartObject();
 
             w.WriteString("version", "V1.0");
