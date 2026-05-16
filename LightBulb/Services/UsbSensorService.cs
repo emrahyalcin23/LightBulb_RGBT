@@ -624,6 +624,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// Opens the serial port and starts periodic sensor reads.
     /// Safe to call multiple times — stops any previous session first.
     /// Also reloads the RGBL curve evaluator from the current settings path.
+    /// KIMSIN handshake + one-time init commands run on a background thread;
+    /// IsConnected becomes true only after a successful handshake.
     /// </summary>
     public void Start()
     {
@@ -643,24 +645,118 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 DtrEnable = true,  // Pico firmware ignores commands until DTR=HIGH
             };
             _port.Open();
-            if (Dispatcher.UIThread.CheckAccess())
-                IsConnected = true;
-            else
-                Dispatcher.UIThread.Post(() => IsConnected = true);
         }
         catch
         {
-            if (Dispatcher.UIThread.CheckAccess())
-                IsConnected = false;
-            else
-                Dispatcher.UIThread.Post(() => IsConnected = false);
+            Dispatcher.UIThread.Post(() => IsConnected = false);
             _port?.Dispose();
             _port = null;
             return;
         }
 
-        // Schedule first read immediately (background thread via Timer), then repeat.
-        ScheduleNextRead(delay: TimeSpan.Zero);
+        // KIMSIN handshake + one-time init commands run on a background thread.
+        // IsConnected is set to true only after successful handshake.
+        Task.Run(PerformSessionInit);
+    }
+
+    /// <summary>
+    /// Closes the port and nulls the reference while the caller already holds _portLock.
+    /// Must only be called from within a _portLock.Wait() / _portLock.Release() block.
+    /// </summary>
+    private void ClosePortInternal()
+    {
+        try { if (_port?.IsOpen == true) _port.Close(); } catch { }
+        _port?.Dispose();
+        _port = null;
+    }
+
+    /// <summary>
+    /// Runs on a background thread immediately after the port is opened by Start().
+    /// Performs the KIMSIN handshake, sends one-time session-start commands (BASAMAK_2,
+    /// Logaritmik_3), then kicks off the periodic OKU read timer.
+    /// On handshake failure the port is closed and an error is reported.
+    /// </summary>
+    private void PerformSessionInit()
+    {
+        if (_port is not { IsOpen: true }) return;
+
+        _portLock.Wait();
+        string? initError = null;
+        bool initOk = false;
+        try
+        {
+            // Brief settle: give firmware time to boot after DTR rising edge.
+            System.Threading.Thread.Sleep(500);
+            _port.DiscardInBuffer();
+
+            // KIMSIN handshake — up to 3 attempts.
+            string identity = "";
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                if (attempt > 0)
+                {
+                    System.Threading.Thread.Sleep(1000);
+                    if (_port is not { IsOpen: true }) break;
+                    _port.DiscardInBuffer();
+                }
+                if (_port is not { IsOpen: true }) break;
+                _port.WriteLine(KimsinCommand);
+                identity = ReadResponseLine(_port).Trim();
+                if (IsKnownFirmware(identity))
+                    break;
+            }
+
+            if (!IsKnownFirmware(identity))
+            {
+                initError = $"Kimlik doğrulanamadı — oturum başlatılamadı. Gelen: '{Escape(identity)}'";
+                ClosePortInternal();
+            }
+            else
+            {
+                // Send one-time session-start commands before the first OKU.
+                _port.WriteLine("BASAMAK_2");
+                System.Threading.Thread.Sleep(200);
+                if (_port is { IsOpen: true })
+                    _port.WriteLine("Logaritmik_3");
+                System.Threading.Thread.Sleep(200);
+                // Flush any responses from the init commands before OKU begins.
+                if (_port is { IsOpen: true })
+                    _port.DiscardInBuffer();
+
+                initOk = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            initError = $"Oturum başlatma hatası: {ex.Message}";
+            ClosePortInternal();
+        }
+        finally
+        {
+            _portLock.Release();
+        }
+
+        if (initError is not null)
+        {
+            var err = initError;
+            Dispatcher.UIThread.Post(() =>
+            {
+                LastReadError = err;
+                IsConnected   = false;
+            });
+            return;
+        }
+
+        if (initOk)
+        {
+            // Session is now open — mark connected and start OKU timer.
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected   = true;
+                LastReadError = "";
+            });
+            ScheduleNextRead(delay: TimeSpan.Zero);
+        }
     }
 
     /// <summary>Stops the periodic reads and closes the serial port.</summary>
@@ -822,6 +918,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
         string? rawResponse = null;
         var cmd = "—";
+        string? sessionError = null;
+
         _portLock.Wait();
         try
         {
@@ -832,28 +930,35 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         catch (TimeoutException)
         {
-            var snap = rawResponse;
-            Dispatcher.UIThread.Post(() =>
-            {
-                LastRawResponse = snap ?? "(yanıt yok)";
-                LastReadError   = "Zaman aşımı — sensör 2 sn içinde yanıt vermedi";
-                IsConnected     = false;
-            });
+            sessionError = "Bağlantı hatası — sensör yanıt vermedi, oturum sonlandırıldı";
+            ClosePortInternal();
         }
         catch (Exception ex)
         {
-            var snap = rawResponse;
-            var msg  = ex.Message;
-            Dispatcher.UIThread.Post(() =>
-            {
-                LastRawResponse = snap ?? "(yanıt yok)";
-                LastReadError   = $"Port hatası: {msg}";
-                IsConnected     = false;
-            });
+            sessionError = $"Bağlantı hatası: {ex.Message} — oturum sonlandırıldı";
+            ClosePortInternal();
         }
         finally
         {
             _portLock.Release();
+        }
+
+        if (sessionError is not null)
+        {
+            // User did not initiate this stop — terminate session with error.
+            _readTimerRegistration?.Dispose();
+            _readTimerRegistration = null;
+
+            var errorMsg = sessionError;
+            var snap     = rawResponse;
+            Dispatcher.UIThread.Post(() =>
+            {
+                LastRawResponse      = snap ?? "(yanıt yok)";
+                LastReadError        = errorMsg;
+                IsConnected          = false;
+                HasReceivedValidData = false;
+                GammaApplyBlocked    = false;
+            });
         }
     }
 
