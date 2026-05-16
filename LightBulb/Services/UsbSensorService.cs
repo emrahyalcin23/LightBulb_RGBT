@@ -926,7 +926,19 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             cmd = BuildReadCommand();
             _port.WriteLine(cmd);
             rawResponse = ReadResponseLine(_port).Trim();
-            ParseAndDispatch(rawResponse, cmd);
+
+            // Empty response means ReadByte() timed out inside ReadResponseLine without
+            // receiving any data — the device did not reply within the timeout window.
+            // This is the primary signal for a dropped USB connection.
+            if (string.IsNullOrEmpty(rawResponse))
+            {
+                sessionError = "Bağlantı hatası — sensör yanıt vermedi, oturum sonlandırıldı";
+                ClosePortInternal();
+            }
+            else
+            {
+                ParseAndDispatch(rawResponse, cmd);
+            }
         }
         catch (TimeoutException)
         {
