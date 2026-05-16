@@ -597,6 +597,19 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         {
             SettingsService.IsNnModeActive = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsRgblModeActive));
+        }
+    }
+
+    // Complement property so the AXAML RadioButton binding stays direct (no !x negation).
+    public bool IsRgblModeActive
+    {
+        get => !SettingsService.IsNnModeActive;
+        set
+        {
+            SettingsService.IsNnModeActive = !value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsNnModeActive));
         }
     }
 
