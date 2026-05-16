@@ -354,8 +354,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             var ambMin2 = _settingsService.UsbAmbientMinPct;
             var ambMax2 = _settingsService.UsbAmbientMaxPct;
-            var lastCurveInput = Math.Clamp(ambMin2 + (_lastAmbientPct / 100.0) * (ambMax2 - ambMin2), 0, 100);
-            var (r, g, b, l) = evaluator.Evaluate(lastCurveInput);
+            var lastCurveInputL = Math.Clamp(ambMin2 + (_lastAmbientPct / 100.0) * (ambMax2 - ambMin2), 0, 100);
+            var lastCurveInputR = Math.Clamp(ambMin2 + (_lastProcR     / 100.0) * (ambMax2 - ambMin2), 0, 100);
+            var lastCurveInputG = Math.Clamp(ambMin2 + (_lastProcG     / 100.0) * (ambMax2 - ambMin2), 0, 100);
+            var lastCurveInputB = Math.Clamp(ambMin2 + (_lastProcB     / 100.0) * (ambMax2 - ambMin2), 0, 100);
+            var (r, g, b, l) = evaluator.Evaluate(lastCurveInputR, lastCurveInputG, lastCurveInputB, lastCurveInputL);
             var outMin2 = _settingsService.UsbOutputMin;
             var outMax2 = _settingsService.UsbOutputMax;
             if (outMax2 > outMin2)
@@ -365,8 +368,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 b = outMin2 + (b / 100.0) * (outMax2 - outMin2);
                 l = outMin2 + (l / 100.0) * (outMax2 - outMin2);
             }
-            var (_, _, _, lMin)    = evaluator.Evaluate(0.0);
-            var (_, _, _, lMax)    = evaluator.Evaluate(100.0);
+            var (_, _, _, lMin) = evaluator.Evaluate(0.0,   0.0,   0.0,   0.0);
+            var (_, _, _, lMax) = evaluator.Evaluate(100.0, 100.0, 100.0, 100.0);
             Dispatcher.UIThread.Post(() =>
             {
                 RgblLoadStatus    = $"✓ Yüklü — {fileName}";
@@ -1627,17 +1630,21 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         }
         _lastAmbientPct = ambientPct;
 
-        // Pre-curve normalization: ambient [0,100] → curve input [ambMin, ambMax]
+        // Pre-curve normalization: [0,100] → [ambMin, ambMax]
+        // L channel uses CIE-Y luminance (ambientPct); RGB channels use their own sensor values.
         var ambMin = _settingsService.UsbAmbientMinPct;
         var ambMax = _settingsService.UsbAmbientMaxPct;
-        var curveInput = Math.Clamp(ambMin + (ambientPct / 100.0) * (ambMax - ambMin), 0, 100);
+        var curveInputL = Math.Clamp(ambMin + (ambientPct  / 100.0) * (ambMax - ambMin), 0, 100);
+        var curveInputR = Math.Clamp(ambMin + (dr.ProcR    / 100.0) * (ambMax - ambMin), 0, 100);
+        var curveInputG = Math.Clamp(ambMin + (dr.ProcG    / 100.0) * (ambMax - ambMin), 0, 100);
+        var curveInputB = Math.Clamp(ambMin + (dr.ProcB    / 100.0) * (ambMax - ambMin), 0, 100);
 
         // RGBL curve evaluation — only when a calibration JSON is loaded.
         double rgblR = LatestRgblR, rgblG = LatestRgblG, rgblB = LatestRgblB, rgblL = LatestRgblL;
         double rawCurveR = LatestRawCurveR, rawCurveG = LatestRawCurveG, rawCurveB = LatestRawCurveB, rawCurveL = LatestRawCurveL;
         if (_rgblEvaluator is not null)
         {
-            (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(curveInput);
+            (rgblR, rgblG, rgblB, rgblL) = _rgblEvaluator.Evaluate(curveInputR, curveInputG, curveInputB, curveInputL);
             rawCurveR = rgblR; rawCurveG = rgblG; rawCurveB = rgblB; rawCurveL = rgblL;
             // Post-curve normalization: [0, 100] → [outMin, outMax]
             var outMin = _settingsService.UsbOutputMin;
@@ -1698,7 +1705,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             LatestProcG      = dr.ProcG;
             LatestProcB      = dr.ProcB;
             LatestAmbientPct  = ambientPct;
-            LatestCurveInput  = curveInput;
+            LatestCurveInput  = curveInputL;
             LatestRawCurveR   = rawCurveR;
             LatestRawCurveG   = rawCurveG;
             LatestRawCurveB   = rawCurveB;

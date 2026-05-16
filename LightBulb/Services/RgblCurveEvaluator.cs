@@ -63,16 +63,19 @@ public sealed class RgblCurveEvaluator
     }
 
     /// <summary>
-    /// Evaluates the RGBL pipeline for the given ambient light percentage.
+    /// Evaluates the RGBL pipeline with per-channel independent X inputs.
+    /// ambR/G/B are the sensor channel values (0-100) used as X for the R/G/B curves.
+    /// ambL is the CIE-Y luminance value (0-100) used as X for the L curve.
     /// Returns (finalR, finalG, finalB, ltVal) each in the 0-100 range.
-    /// ltVal is the pre-computed LT brightness multiplier at this ambient level.
+    /// ltVal is the pre-computed LT brightness multiplier; max(R,G,B) == ltVal is guaranteed.
     /// </summary>
-    public (double R, double G, double B, double L) Evaluate(double ambientPct)
+    public (double R, double G, double B, double L) Evaluate(
+        double ambR, double ambG, double ambB, double ambL)
     {
-        var ltVal = SampleAtX(_l, ambientPct);   // L = pre-computed LT
-        var fR    = SampleAtX(_r, ambientPct);
-        var fG    = SampleAtX(_g, ambientPct);
-        var fB    = SampleAtX(_b, ambientPct);
+        var ltVal = SampleAtX(_l, ambL);
+        var fR    = SampleAtX(_r, ambR);
+        var fG    = SampleAtX(_g, ambG);
+        var fB    = SampleAtX(_b, ambB);
 
         if (!_isRatio)
         {
