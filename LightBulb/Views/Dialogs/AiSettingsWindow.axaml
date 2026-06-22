@@ -114,6 +114,139 @@
                 </StackPanel>
             </Border>
 
+            <!--  ══════════  GEÇİCİ ÖNİZLEME  ══════════  -->
+            <Border
+                Margin="0,0,0,12"
+                Padding="12"
+                Background="{DynamicResource MaterialCardBackgroundBrush}"
+                BorderBrush="{DynamicResource MaterialDividerBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Orientation="Vertical" Spacing="8">
+
+                    <DockPanel LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" FontWeight="SemiBold" Text="Geçici Önizleme" />
+                        <ToggleSwitch
+                            DockPanel.Dock="Right"
+                            IsChecked="{Binding IsPreviewActive}"
+                            IsEnabled="{Binding IsPreviewEnabled}"
+                            OffContent=""
+                            OnContent="" />
+                    </DockPanel>
+
+                    <TextBlock
+                        FontSize="11"
+                        Opacity="0.6"
+                        TextWrapping="Wrap"
+                        Text="Aktifken ekran gamma'sı slider değerlerinden uygulanır (eğri profili devre dışı). 'Şimdi Kaydet' bu değerleri waypoint hedefi olarak kullanır." />
+
+                    <!--  R  -->
+                    <Grid ColumnDefinitions="16,*,48">
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Foreground="#FF6060"
+                            Text="R" />
+                        <Slider
+                            Grid.Column="1"
+                            Margin="8,0"
+                            Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            LargeChange="5"
+                            Value="{Binding PreviewR}"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontFamily="Monospace"
+                            FontSize="11"
+                            HorizontalAlignment="Right"
+                            Text="{Binding PreviewR, StringFormat={}{0:F0}%}" />
+                    </Grid>
+
+                    <!--  G  -->
+                    <Grid ColumnDefinitions="16,*,48">
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Foreground="#60C060"
+                            Text="G" />
+                        <Slider
+                            Grid.Column="1"
+                            Margin="8,0"
+                            Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            LargeChange="5"
+                            Value="{Binding PreviewG}"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontFamily="Monospace"
+                            FontSize="11"
+                            HorizontalAlignment="Right"
+                            Text="{Binding PreviewG, StringFormat={}{0:F0}%}" />
+                    </Grid>
+
+                    <!--  B  -->
+                    <Grid ColumnDefinitions="16,*,48">
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Foreground="#6090FF"
+                            Text="B" />
+                        <Slider
+                            Grid.Column="1"
+                            Margin="8,0"
+                            Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            LargeChange="5"
+                            Value="{Binding PreviewB}"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontFamily="Monospace"
+                            FontSize="11"
+                            HorizontalAlignment="Right"
+                            Text="{Binding PreviewB, StringFormat={}{0:F0}%}" />
+                    </Grid>
+
+                    <!--  L  -->
+                    <Grid ColumnDefinitions="16,*,48">
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Opacity="0.75"
+                            Text="L" />
+                        <Slider
+                            Grid.Column="1"
+                            Margin="8,0"
+                            Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            LargeChange="5"
+                            Value="{Binding PreviewL}"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            FontFamily="Monospace"
+                            FontSize="11"
+                            HorizontalAlignment="Right"
+                            Text="{Binding PreviewL, StringFormat={}{0:F0}%}" />
+                    </Grid>
+
+                </StackPanel>
+            </Border>
+
             <!--  ══════════  WAYPOINTS  ══════════  -->
             <Border
                 Margin="0,0,0,12"

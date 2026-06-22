@@ -69,6 +69,52 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(NnModelStatusText))]
     private bool _hasNnModel;
 
+    // ── Preview override ──────────────────────────────────────────────────────
+
+    // USB sensör aktif ve veri gönderiyorsa true; toggle bu property ile kilitlenir.
+    public bool IsPreviewEnabled => _settings.IsUsbSensorEnabled && _sensor.HasReceivedValidData;
+
+    [ObservableProperty]
+    private bool _isPreviewActive;
+
+    [ObservableProperty]
+    private double _previewR = 50;
+
+    [ObservableProperty]
+    private double _previewG = 50;
+
+    [ObservableProperty]
+    private double _previewB = 50;
+
+    [ObservableProperty]
+    private double _previewL = 50;
+
+    partial void OnIsPreviewActiveChanged(bool value)
+    {
+        if (value)
+        {
+            PreviewR = _sensor.LatestRawCurveR;
+            PreviewG = _sensor.LatestRawCurveG;
+            PreviewB = _sensor.LatestRawCurveB;
+            PreviewL = _sensor.LatestRawCurveL;
+            SyncPreviewToSensor();
+        }
+        _sensor.IsGammaPreviewActive = value;
+    }
+
+    partial void OnPreviewRChanged(double _) => SyncPreviewToSensor();
+    partial void OnPreviewGChanged(double _) => SyncPreviewToSensor();
+    partial void OnPreviewBChanged(double _) => SyncPreviewToSensor();
+    partial void OnPreviewLChanged(double _) => SyncPreviewToSensor();
+
+    private void SyncPreviewToSensor()
+    {
+        _sensor.GammaPreviewR = PreviewR;
+        _sensor.GammaPreviewG = PreviewG;
+        _sensor.GammaPreviewB = PreviewB;
+        _sensor.GammaPreviewL = PreviewL;
+    }
+
     // ── Mode ──────────────────────────────────────────────────────────────────
 
     public bool IsNnModeActive
@@ -140,6 +186,7 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         ExportModelCommand     = new RelayCommand(ExportModel);
 
         _subs.Add(_sensor.WatchAllProperties(RefreshLiveState));
+        _subs.Add(_settings.WatchProperties([o => o.IsUsbSensorEnabled], RefreshLiveState));
         RefreshLiveState();
     }
 
@@ -147,6 +194,10 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
 
     private void RefreshLiveState()
     {
+        OnPropertyChanged(nameof(IsPreviewEnabled));
+        if (IsPreviewActive && !IsPreviewEnabled)
+            IsPreviewActive = false;
+
         HasNnModel = File.Exists(ModelPath);
 
         var inp = _sensor.GetCurrentNnInputs();
@@ -172,26 +223,31 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
     {
         var inputs = _sensor.GetCurrentNnInputs();
 
-        // Use curve evaluator outputs as training targets regardless of current mode.
-        // LatestRawCurveR/G/B/L are always the curve-based pre-norm values;
-        // applying the same post-norm clamp gives what the curve path would output.
         double outMin = _settings.UsbOutputMin;
         double outMax = _settings.UsbOutputMax;
         double Clamp(double v) => Math.Clamp(v, outMin, outMax);
 
-        var targets = new[]
+        double[] targets;
+        string source;
+        if (IsPreviewActive)
         {
-            Clamp(_sensor.LatestRawCurveR),
-            Clamp(_sensor.LatestRawCurveG),
-            Clamp(_sensor.LatestRawCurveB),
-            Clamp(_sensor.LatestRawCurveL),
-        };
+            targets = [Clamp(PreviewR), Clamp(PreviewG), Clamp(PreviewB), Clamp(PreviewL)];
+            source = "⚙ Manuel";
+        }
+        else
+        {
+            // Use curve evaluator outputs as training targets regardless of current mode.
+            // LatestRawCurveR/G/B/L are always the curve-based pre-norm values.
+            targets = [Clamp(_sensor.LatestRawCurveR), Clamp(_sensor.LatestRawCurveG),
+                       Clamp(_sensor.LatestRawCurveB), Clamp(_sensor.LatestRawCurveL)];
+            source = "Eğri";
+        }
 
         var now = DateTime.Now;
         var label = string.Create(CultureInfo.InvariantCulture,
             $"{now:HH:mm:ss}  DOY={now.DayOfYear}  " +
             $"R={targets[0]:F0}% G={targets[1]:F0}% B={targets[2]:F0}% L={targets[3]:F0}%  " +
-            $"amb={inputs[10]*100:F0}%");
+            $"amb={inputs[10]*100:F0}%  [{source}]");
 
         var entry = new WaypointEntryViewModel(inputs, targets, label);
         entry.RemoveCommand = new RelayCommand(() =>
@@ -452,5 +508,9 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
 
     // ── IDisposable ───────────────────────────────────────────────────────────
 
-    public void Dispose() => _subs.Dispose();
+    public void Dispose()
+    {
+        if (IsPreviewActive) IsPreviewActive = false;
+        _subs.Dispose();
+    }
 }

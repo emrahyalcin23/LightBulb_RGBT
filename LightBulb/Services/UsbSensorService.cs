@@ -151,6 +151,25 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double LatestRawCurveL { get; private set; } = 0;
 
+    // ── Geçici Önizleme ───────────────────────────────────────────────────────
+    // Aktifken UsbGammaController, sensor tabanlı değerler yerine bu değerleri
+    // ekrana uygular. AiSettingsViewModel tarafından yönetilir.
+
+    [ObservableProperty]
+    public partial bool IsGammaPreviewActive { get; set; }
+
+    [ObservableProperty]
+    public partial double GammaPreviewR { get; set; } = 50;
+
+    [ObservableProperty]
+    public partial double GammaPreviewG { get; set; } = 50;
+
+    [ObservableProperty]
+    public partial double GammaPreviewB { get; set; } = 50;
+
+    [ObservableProperty]
+    public partial double GammaPreviewL { get; set; } = 50;
+
     /// <summary>L curve output at X=0 (minimum ambient). Updated when calibration JSON is loaded.</summary>
     [ObservableProperty]
     public partial double RgblBoundaryMinL { get; private set; } = 0;

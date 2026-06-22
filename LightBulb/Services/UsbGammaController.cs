@@ -44,6 +44,11 @@ public class UsbGammaController : IDisposable
                     o => o.LatestRgblB,
                     o => o.HasReceivedValidData,
                     o => o.GammaApplyBlocked,
+                    o => o.IsGammaPreviewActive,
+                    o => o.GammaPreviewR,
+                    o => o.GammaPreviewG,
+                    o => o.GammaPreviewB,
+                    o => o.GammaPreviewL,
                 ],
                 _gamma.InvalidateGamma
             )
@@ -92,7 +97,22 @@ public class UsbGammaController : IDisposable
     {
         if (IsUsbActive)
         {
-            if (_sensor.IsRgblCalibrationActive)
+            if (_sensor.IsGammaPreviewActive)
+            {
+                var dayB = Math.Clamp(
+                    cycleBrightness + brightnessOffset,
+                    _settings.MinimumBrightness,
+                    2.0
+                );
+                var (fR, fG, fB) = RgblPipeline.MaxNormalize(
+                    _sensor.GammaPreviewR,
+                    _sensor.GammaPreviewG,
+                    _sensor.GammaPreviewB,
+                    _sensor.GammaPreviewL
+                );
+                _gamma.SetGammaRgbl(fR * dayB, fG * dayB, fB * dayB);
+            }
+            else if (_sensor.IsRgblCalibrationActive)
             {
                 var dayB = Math.Clamp(
                     cycleBrightness + brightnessOffset,
