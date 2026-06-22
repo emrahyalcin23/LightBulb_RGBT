@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -81,6 +82,34 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     private volatile bool _sessionActive;
     // Serialises all blocking port I/O so PerformRead and RunTest never race.
     private readonly System.Threading.SemaphoreSlim _portLock = new(1, 1);
+
+    // TCP/WiFi transport
+    private TcpTransportState? _tcp;
+    private ActiveTransport _activeTransport = ActiveTransport.None;
+
+    private enum ActiveTransport { None, Usb, Tcp }
+
+    private sealed class TcpTransportState : IDisposable
+    {
+        public TcpClient Client { get; }
+        public StreamReader Reader { get; }
+        public StreamWriter Writer { get; }
+
+        public TcpTransportState(TcpClient client)
+        {
+            Client = client;
+            var ns = client.GetStream();
+            Reader = new StreamReader(ns, System.Text.Encoding.UTF8, leaveOpen: true);
+            Writer = new StreamWriter(ns, System.Text.Encoding.UTF8, leaveOpen: true) { AutoFlush = true, NewLine = "\r\n" };
+        }
+
+        public void Dispose()
+        {
+            try { Writer.Dispose(); } catch { }
+            try { Reader.Dispose(); } catch { }
+            try { Client.Dispose(); } catch { }
+        }
+    }
 
     // Calibration HTTP server fields
     private System.Net.HttpListener? _httpListener;
@@ -258,7 +287,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     public partial string ConnectionTestMessage { get; private set; } = string.Empty;
 
     /// <summary>True when the serial port is currently open (regardless of IsConnected).</summary>
-    public bool IsPortOpen => _port is { IsOpen: true };
+    public bool IsPortOpen => _port is { IsOpen: true } || (_tcp?.Client.Connected == true);
+
+    /// <summary>Human-readable name of the active transport ("USB", "TCP", or "—").</summary>
+    [ObservableProperty]
+    public partial string ActiveConnectionType { get; private set; } = "—";
 
     /// <summary>True when an RGBL calibration JSON is loaded; the display pipeline uses this to decide routing.</summary>
     public bool IsRgblCalibrationActive => _rgblEvaluator is not null;
@@ -659,24 +692,18 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         ReloadRgblEvaluator();
         LoadNnEvaluator();
 
-        if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName))
-            return; // No port configured yet — wait for auto-detect
-
-        try
+        var mode = _settingsService.SensorConnectionMode;
+        bool opened = mode switch
         {
-            _port = new SerialPort(_settingsService.UsbPortName, _settingsService.UsbBaudRate)
-            {
-                ReadTimeout = 2000,
-                WriteTimeout = 1000,
-                DtrEnable = true,  // Pico firmware ignores commands until DTR=HIGH
-            };
-            _port.Open();
-        }
-        catch
+            SensorConnectionMode.Usb  => TryOpenUsbTransport(),
+            SensorConnectionMode.Tcp  => TryOpenTcpTransport(),
+            // Auto: try USB first, fall back to TCP
+            _ => TryOpenUsbTransport() || TryOpenTcpTransport(),
+        };
+
+        if (!opened)
         {
             Dispatcher.UIThread.Post(() => IsConnected = false);
-            _port?.Dispose();
-            _port = null;
             return;
         }
 
@@ -694,6 +721,106 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         try { if (_port?.IsOpen == true) _port.Close(); } catch { }
         _port?.Dispose();
         _port = null;
+        _tcp?.Dispose();
+        _tcp = null;
+        _activeTransport = ActiveTransport.None;
+    }
+
+    // ── Transport abstraction helpers ─────────────────────────────────────────
+
+    private void TransportSendLine(string command)
+    {
+        if (_activeTransport == ActiveTransport.Tcp && _tcp is not null)
+            _tcp.Writer.WriteLine(command);
+        else
+            _port!.WriteLine(command);
+    }
+
+    private string TransportReadLine()
+    {
+        if (_activeTransport == ActiveTransport.Tcp && _tcp is not null)
+            return ReadTcpLine(_tcp);
+        return ReadResponseLine(_port!);
+    }
+
+    private void TransportDiscard()
+    {
+        if (_activeTransport == ActiveTransport.Tcp && _tcp is not null)
+        {
+            // Drain any pending TCP data without blocking.
+            var ns = _tcp.Client.GetStream();
+            while (_tcp.Client.Available > 0)
+            {
+                try { ns.ReadByte(); } catch { break; }
+            }
+        }
+        else
+        {
+            try { _port?.DiscardInBuffer(); } catch { }
+        }
+    }
+
+    private static string ReadTcpLine(TcpTransportState tcp)
+    {
+        var deadline = Environment.TickCount64 + 3000; // 3 s timeout
+        while (Environment.TickCount64 < deadline)
+        {
+            if (tcp.Client.Available > 0 || tcp.Client.GetStream().DataAvailable)
+            {
+                var line = tcp.Reader.ReadLine();
+                return line?.Trim() ?? "";
+            }
+            System.Threading.Thread.Sleep(10);
+        }
+        return "";
+    }
+
+    private bool TryOpenUsbTransport()
+    {
+        if (string.IsNullOrWhiteSpace(_settingsService.UsbPortName)) return false;
+        try
+        {
+            _port = new SerialPort(_settingsService.UsbPortName, _settingsService.UsbBaudRate)
+            {
+                ReadTimeout  = 2000,
+                WriteTimeout = 1000,
+                DtrEnable    = true,
+            };
+            _port.Open();
+            _activeTransport = ActiveTransport.Usb;
+            return true;
+        }
+        catch
+        {
+            _port?.Dispose();
+            _port = null;
+            return false;
+        }
+    }
+
+    private bool TryOpenTcpTransport()
+    {
+        var host = _settingsService.TcpSensorHost;
+        var port = _settingsService.TcpSensorPort;
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        try
+        {
+            var client = new TcpClient();
+            if (!client.ConnectAsync(host, port).Wait(3000))
+            {
+                client.Dispose();
+                return false;
+            }
+            _tcp = new TcpTransportState(client);
+            _activeTransport = ActiveTransport.Tcp;
+            return true;
+        }
+        catch
+        {
+            _tcp?.Dispose();
+            _tcp = null;
+            return false;
+        }
     }
 
     /// <summary>
@@ -704,32 +831,41 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// </summary>
     private void PerformSessionInit()
     {
-        if (_port is not { IsOpen: true }) return;
+        if (!IsPortOpen) return;
 
         _portLock.Wait();
         string? initError = null;
         bool initOk = false;
         try
         {
-            // Brief settle: give firmware time to boot after DTR rising edge.
+            // Brief settle: give firmware time to boot after DTR rising edge (USB)
+            // or to send the TCP welcome banner (TCP).
             System.Threading.Thread.Sleep(500);
-            _port.DiscardInBuffer();
+            TransportDiscard();
 
-            // KIMSIN handshake — up to 3 attempts.
+            // For TCP: the welcome banner already identifies the firmware.
+            // Read it if available so IsKnownFirmware can recognise TCP_CONNECTED.
             string identity = "";
-            for (int attempt = 0; attempt < 3; attempt++)
+            if (_activeTransport == ActiveTransport.Tcp && _tcp?.Client.Available > 0)
+                identity = TransportReadLine().Trim();
+
+            // KIMSIN handshake — up to 3 attempts (skip if TCP banner already identified us).
+            if (!IsKnownFirmware(identity))
             {
-                if (attempt > 0)
+                for (int attempt = 0; attempt < 3; attempt++)
                 {
-                    System.Threading.Thread.Sleep(1000);
-                    if (_port is not { IsOpen: true }) break;
-                    _port.DiscardInBuffer();
+                    if (attempt > 0)
+                    {
+                        System.Threading.Thread.Sleep(1000);
+                        if (!IsPortOpen) break;
+                        TransportDiscard();
+                    }
+                    if (!IsPortOpen) break;
+                    TransportSendLine(KimsinCommand);
+                    identity = TransportReadLine().Trim();
+                    if (IsKnownFirmware(identity))
+                        break;
                 }
-                if (_port is not { IsOpen: true }) break;
-                _port.WriteLine(KimsinCommand);
-                identity = ReadResponseLine(_port).Trim();
-                if (IsKnownFirmware(identity))
-                    break;
             }
 
             if (!IsKnownFirmware(identity))
@@ -740,14 +876,14 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             else
             {
                 // Send one-time session-start commands before the first OKU.
-                _port.WriteLine("BASAMAK_2");
+                TransportSendLine("BASAMAK_2");
                 System.Threading.Thread.Sleep(200);
-                if (_port is { IsOpen: true })
-                    _port.WriteLine("Logaritmik_3");
+                if (IsPortOpen)
+                    TransportSendLine("Logaritmik_3");
                 System.Threading.Thread.Sleep(200);
                 // Flush any responses from the init commands before OKU begins.
-                if (_port is { IsOpen: true })
-                    _port.DiscardInBuffer();
+                if (IsPortOpen)
+                    TransportDiscard();
 
                 initOk = true;
             }
@@ -777,10 +913,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             // Session is now open — mark connected, start watchdog and OKU timer.
             _sessionActive = true;
+            var transportLabel = _activeTransport == ActiveTransport.Tcp ? "TCP" : "USB";
             Dispatcher.UIThread.Post(() =>
             {
-                IsConnected   = true;
-                LastReadError = "";
+                IsConnected          = true;
+                LastReadError        = "";
+                ActiveConnectionType = transportLabel;
             });
             StartConnectionWatchdog();
             ScheduleNextRead(delay: TimeSpan.Zero);
@@ -815,25 +953,46 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         if (_isDisposed || !_sessionActive) return;
 
-        var portName = _settingsService.UsbPortName;
-        bool portGone;
-        try
+        bool gone = false;
+        if (_activeTransport == ActiveTransport.Tcp)
         {
-            portGone = !SerialPort.GetPortNames()
-                .Contains(portName, StringComparer.OrdinalIgnoreCase);
+            // Poll the TCP socket: if it is readable but has 0 bytes, the remote closed it.
+            var socket = _tcp?.Client.Client;
+            if (socket is null || !socket.Connected)
+            {
+                gone = true;
+            }
+            else
+            {
+                try
+                {
+                    gone = socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0;
+                }
+                catch { gone = true; }
+            }
         }
-        catch
+        else
         {
-            portGone = false; // Cannot determine — assume still present
+            var portName = _settingsService.UsbPortName;
+            try
+            {
+                gone = !SerialPort.GetPortNames()
+                    .Contains(portName, StringComparer.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                gone = false; // Cannot determine — assume still present
+            }
         }
 
-        if (portGone)
+        if (gone)
         {
-            ReportUnexpectedDisconnect("Bağlantı hatası — USB cihazı bağlantısı kesildi, oturum sonlandırıldı");
+            var transport = _activeTransport == ActiveTransport.Tcp ? "TCP" : "USB";
+            ReportUnexpectedDisconnect($"Bağlantı hatası — {transport} cihazı bağlantısı kesildi, oturum sonlandırıldı");
             return;
         }
 
-        // Port still present — reschedule.
+        // Transport still alive — reschedule.
         if (!_isDisposed && _sessionActive)
             _watchdogRegistration = Timer.QueueDelayedAction(TimeSpan.FromSeconds(3), WatchdogTick);
     }
@@ -851,8 +1010,8 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         _readTimerRegistration?.Dispose();
         _readTimerRegistration = null;
 
-        // Close port best-effort; PerformRead may concurrently hold _portLock.
-        // Closing the port while a read is in progress will cause an IOException
+        // Close transport best-effort; PerformRead may concurrently hold _portLock.
+        // Closing while a read is in progress will cause an IOException or IOException
         // inside PerformRead, which is caught and handled safely.
         if (_port is not null)
         {
@@ -860,6 +1019,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             try { _port.Dispose(); } catch { }
             _port = null;
         }
+        if (_tcp is not null)
+        {
+            try { _tcp.Dispose(); } catch { }
+            _tcp = null;
+        }
+        _activeTransport = ActiveTransport.None;
 
         var msg = errorMessage;
         Dispatcher.UIThread.Post(() =>
@@ -892,6 +1057,13 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             _port = null;
         }
 
+        if (_tcp is not null)
+        {
+            try { _tcp.Dispose(); } catch { }
+            _tcp = null;
+        }
+        _activeTransport = ActiveTransport.None;
+
         // When called from the UI thread (e.g. Start() calls Stop() first) set the property
         // synchronously so a later queued Post cannot overwrite it after Start() sets true.
         if (Dispatcher.UIThread.CheckAccess())
@@ -899,6 +1071,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             IsConnected          = false;
             HasReceivedValidData = false;
             GammaApplyBlocked    = false;
+            ActiveConnectionType = "—";
         }
         else
         {
@@ -907,6 +1080,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 IsConnected          = false;
                 HasReceivedValidData = false;
                 GammaApplyBlocked    = false;
+                ActiveConnectionType = "—";
             });
         }
     }
@@ -962,9 +1136,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     ///      existing devices without requiring a firmware update.
     ///   3. Firmware responds to any command with sensor data (dual-line format).
     /// </summary>
+    private const string TcpConnectedPrefix = "TCP_CONNECTED=PICOLOR";
+
     private static bool IsKnownFirmware(string response) =>
         response.Contains(PicoIdentityPrefix, StringComparison.OrdinalIgnoreCase) ||
         response.Contains(PicoIdentityLegacy, StringComparison.OrdinalIgnoreCase) ||
+        response.Contains(TcpConnectedPrefix, StringComparison.OrdinalIgnoreCase) ||
         (response.Contains("OKU", StringComparison.OrdinalIgnoreCase) &&
          response.Contains("RAW", StringComparison.OrdinalIgnoreCase)) ||
         TryParseDualLine(response, out _); // firmware responds to any command with sensor data
@@ -1028,10 +1205,11 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     private void PerformRead()
     {
-        if (_port is not { IsOpen: true })
+        if (!IsPortOpen)
         {
-            // Port closed unexpectedly (not by user Stop()) — report as error.
-            ReportUnexpectedDisconnect("Bağlantı hatası — USB port beklenmedik şekilde kapandı, oturum sonlandırıldı");
+            // Transport closed unexpectedly (not by user Stop()) — report as error.
+            var transport = _activeTransport == ActiveTransport.Tcp ? "TCP" : "USB";
+            ReportUnexpectedDisconnect($"Bağlantı hatası — {transport} bağlantısı beklenmedik şekilde kapandı, oturum sonlandırıldı");
             return;
         }
 
@@ -1043,12 +1221,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         try
         {
             cmd = BuildReadCommand();
-            _port.WriteLine(cmd);
-            rawResponse = ReadResponseLine(_port).Trim();
+            TransportSendLine(cmd);
+            rawResponse = TransportReadLine().Trim();
 
-            // Empty response means ReadByte() timed out inside ReadResponseLine without
-            // receiving any data — the device did not reply within the timeout window.
-            // This is indistinguishable from physical USB disconnection.
+            // Empty response means the device did not reply within the timeout window.
             if (string.IsNullOrEmpty(rawResponse))
             {
                 sessionError = "Bağlantı hatası — sensör yanıt vermedi, oturum sonlandırıldı";
@@ -1516,7 +1692,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
                 try { testPort?.Close(); } catch { }
                 testPort?.Dispose();
             }
-            else if (_port is { IsOpen: true } && _readTimerRegistration is null)
+            else if (IsPortOpen && _readTimerRegistration is null)
             {
                 // Resume the background reading loop that was paused for the test.
                 ScheduleNextRead(delay: TimeSpan.FromSeconds(2));

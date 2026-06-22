@@ -5,6 +5,17 @@ using LightBulb.Models;
 
 namespace LightBulb.Services;
 
+/// <summary>
+/// Bağlantı önceliği: Auto → önce USB dener, başarısız olursa TCP'ye geçer.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SensorConnectionMode>))]
+public enum SensorConnectionMode
+{
+    Auto,
+    Usb,
+    Tcp,
+}
+
 // USB sensor and RGBL calibration settings — isolated from the base SettingsService
 // so that upstream merges don't conflict with this feature set.
 public partial class SettingsService
@@ -74,12 +85,26 @@ public partial class SettingsService
     [JsonPropertyName("GeoLongitude")]
     public partial double GeoLongitude { get; set; } = 29.0;
 
+    // TCP/WiFi Sensor
+    [ObservableProperty]
+    [JsonPropertyName("SensorConnectionMode")]
+    public partial SensorConnectionMode SensorConnectionMode { get; set; } = SensorConnectionMode.Auto;
+
+    [ObservableProperty]
+    [JsonPropertyName("TcpSensorHost")]
+    public partial string TcpSensorHost { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    [JsonPropertyName("TcpSensorPort")]
+    public partial int TcpSensorPort { get; set; } = 8266;
+
 }
 
 // SerializerContext is owned entirely here so that all [JsonSerializable] attributes
 // are in one place — the source generator requires a single declaration per context.
 public partial class SettingsService
 {
+    [JsonSerializable(typeof(SensorConnectionMode))]
     [JsonSerializable(typeof(SettingsService))]
     [JsonSerializable(typeof(UsbCalibrationPoint))]
     [JsonSerializable(typeof(List<UsbCalibrationPoint>))]
