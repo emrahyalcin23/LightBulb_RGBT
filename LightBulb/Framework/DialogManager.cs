@@ -1,25 +1,13 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Threading;
 using DialogHostAvalonia;
-using LightBulb.Utils.Extensions;
 
 namespace LightBulb.Framework;
 
-public class DialogManager : IDisposable
+public partial class DialogManager : IDisposable
 {
-    private readonly ViewManager _viewManager;
     private readonly SemaphoreSlim _dialogLock = new(1, 1);
-
-    public DialogManager(ViewManager viewManager)
-    {
-        _viewManager = viewManager;
-    }
 
     public async Task<T?> ShowDialogAsync<T>(DialogViewModelBase<T> dialog)
     {
@@ -55,50 +43,6 @@ public class DialogManager : IDisposable
         {
             _dialogLock.Release();
         }
-    }
-
-    /// <summary>
-    /// Shows a dialog as a standalone top-level window, unconstrained by the main window size.
-    /// Useful for dialogs that are taller than the main window (e.g. Settings with many tabs).
-    /// Each call creates its own OS-managed modal window, so no shared lock is needed.
-    /// </summary>
-    public async Task<T?> ShowWindowDialogAsync<T>(DialogViewModelBase<T> dialog)
-    {
-        var view = _viewManager.TryBindView(dialog);
-
-        var window = new Window
-        {
-            SizeToContent = SizeToContent.WidthAndHeight,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            SystemDecorations = SystemDecorations.Full,
-            Content = view,
-        };
-
-        // When the ViewModel is closed (Save/Cancel) → close the Window
-        _ = dialog.WaitForCloseAsync().ContinueWith(
-            _ => Dispatcher.UIThread.Post(() =>
-            {
-                try { window.Close(); }
-                catch { /* already closed — ignore */ }
-            }),
-            TaskContinuationOptions.ExecuteSynchronously
-        );
-
-        // Prefer the currently active window as owner so nested dialogs (e.g. a MessageBox
-        // triggered from inside the Settings window) appear on top of their actual parent.
-        var owner =
-            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
-                ?.Windows.FirstOrDefault(w => w.IsActive)
-            ?? Application.Current?.ApplicationLifetime?.TryGetMainWindow();
-
-        if (owner is not null)
-            await window.ShowDialog(owner);
-        else
-            window.Show();
-
-        await Task.Yield();
-        return dialog.DialogResult;
     }
 
     public void Dispose() => _dialogLock.Dispose();
