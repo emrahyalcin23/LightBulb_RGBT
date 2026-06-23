@@ -13,6 +13,39 @@
             <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding IsEnabled}" />
         </DockPanel>
 
+        <!--  Bağlantı Modu  -->
+        <DockPanel
+            Margin="0,16,0,0"
+            LastChildFill="False"
+            ToolTip.Tip="Otomatik: önce USB dener, başarısız olursa TCP'ye geçer. USB: yalnızca seri port. TCP: yalnızca WiFi/ağ bağlantısı.">
+            <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Text="Bağlantı Modu" />
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12">
+                <RadioButton Content="Otomatik" IsChecked="{Binding IsModeAuto}" />
+                <RadioButton Content="USB" IsChecked="{Binding IsModeUsb}" />
+                <RadioButton Content="TCP/WiFi" IsChecked="{Binding IsModeTcp}" />
+            </StackPanel>
+        </DockPanel>
+
+        <!--  TCP Bağlantı Ayarları — Otomatik veya TCP modunda görünür  -->
+        <StackPanel IsVisible="{Binding ShowTcpFields}" Margin="0,8,0,0" Orientation="Vertical" Spacing="6">
+            <DockPanel LastChildFill="False" ToolTip.Tip="PiColor cihazının IP adresi veya hostname'i (ör: 192.168.1.42)">
+                <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Text="TCP Host" />
+                <TextBox
+                    MinWidth="160"
+                    DockPanel.Dock="Right"
+                    Text="{Binding TcpHost, UpdateSourceTrigger=LostFocus}"
+                    Theme="{DynamicResource CompactTextBox}" />
+            </DockPanel>
+            <DockPanel LastChildFill="False" ToolTip.Tip="TCP port numarası (PiColor varsayılanı: 8266)">
+                <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center" Text="TCP Port" />
+                <TextBox
+                    MinWidth="80"
+                    DockPanel.Dock="Right"
+                    Text="{Binding TcpPortText, UpdateSourceTrigger=LostFocus}"
+                    Theme="{DynamicResource CompactTextBox}" />
+            </DockPanel>
+        </StackPanel>
+
         <!--  Port selection + merged Bağlan button  -->
         <DockPanel Margin="0,16,0,0" LastChildFill="False" ToolTip.Tip="Serial port the sensor is connected to (e.g. COM3)">
             <TextBlock DockPanel.Dock="Left" Text="Serial Port" />
@@ -357,6 +390,12 @@
                         <StackPanel Width="300" Orientation="Vertical" Spacing="8">
 
                             <TextBlock FontWeight="SemiBold" Text="Telemetri" />
+
+                            <!--  Aktif Transport  -->
+                            <DockPanel LastChildFill="False" ToolTip.Tip="Aktif bağlantı türü (USB veya TCP)">
+                                <TextBlock DockPanel.Dock="Left" Opacity="0.6" Text="Transport" />
+                                <TextBlock DockPanel.Dock="Right" FontFamily="Monospace" Text="{Binding ActiveConnectionType}" />
+                            </DockPanel>
 
                             <!--  Son Okuma Zamanı  -->
                             <DockPanel LastChildFill="False">

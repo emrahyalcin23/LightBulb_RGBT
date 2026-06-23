@@ -363,6 +363,47 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         }
     }
 
+    // ── Connection mode ───────────────────────────────────────────────────────
+
+    public SensorConnectionMode ConnectionMode
+    {
+        get => SettingsService.SensorConnectionMode;
+        set
+        {
+            SettingsService.SensorConnectionMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsModeAuto));
+            OnPropertyChanged(nameof(IsModeUsb));
+            OnPropertyChanged(nameof(IsModeTcp));
+            OnPropertyChanged(nameof(ShowTcpFields));
+        }
+    }
+
+    public bool IsModeAuto { get => ConnectionMode == SensorConnectionMode.Auto; set { if (value) ConnectionMode = SensorConnectionMode.Auto; } }
+    public bool IsModeUsb  { get => ConnectionMode == SensorConnectionMode.Usb;  set { if (value) ConnectionMode = SensorConnectionMode.Usb;  } }
+    public bool IsModeTcp  { get => ConnectionMode == SensorConnectionMode.Tcp;  set { if (value) ConnectionMode = SensorConnectionMode.Tcp;  } }
+
+    /// <summary>True when TCP host/port fields should be visible (Auto or TCP mode).</summary>
+    public bool ShowTcpFields => ConnectionMode != SensorConnectionMode.Usb;
+
+    public string TcpHost
+    {
+        get => SettingsService.TcpSensorHost;
+        set => SettingsService.TcpSensorHost = value ?? string.Empty;
+    }
+
+    public string TcpPortText
+    {
+        get => SettingsService.TcpSensorPort.ToString();
+        set
+        {
+            if (int.TryParse(value, out var p) && p is > 0 and < 65536)
+                SettingsService.TcpSensorPort = p;
+        }
+    }
+
+    // ── Port ─────────────────────────────────────────────────────────────────
+
     public string PortName
     {
         get => SettingsService.UsbPortName;
@@ -462,7 +503,9 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public string ConnectionStatusText => IsTestingConnection
         ? "● Test ediliyor..."
-        : IsConnected ? "● Bağlı" : "● Bağlı Değil";
+        : IsConnected ? $"● Bağlı ({_usbSensorService.ActiveConnectionType})" : "● Bağlı Değil";
+
+    public string ActiveConnectionType => _usbSensorService.ActiveConnectionType;
 
     public string ConnectionTestMessage => _usbSensorService.ConnectionTestMessage;
 
