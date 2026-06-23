@@ -102,10 +102,10 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         _sensor.IsGammaPreviewActive = value;
     }
 
-    partial void OnPreviewRChanged(double _) => SyncPreviewToSensor();
-    partial void OnPreviewGChanged(double _) => SyncPreviewToSensor();
-    partial void OnPreviewBChanged(double _) => SyncPreviewToSensor();
-    partial void OnPreviewLChanged(double _) => SyncPreviewToSensor();
+    partial void OnPreviewRChanged(double value) => SyncPreviewToSensor();
+    partial void OnPreviewGChanged(double value) => SyncPreviewToSensor();
+    partial void OnPreviewBChanged(double value) => SyncPreviewToSensor();
+    partial void OnPreviewLChanged(double value) => SyncPreviewToSensor();
 
     private void SyncPreviewToSensor()
     {
