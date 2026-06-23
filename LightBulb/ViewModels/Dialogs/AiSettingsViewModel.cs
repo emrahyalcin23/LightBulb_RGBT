@@ -9,8 +9,8 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightBulb.Services;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.ViewModels.Dialogs;
 
@@ -42,7 +42,7 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
 
     private readonly SettingsService  _settings;
     private readonly UsbSensorService _sensor;
-    private readonly DisposableCollector _subs = new();
+    private readonly IDisposable _subs;
 
     private NnTrainer? _trainer;
 
@@ -185,8 +185,10 @@ public partial class AiSettingsViewModel : ObservableObject, IDisposable
         ImportModelCommand     = new RelayCommand(ImportModel);
         ExportModelCommand     = new RelayCommand(ExportModel);
 
-        _subs.Add(_sensor.WatchAllProperties(RefreshLiveState));
-        _subs.Add(_settings.WatchProperties([o => o.IsUsbSensorEnabled], RefreshLiveState));
+        _subs = Disposable.Merge(
+            _sensor.WatchAllProperties(RefreshLiveState),
+            _settings.WatchProperties([o => o.IsUsbSensorEnabled], RefreshLiveState)
+        );
         RefreshLiveState();
     }
 

@@ -5,14 +5,14 @@ using CommunityToolkit.Mvvm.Input;
 using LightBulb.Core;
 using LightBulb.Localization;
 using LightBulb.Services;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.ViewModels.Components.Settings;
 
 public partial class LocationSettingsTabViewModel : SettingsTabViewModelBase
 {
-    private readonly DisposableCollector _eventRoot = new();
+    private readonly IDisposable _eventSubscription;
 
     public LocationSettingsTabViewModel(
         SettingsService settingsService,
@@ -20,8 +20,10 @@ public partial class LocationSettingsTabViewModel : SettingsTabViewModelBase
     )
         : base(settingsService, localizationManager, 1)
     {
-        _eventRoot.Add(
-            this.WatchProperty(o => o.Location, () => LocationQuery = Location?.ToString(), true)
+        _eventSubscription = this.WatchProperty(
+            o => o.Location,
+            _ => LocationQuery = Location?.ToString(),
+            true
         );
     }
 
@@ -124,7 +126,7 @@ public partial class LocationSettingsTabViewModel : SettingsTabViewModelBase
     protected override void Dispose(bool disposing)
     {
         if (disposing)
-            _eventRoot.Dispose();
+            _eventSubscription.Dispose();
 
         base.Dispose(disposing);
     }

@@ -5,9 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using LightBulb.Framework;
 using LightBulb.Models;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
 using LightBulb.ViewModels.Components.Settings;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.Views.Components.Settings;
 
@@ -15,7 +15,7 @@ public partial class ApplicationWhitelistSettingsTabView
     : UserControl<ApplicationWhitelistSettingsTabViewModel>,
         IDisposable
 {
-    private readonly DisposableCollector _eventRoot = new();
+    private IDisposable _eventSubscription = Disposable.Null;
 
     public ApplicationWhitelistSettingsTabView() => InitializeComponent();
 
@@ -23,21 +23,19 @@ public partial class ApplicationWhitelistSettingsTabView
     {
         DataContext.RefreshApplicationsCommand.Execute(null);
 
-        _eventRoot.Add(
+        _eventSubscription = DataContext.WatchProperty(
+            o => o.WhitelistedApplications,
             // This hack is required to avoid having to use an ObservableCollection<T> on the view model
-            DataContext.WatchProperty(
-                o => o.WhitelistedApplications,
-                () =>
-                    WhitelistedApplicationsListBox.SelectedItems = new AvaloniaList<object>(
-                        DataContext.WhitelistedApplications ?? []
-                    ),
-                true
-            )
+            _ =>
+                WhitelistedApplicationsListBox.SelectedItems = new AvaloniaList<object>(
+                    DataContext.WhitelistedApplications ?? []
+                ),
+            true
         );
     }
 
     private void UserControl_OnUnloaded(object? sender, RoutedEventArgs args) =>
-        _eventRoot.Dispose();
+        _eventSubscription.Dispose();
 
     // This hack is required to avoid having to use an ObservableCollection<T> on the view model
     private void WhitelistedApplicationsListBox_OnSelectionChanged(
@@ -63,5 +61,5 @@ public partial class ApplicationWhitelistSettingsTabView
         DataContext.WhitelistedApplications = applications;
     }
 
-    public void Dispose() => _eventRoot.Dispose();
+    public void Dispose() => _eventSubscription.Dispose();
 }

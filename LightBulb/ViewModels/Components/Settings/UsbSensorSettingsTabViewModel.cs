@@ -7,8 +7,8 @@ using CommunityToolkit.Mvvm.Input;
 using LightBulb.Framework;
 using LightBulb.Localization;
 using LightBulb.Services;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 using LightBulb.ViewModels.Dialogs;
 using LightBulb.Views.Dialogs;
 
@@ -20,7 +20,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     private readonly GammaService _gammaService;
     private readonly DialogManager _dialogManager;
     private readonly ViewModelManager _viewModelManager;
-    private readonly DisposableCollector _usbEventRoot = new();
+    private readonly IDisposable _usbEventSubscription;
 
     private double _simR = 1200;
     private double _simG = 800;
@@ -44,25 +44,6 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         _dialogManager = dialogManager;
         _viewModelManager = viewModelManager;
 
-        // Propagate live sensor readings to the UI;
-        // also re-evaluate ReadNowCommand.CanExecute when IsConnected changes.
-        _usbEventRoot.Add(
-            _usbSensorService.WatchAllProperties(() =>
-            {
-                OnAllPropertiesChanged();
-                ReadNowCommand.NotifyCanExecuteChanged();
-            })
-        );
-
-        // Dark-reading guard: when the first valid data arrives and the ambient
-        // is very dark (LatestRawY < 200), ask the user before applying it to the screen.
-        _usbEventRoot.Add(
-            _usbSensorService.WatchProperty(
-                o => o.HasReceivedValidData,
-                () => _ = CheckDarkReadingAsync()
-            )
-        );
-
         TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
         AutoDetectPortCommand = new AsyncRelayCommand(AutoDetectPortAsync);
         AutoDetectAndConnectCommand = new AsyncRelayCommand(AutoDetectAndConnectAsync);
@@ -74,12 +55,25 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             () => !string.IsNullOrWhiteSpace(SettingsService.UsbPortName)
         );
 
-        // CanExecute depends on UsbPortName which is a settings property, not a sensor
-        // property, so notify separately when it changes.
-        _usbEventRoot.Add(
+        _usbEventSubscription = Disposable.Merge(
+            // Propagate live sensor readings to the UI;
+            // also re-evaluate ReadNowCommand.CanExecute when IsConnected changes.
+            _usbSensorService.WatchAllProperties(() =>
+            {
+                OnAllPropertiesChanged();
+                ReadNowCommand.NotifyCanExecuteChanged();
+            }),
+            // Dark-reading guard: when the first valid data arrives and the ambient
+            // is very dark (LatestRawY < 200), ask the user before applying it to the screen.
+            _usbSensorService.WatchProperty(
+                o => o.HasReceivedValidData,
+                hasData => _ = CheckDarkReadingAsync()
+            ),
+            // CanExecute depends on UsbPortName which is a settings property, not a sensor
+            // property, so notify separately when it changes.
             SettingsService.WatchProperty(
                 o => o.UsbPortName,
-                () => ReadNowCommand.NotifyCanExecuteChanged()
+                _ => ReadNowCommand.NotifyCanExecuteChanged()
             )
         );
 
@@ -145,7 +139,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             : $"✗ {result.ErrorMessage}");
 
         await _dialogManager.ShowWindowDialogAsync(
-            _viewModelManager.CreateMessageBoxViewModel(
+            _viewModelManager.GetMessageBoxViewModel(
                 title: "USB Sensör Tanılama",
                 message: sb.ToString(),
                 okButtonText: "Tamam",
@@ -182,7 +176,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
                 sb.Append("✗ TCP/WiFi üzerinden PiColor bulunamadı");
 
                 await _dialogManager.ShowWindowDialogAsync(
-                    _viewModelManager.CreateMessageBoxViewModel(
+                    _viewModelManager.GetMessageBoxViewModel(
                         title: "TCP Tarama",
                         message: sb.ToString(),
                         okButtonText: "Tamam",
@@ -223,7 +217,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
             sb.Append("✗ Sensör hiçbir COM portunda bulunamadı");
 
             await _dialogManager.ShowWindowDialogAsync(
-                _viewModelManager.CreateMessageBoxViewModel(
+                _viewModelManager.GetMessageBoxViewModel(
                     title: "Otomatik Tarama",
                     message: sb.ToString(),
                     okButtonText: "Tamam",
@@ -269,7 +263,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         }
 
         await _dialogManager.ShowWindowDialogAsync(
-            _viewModelManager.CreateMessageBoxViewModel(
+            _viewModelManager.GetMessageBoxViewModel(
                 title: "Otomatik Port Tarama",
                 message: sb.ToString(),
                 okButtonText: "Tamam",
@@ -328,7 +322,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
         _usbSensorService.GammaApplyBlocked = true;
 
         var rawY = _usbSensorService.LatestRawY;
-        var dialog = _viewModelManager.CreateMessageBoxViewModel(
+        var dialog = _viewModelManager.GetMessageBoxViewModel(
             title: "Çok Karanlık Ortam Uyarısı",
             message:
                 $"Sensör çok düşük aydınlık değeri okudu (Ham L ≈ {rawY:F0}).\n" +
@@ -663,7 +657,7 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     protected override void Dispose(bool disposing)
     {
         if (disposing)
-            _usbEventRoot.Dispose();
+            _usbEventSubscription.Dispose();
 
         base.Dispose(disposing);
     }

@@ -1,37 +1,33 @@
-﻿using System;
-using System.Linq;
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform;
-using Avalonia.Threading;
 using LightBulb.Framework;
 using LightBulb.Localization;
 using LightBulb.Services;
-using LightBulb.Utils;
 using LightBulb.Utils.Extensions;
 using LightBulb.ViewModels;
 using LightBulb.ViewModels.Components;
 using LightBulb.ViewModels.Components.Settings;
 using LightBulb.ViewModels.Dialogs;
-using LightBulb.Views;
 using Material.Styles.Themes;
 using Microsoft.Extensions.DependencyInjection;
+using PowerKit.Extensions;
 
 namespace LightBulb;
 
-public class App : Application, IDisposable
+public partial class App : Application, IDisposable
 {
     public static new App? Current => Application.Current as App;
-
-    private readonly DisposableCollector _eventRoot = new();
 
     private readonly ServiceProvider _services;
     private readonly SettingsService _settingsService;
     private readonly MainViewModel _mainViewModel;
 
+    private readonly IDisposable _eventSubscription;
     private bool _isDisposed;
 
     public App()
@@ -55,7 +51,7 @@ public class App : Application, IDisposable
 
         // View models
         services.AddTransient<MainViewModel>();
-        services.AddTransient<DashboardViewModel>();
+        services.AddSingleton<DashboardViewModel>();
         services.AddTransient<MessageBoxViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<SettingsTabViewModelBase, AdvancedSettingsTabViewModel>();
@@ -67,54 +63,22 @@ public class App : Application, IDisposable
 
         _services = services.BuildServiceProvider(true);
         _settingsService = _services.GetRequiredService<SettingsService>();
-        _mainViewModel = _services.GetRequiredService<ViewModelManager>().CreateMainViewModel();
+        _mainViewModel = _services.GetRequiredService<ViewModelManager>().GetMainViewModel();
 
         // Re-initialize the theme when the user changes it
-        _eventRoot.Add(
-            _settingsService.WatchProperty(
-                o => o.Theme,
-                () =>
+        _eventSubscription = _settingsService.WatchProperty(
+            o => o.Theme,
+            v =>
+            {
+                RequestedThemeVariant = v switch
                 {
-                    RequestedThemeVariant = _settingsService.Theme switch
-                    {
-                        ThemeVariant.Light => Avalonia.Styling.ThemeVariant.Light,
-                        ThemeVariant.Dark => Avalonia.Styling.ThemeVariant.Dark,
-                        _ => Avalonia.Styling.ThemeVariant.Default,
-                    };
+                    ThemeVariant.Light => Avalonia.Styling.ThemeVariant.Light,
+                    ThemeVariant.Dark => Avalonia.Styling.ThemeVariant.Dark,
+                    _ => Avalonia.Styling.ThemeVariant.Default,
+                };
 
-                    InitializeTheme();
-                }
-            )
-        );
-
-        // Tray icon does not support binding so we use this hack to synchronize its tooltip
-        _eventRoot.Add(
-            _mainViewModel.Dashboard.WatchProperties(
-                [o => o.IsActive, o => o.CurrentConfiguration],
-                () =>
-                {
-                    var status =
-                        _mainViewModel.Dashboard.CurrentConfiguration.Temperature.ToString("F0")
-                        + " / "
-                        + _mainViewModel.Dashboard.CurrentConfiguration.Brightness.ToString("P0");
-
-                    var tooltip =
-                        "LightBulb"
-                        + Environment.NewLine
-                        + (_mainViewModel.Dashboard.IsActive ? status : "Disabled");
-
-                    try
-                    {
-                        Dispatcher.UIThread.Invoke(() =>
-                        {
-                            if (TrayIcon.GetIcons(this)?.FirstOrDefault() is { } trayIcon)
-                                trayIcon.ToolTipText = tooltip;
-                        });
-                    }
-                    // Ignore exceptions when the application is shutting down
-                    catch (OperationCanceledException) { }
-                }
-            )
+                InitializeTheme();
+            }
         );
     }
 
@@ -123,6 +87,9 @@ public class App : Application, IDisposable
         base.Initialize();
 
         AvaloniaXamlLoader.Load(this);
+
+        // TrayIcon bindings resolve through the application's DataContext
+        DataContext = _mainViewModel;
     }
 
     private void InitializeTheme()
@@ -142,23 +109,19 @@ public class App : Application, IDisposable
 
     public override void OnFrameworkInitializationCompleted()
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopLifetime)
+        // Load settings
+        _settingsService.Load();
+
+        // Initialize the lifetime
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktopLifetime.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-
-            void OnExit(object? sender, ControlledApplicationLifetimeExitEventArgs args)
-            {
-                if (sender is IControlledApplicationLifetime lifetime)
-                    lifetime.Exit -= OnExit;
-
-                Dispose();
-            }
+            desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             // Although `App.Dispose()` is invoked from `Program.Main(...)`, on some platforms
             // it may be called too late in the shutdown lifecycle. Attach an exit
             // handler to ensure timely disposal as a safeguard.
             // https://github.com/Tyrrrz/YoutubeDownloader/issues/795
-            desktopLifetime.Exit += OnExit;
+            desktop.Exit += (_, _) => Dispose();
 
             if (!StartOptions.Current.IsInitiallyHidden)
             {
@@ -168,43 +131,44 @@ public class App : Application, IDisposable
             else
             {
                 // When starting hidden, initialize the backend without showing the UI
-                _mainViewModel.Dashboard.InitializeCommand.Execute(null);
+                _ = _mainViewModel.Dashboard.InitializeAsync();
             }
         }
 
         base.OnFrameworkInitializationCompleted();
 
-        // Set up custom theme colors
-        InitializeTheme();
-
-        // Load settings
-        _settingsService.Load();
-
-        // Auto-start USB sensor if it was enabled in the previous session.
+        // Auto-start USB sensor if it was enabled in the previous session
         if (_settingsService.IsUsbSensorEnabled)
             _services.GetRequiredService<UsbSensorService>().Start();
     }
 
     internal Window? ShowMainWindow()
     {
-        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktopLifetime)
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
             return null;
 
         // Re-use the existing window if already open
-        if (desktopLifetime.MainWindow is { } existingWindow)
+        if (desktop.MainWindow is { } existingWindow)
         {
             existingWindow.ShowActivateFocus();
         }
         // Otherwise, create a new window (the previous one was closed to free resources)
         else
         {
-            var window = new MainView { DataContext = _mainViewModel };
-            window.Closed += (_, _) => desktopLifetime.MainWindow = null;
-            desktopLifetime.MainWindow = window;
-            window.ShowActivateFocus();
+            var viewManager = _services.GetRequiredService<ViewManager>();
+            var window = viewManager.TryBindWindow(_mainViewModel);
+
+            window?.Closed += (_, _) => desktop.MainWindow = null;
+
+            desktop.MainWindow = window;
+
+            window?.ShowActivateFocus();
+
+            // Initialize the theme for the first time; must be done after the main window is created
+            InitializeTheme();
         }
 
-        return desktopLifetime.MainWindow;
+        return desktop.MainWindow;
     }
 
     internal void ToggleMainWindow()
@@ -223,7 +187,10 @@ public class App : Application, IDisposable
 
     private void TrayIcon_OnClicked(object? sender, EventArgs args) => ToggleMainWindow();
 
-    private async void ShowSettingsMenuItem_OnClick(object? sender, EventArgs args)
+    private void TrayToggleWindowMenuItem_OnClick(object? sender, EventArgs args) =>
+        ToggleMainWindow();
+
+    private async void TrayShowSettingsMenuItem_OnClick(object? sender, EventArgs args)
     {
         var window = ShowMainWindow();
         if (window is null)
@@ -240,47 +207,10 @@ public class App : Application, IDisposable
             return;
         }
 
-        _mainViewModel.ShowSettingsCommand.Execute(null);
+        await _mainViewModel.ShowSettingsCommand.ExecuteAsync(null);
     }
 
-    private void ToggleMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.IsEnabled = !_mainViewModel.Dashboard.IsEnabled;
-
-    private void DisableUntilSunriseMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableUntilSunriseCommand.Execute(null);
-
-    private void DisableTemporarily1DayMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromDays(1));
-
-    private void DisableTemporarily12HoursMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromHours(12));
-
-    private void DisableTemporarily6HoursMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromHours(6));
-
-    private void DisableTemporarily3HoursMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromHours(3));
-
-    private void DisableTemporarily1HourMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromHours(1));
-
-    private void DisableTemporarily30MinutesMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromMinutes(30));
-
-    private void DisableTemporarily15MinutesMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromMinutes(15));
-
-    private void DisableTemporarily5MinutesMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromMinutes(5));
-
-    private void DisableTemporarily1MinuteMenuItem_OnClick(object? sender, EventArgs args) =>
-        _mainViewModel.Dashboard.DisableTemporarilyCommand.Execute(TimeSpan.FromMinutes(1));
-
-    private void ExitMenuItem_OnClick(object? sender, EventArgs args)
-    {
-        if (ApplicationLifetime?.TryShutdown() != true)
-            Environment.Exit(0);
-    }
+    private void TrayExitMenuItem_OnClick(object? sender, EventArgs args) => Shutdown();
 
     public void Dispose()
     {
@@ -289,7 +219,16 @@ public class App : Application, IDisposable
 
         _isDisposed = true;
 
-        _eventRoot.Dispose();
+        _eventSubscription.Dispose();
         _services.Dispose();
+    }
+}
+
+public partial class App
+{
+    public static void Shutdown(int exitCode = 0)
+    {
+        if (Current?.ApplicationLifetime?.TryShutdown(exitCode) != true)
+            Environment.Exit(exitCode);
     }
 }

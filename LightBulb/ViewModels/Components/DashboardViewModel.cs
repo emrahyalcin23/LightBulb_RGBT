@@ -1,6 +1,7 @@
-﻿using System;
+using System;
+using System.Globalization;
 using System.Linq;
-using Avalonia;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -11,8 +12,9 @@ using LightBulb.Localization;
 using LightBulb.Models;
 using LightBulb.PlatformInterop;
 using LightBulb.Services;
-using LightBulb.Utils;
 using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.ViewModels.Components;
 
@@ -24,7 +26,7 @@ public partial class DashboardViewModel : ViewModelBase
     private readonly ExternalApplicationService _externalApplicationService;
     private readonly UsbGammaController _usbController;
 
-    private readonly DisposableCollector _eventRoot = new();
+    private readonly IDisposable _eventSubscription;
 
     private readonly Timer _updateInstantTimer;
     private readonly Timer _updateConfigurationTimer;
@@ -50,24 +52,31 @@ public partial class DashboardViewModel : ViewModelBase
         _externalApplicationService = externalApplicationService;
         _usbController = usbController;
 
-        _eventRoot.Add(
+        _eventSubscription = Disposable.Merge(
             this.WatchProperty(
                 o => o.IsEnabled,
-                () =>
+                v =>
                 {
-                    if (IsEnabled)
+                    if (v)
                     {
-                        // Cancel any activate 'disable temporarily' timers
+                        // Cancel any active 'disable temporarily' timers
                         _enableAfterDelayRegistration?.Dispose();
 
                         // Invalidate device contexts
                         _gammaService.InvalidateDeviceContexts();
                     }
                 }
-            )
-        );
-
-        _eventRoot.Add(
+            ),
+            // Refresh transition tooltips and status when the language changes
+            localizationManager.WatchProperty(
+                o => o.Language,
+                _ =>
+                {
+                    OnPropertyChanged(nameof(SunsetTransitionTooltip));
+                    OnPropertyChanged(nameof(SunriseTransitionTooltip));
+                    OnPropertyChanged(nameof(StatusText));
+                }
+            ),
             // Re-register hotkeys when they get updated
             settingsService.WatchProperties(
                 [
@@ -101,14 +110,17 @@ public partial class DashboardViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsActive))]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
     public partial bool IsEnabled { get; set; } = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsActive))]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
     public partial bool IsPaused { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsActive))]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
     public partial bool IsCyclePreviewEnabled { get; set; }
 
     public bool IsActive => IsEnabled && !IsPaused || IsCyclePreviewEnabled;
@@ -119,6 +131,8 @@ public partial class DashboardViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(SunriseEnd))]
     [NotifyPropertyChangedFor(nameof(SunsetStart))]
     [NotifyPropertyChangedFor(nameof(SunsetEnd))]
+    [NotifyPropertyChangedFor(nameof(SunriseTransitionTooltip))]
+    [NotifyPropertyChangedFor(nameof(SunsetTransitionTooltip))]
     [NotifyPropertyChangedFor(nameof(TargetConfiguration))]
     [NotifyPropertyChangedFor(nameof(CycleState))]
     public partial DateTimeOffset Instant { get; set; } = DateTimeOffset.Now;
@@ -140,6 +154,7 @@ public partial class DashboardViewModel : ViewModelBase
     public partial double BrightnessOffset { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
     public partial ColorConfiguration CurrentConfiguration { get; set; } =
         ColorConfiguration.Default;
 
@@ -174,6 +189,20 @@ public partial class DashboardViewModel : ViewModelBase
             SolarTimes.Sunset,
             _settingsService.ConfigurationTransitionDuration,
             _settingsService.ConfigurationTransitionOffset
+        );
+
+    public string SunsetTransitionTooltip =>
+        string.Format(
+            LocalizationManager.SunsetTransitionTooltip,
+            SunsetStart.ToString(CultureInfo.CurrentCulture),
+            SunsetEnd.ToString(CultureInfo.CurrentCulture)
+        );
+
+    public string SunriseTransitionTooltip =>
+        string.Format(
+            LocalizationManager.SunriseTransitionTooltip,
+            SunriseStart.ToString(CultureInfo.CurrentCulture),
+            SunriseEnd.ToString(CultureInfo.CurrentCulture)
         );
 
     public bool IsOffsetEnabled => Math.Abs(TemperatureOffset) + Math.Abs(BrightnessOffset) >= 0.01;
@@ -215,6 +244,17 @@ public partial class DashboardViewModel : ViewModelBase
             _ when CurrentConfiguration == AdjustedNightConfiguration => CycleState.Night,
             _ => CycleState.Transition,
         };
+
+    public string StatusText =>
+        Program.Name
+        + Environment.NewLine
+        + (
+            IsActive
+                ? CurrentConfiguration.Temperature.ToString("F0")
+                    + " / "
+                    + CurrentConfiguration.Brightness.ToString("P0")
+                : LocalizationManager.TrayTooltipDisabled
+        );
 
     private void RegisterHotKeys()
     {
@@ -268,7 +308,13 @@ public partial class DashboardViewModel : ViewModelBase
         {
             _hotKeyService.RegisterHotKey(
                 _settingsService.IncreaseBrightnessOffsetHotKey,
-                () => BrightnessOffset = Math.Min(BrightnessOffset + 0.05, 0.9)
+                () =>
+                {
+                    BrightnessOffset += Math.Min(
+                        0.05,
+                        _settingsService.MaximumBrightness - TargetConfiguration.Brightness
+                    );
+                }
             );
         }
 
@@ -276,7 +322,13 @@ public partial class DashboardViewModel : ViewModelBase
         {
             _hotKeyService.RegisterHotKey(
                 _settingsService.DecreaseBrightnessOffsetHotKey,
-                () => BrightnessOffset = Math.Max(BrightnessOffset - 0.05, -0.9)
+                () =>
+                {
+                    BrightnessOffset += Math.Max(
+                        -0.05,
+                        _settingsService.MinimumBrightness - TargetConfiguration.Brightness
+                    );
+                }
             );
         }
 
@@ -400,8 +452,7 @@ public partial class DashboardViewModel : ViewModelBase
         IsPaused = IsPausedByFullScreen() || IsPausedByWhitelistedApplication();
     }
 
-    [RelayCommand]
-    private void Initialize()
+    public override Task InitializeAsync()
     {
         _updateInstantTimer.Start();
         _updateConfigurationTimer.Start();
@@ -409,6 +460,8 @@ public partial class DashboardViewModel : ViewModelBase
 
         // Hack: feign property changes to refresh the tray icon
         OnAllPropertiesChanged();
+
+        return Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -431,6 +484,9 @@ public partial class DashboardViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void Toggle() => IsEnabled = !IsEnabled;
+
+    [RelayCommand]
     private void ResetConfigurationOffset()
     {
         TemperatureOffset = 0;
@@ -441,7 +497,7 @@ public partial class DashboardViewModel : ViewModelBase
     {
         if (disposing)
         {
-            _eventRoot.Dispose();
+            _eventSubscription.Dispose();
 
             _updateInstantTimer.Dispose();
             _updateConfigurationTimer.Dispose();

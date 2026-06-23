@@ -11,9 +11,10 @@ public partial class LocalizationManager
     {
         [nameof(SunsetLabel)] = "Sonnenuntergang",
         [nameof(SunriseLabel)] = "Sonnenaufgang",
-        [nameof(SunsetTransitionStartsAt)] = "Sonnenuntergangsübergang beginnt um",
-        [nameof(SunriseTransitionStartsAt)] = "Sonnenaufgangsübergang beginnt um",
-        [nameof(AndEndsAt)] = "und endet um",
+        [nameof(SunsetTransitionTooltip)] =
+            "Sonnenuntergangsübergang beginnt um **{0}** und endet um **{1}**",
+        [nameof(SunriseTransitionTooltip)] =
+            "Sonnenaufgangsübergang beginnt um **{0}** und endet um **{1}**",
         [nameof(OffsetTooltipHeader)] =
             "Aktuelle Temperatur- und Helligkeitswerte werden durch einen Versatz angepasst:",
         [nameof(TemperatureOffsetLabel)] = "Temperaturversatz:",
@@ -130,6 +131,25 @@ public partial class LocalizationManager
         [nameof(RefreshAppsTooltip)] = "Laufende Anwendungen aktualisieren",
         [nameof(PauseForWhitelistedTooltip)] =
             "LightBulb pausieren, wenn eine der ausgewählten Anwendungen im Vordergrund ist",
+        // Tray icon context menu
+        [nameof(TrayShowMenuItem)] = "Anzeigen",
+        [nameof(TrayHideMenuItem)] = "Ausblenden",
+        [nameof(TraySettingsMenuItem)] = "Einstellungen",
+        [nameof(TrayEnableMenuItem)] = "Aktivieren",
+        [nameof(TrayDisableMenuItem)] = "Deaktivieren",
+        [nameof(TrayDisableTemporarilyMenuItem)] = "Deaktivieren...",
+        [nameof(TrayDisableUntilSunriseMenuItem)] = "Bis Sonnenaufgang",
+        [nameof(TrayDisableFor1DayMenuItem)] = "Für 1 Tag",
+        [nameof(TrayDisableFor12HoursMenuItem)] = "Für 12 Stunden",
+        [nameof(TrayDisableFor6HoursMenuItem)] = "Für 6 Stunden",
+        [nameof(TrayDisableFor3HoursMenuItem)] = "Für 3 Stunden",
+        [nameof(TrayDisableFor1HourMenuItem)] = "Für 1 Stunde",
+        [nameof(TrayDisableFor30MinutesMenuItem)] = "Für 30 Minuten",
+        [nameof(TrayDisableFor15MinutesMenuItem)] = "Für 15 Minuten",
+        [nameof(TrayDisableFor5MinutesMenuItem)] = "Für 5 Minuten",
+        [nameof(TrayDisableFor1MinuteMenuItem)] = "Für 1 Minute",
+        [nameof(TrayExitMenuItem)] = "Beenden",
+        [nameof(TrayTooltipDisabled)] = "Deaktiviert",
         [nameof(UpdateAvailableTitle)] = "Update verfügbar",
         [nameof(UpdateAvailableMessage)] = """
             Update auf {0} v{1} wurde heruntergeladen.

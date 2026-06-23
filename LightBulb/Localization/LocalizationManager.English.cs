@@ -10,9 +10,10 @@ public partial class LocalizationManager
             // Dashboard
             [nameof(SunsetLabel)] = "Sunset",
             [nameof(SunriseLabel)] = "Sunrise",
-            [nameof(SunsetTransitionStartsAt)] = "Sunset transition starts at",
-            [nameof(SunriseTransitionStartsAt)] = "Sunrise transition starts at",
-            [nameof(AndEndsAt)] = "and ends at",
+            [nameof(SunsetTransitionTooltip)] =
+                "Sunset transition starts at **{0}** and ends at **{1}**",
+            [nameof(SunriseTransitionTooltip)] =
+                "Sunrise transition starts at **{0}** and ends at **{1}**",
             [nameof(OffsetTooltipHeader)] =
                 "Current temperature and brightness values are adjusted by an offset:",
             [nameof(TemperatureOffsetLabel)] = "Temperature offset:",
@@ -136,6 +137,25 @@ public partial class LocalizationManager
             [nameof(RefreshAppsTooltip)] = "Refresh running applications",
             [nameof(PauseForWhitelistedTooltip)] =
                 "Pause LightBulb when one of the selected applications is in the foreground",
+            // Tray icon context menu
+            [nameof(TrayShowMenuItem)] = "Show",
+            [nameof(TrayHideMenuItem)] = "Hide",
+            [nameof(TraySettingsMenuItem)] = "Settings",
+            [nameof(TrayEnableMenuItem)] = "Enable",
+            [nameof(TrayDisableMenuItem)] = "Disable",
+            [nameof(TrayDisableTemporarilyMenuItem)] = "Disable...",
+            [nameof(TrayDisableUntilSunriseMenuItem)] = "Until sunrise",
+            [nameof(TrayDisableFor1DayMenuItem)] = "For 1 day",
+            [nameof(TrayDisableFor12HoursMenuItem)] = "For 12 hours",
+            [nameof(TrayDisableFor6HoursMenuItem)] = "For 6 hours",
+            [nameof(TrayDisableFor3HoursMenuItem)] = "For 3 hours",
+            [nameof(TrayDisableFor1HourMenuItem)] = "For 1 hour",
+            [nameof(TrayDisableFor30MinutesMenuItem)] = "For 30 minutes",
+            [nameof(TrayDisableFor15MinutesMenuItem)] = "For 15 minutes",
+            [nameof(TrayDisableFor5MinutesMenuItem)] = "For 5 minutes",
+            [nameof(TrayDisableFor1MinuteMenuItem)] = "For 1 minute",
+            [nameof(TrayExitMenuItem)] = "Exit",
+            [nameof(TrayTooltipDisabled)] = "Disabled",
             // Dialog messages
             [nameof(UpdateAvailableTitle)] = "Update available",
             [nameof(UpdateAvailableMessage)] = """

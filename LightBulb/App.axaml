@@ -2,11 +2,14 @@
     x:Class="LightBulb.App"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:LightBulb.Views.Controls"
     xmlns:dialogHostAvalonia="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
     xmlns:framework="clr-namespace:LightBulb.Framework"
     xmlns:materialAssists="clr-namespace:Material.Styles.Assists;assembly=Material.Styles"
     xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
     xmlns:materialStyles="clr-namespace:Material.Styles.Themes;assembly=Material.Styles"
+    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+    xmlns:vm="clr-namespace:LightBulb.ViewModels"
     Name="LightBulb"
     ActualThemeVariantChanged="Application_OnActualThemeVariantChanged">
     <Application.DataTemplates>
@@ -160,33 +163,82 @@
     <TrayIcon.Icons>
         <TrayIcons>
             <TrayIcon
+                x:DataType="vm:MainViewModel"
                 Clicked="TrayIcon_OnClicked"
                 Icon="/favicon.ico"
-                ToolTipText="LightBulb">
+                ToolTipText="{Binding Dashboard.StatusText}">
                 <TrayIcon.Menu>
                     <NativeMenu>
-                        <NativeMenuItem Click="TrayIcon_OnClicked" Header="Show/hide" />
-                        <NativeMenuItem Click="ShowSettingsMenuItem_OnClick" Header="Settings" />
+                        <NativeMenuItem
+                            Click="TrayToggleWindowMenuItem_OnClick"
+                            Header="{Binding LocalizationManager.TrayHideMenuItem}"
+                            IsVisible="{Binding IsOpen}" />
+                        <NativeMenuItem
+                            Click="TrayToggleWindowMenuItem_OnClick"
+                            Header="{Binding LocalizationManager.TrayShowMenuItem}"
+                            IsVisible="{Binding !IsOpen}" />
+                        <NativeMenuItem Click="TrayShowSettingsMenuItem_OnClick" Header="{Binding LocalizationManager.TraySettingsMenuItem}" />
                         <NativeMenuItemSeparator />
-
-                        <NativeMenuItem Click="ToggleMenuItem_OnClick" Header="Enable/disable" />
-                        <NativeMenuItem Header="Disable...">
+                        <NativeMenuItem
+                            Command="{Binding Dashboard.ToggleCommand}"
+                            Header="{Binding LocalizationManager.TrayDisableMenuItem}"
+                            IsVisible="{Binding Dashboard.IsEnabled}" />
+                        <NativeMenuItem
+                            Command="{Binding Dashboard.ToggleCommand}"
+                            Header="{Binding LocalizationManager.TrayEnableMenuItem}"
+                            IsVisible="{Binding !Dashboard.IsEnabled}" />
+                        <NativeMenuItem Header="{Binding LocalizationManager.TrayDisableTemporarilyMenuItem}">
                             <NativeMenu>
-                                <NativeMenuItem Click="DisableUntilSunriseMenuItem_OnClick" Header="Until sunrise" />
-                                <NativeMenuItem Click="DisableTemporarily1DayMenuItem_OnClick" Header="For 1 day" />
-                                <NativeMenuItem Click="DisableTemporarily12HoursMenuItem_OnClick" Header="For 12 hours" />
-                                <NativeMenuItem Click="DisableTemporarily6HoursMenuItem_OnClick" Header="For 6 hours" />
-                                <NativeMenuItem Click="DisableTemporarily3HoursMenuItem_OnClick" Header="For 3 hours" />
-                                <NativeMenuItem Click="DisableTemporarily1HourMenuItem_OnClick" Header="For 1 hour" />
-                                <NativeMenuItem Click="DisableTemporarily30MinutesMenuItem_OnClick" Header="For 30 minutes" />
-                                <NativeMenuItem Click="DisableTemporarily15MinutesMenuItem_OnClick" Header="For 15 minutes" />
-                                <NativeMenuItem Click="DisableTemporarily5MinutesMenuItem_OnClick" Header="For 5 minutes" />
-                                <NativeMenuItem Click="DisableTemporarily1MinuteMenuItem_OnClick" Header="For 1 minute" />
+                                <NativeMenuItem Command="{Binding Dashboard.DisableUntilSunriseCommand}" Header="{Binding LocalizationManager.TrayDisableUntilSunriseMenuItem}" />
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor1DayMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>1.00:00:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor12HoursMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.12:00:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor6HoursMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.06:00:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor3HoursMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.03:00:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor1HourMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.01:00:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor30MinutesMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.00:30:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor15MinutesMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.00:15:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor5MinutesMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.00:05:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
+                                <NativeMenuItem Command="{Binding Dashboard.DisableTemporarilyCommand}" Header="{Binding LocalizationManager.TrayDisableFor1MinuteMenuItem}">
+                                    <NativeMenuItem.CommandParameter>
+                                        <sys:TimeSpan>0.00:01:00</sys:TimeSpan>
+                                    </NativeMenuItem.CommandParameter>
+                                </NativeMenuItem>
                             </NativeMenu>
                         </NativeMenuItem>
                         <NativeMenuItemSeparator />
-
-                        <NativeMenuItem Click="ExitMenuItem_OnClick" Header="Exit" />
+                        <NativeMenuItem Click="TrayExitMenuItem_OnClick" Header="{Binding LocalizationManager.TrayExitMenuItem}" />
                     </NativeMenu>
                 </TrayIcon.Menu>
             </TrayIcon>

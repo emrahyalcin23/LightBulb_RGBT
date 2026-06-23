@@ -1,7 +1,7 @@
 using System;
 using LightBulb.Core;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.Services;
 
@@ -15,7 +15,7 @@ public class UsbGammaController : IDisposable
     private readonly UsbSensorService _sensor;
     private readonly GammaService _gamma;
     private readonly SettingsService _settings;
-    private readonly DisposableCollector _eventRoot = new();
+    private readonly IDisposable _eventSubscription;
 
     public UsbGammaController(
         UsbSensorService sensor,
@@ -27,14 +27,11 @@ public class UsbGammaController : IDisposable
         _gamma = gamma;
         _settings = settings;
 
-        _eventRoot.Add(
+        _eventSubscription = Disposable.Merge(
             settings.WatchProperties(
                 [o => o.IsUsbSensorEnabled],
                 _gamma.InvalidateGamma
-            )
-        );
-
-        _eventRoot.Add(
+            ),
             sensor.WatchProperties(
                 [
                     o => o.LatestCct,
@@ -142,5 +139,5 @@ public class UsbGammaController : IDisposable
         }
     }
 
-    public void Dispose() => _eventRoot.Dispose();
+    public void Dispose() => _eventSubscription.Dispose();
 }

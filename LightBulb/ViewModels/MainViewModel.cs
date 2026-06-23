@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LightBulb.Framework;
 using LightBulb.Localization;
@@ -10,11 +11,13 @@ using LightBulb.Services;
 using LightBulb.Utils.Extensions;
 using LightBulb.ViewModels.Components;
 using LightBulb.ViewModels.Components.Settings;
+using PowerKit.Extensions;
 using Process = System.Diagnostics.Process;
 
 namespace LightBulb.ViewModels;
 
 public partial class MainViewModel(
+    DashboardViewModel dashboard,
     ViewModelManager viewModelManager,
     DialogManager dialogManager,
     SettingsService settingsService,
@@ -43,7 +46,10 @@ public partial class MainViewModel(
 
     public LocalizationManager LocalizationManager { get; } = localizationManager;
 
-    public DashboardViewModel Dashboard { get; } = viewModelManager.CreateDashboardViewModel();
+    public DashboardViewModel Dashboard { get; } = dashboard;
+
+    [ObservableProperty]
+    public partial bool IsOpen { get; set; }
 
     private async Task FinalizePendingUpdateAsync()
     {
@@ -51,7 +57,7 @@ public partial class MainViewModel(
         if (updateVersion is null)
             return;
 
-        var dialog = viewModelManager.CreateMessageBoxViewModel(
+        var dialog = viewModelManager.GetMessageBoxViewModel(
             LocalizationManager.UpdateAvailableTitle,
             string.Format(LocalizationManager.UpdateAvailableMessage, Program.Name, updateVersion),
             LocalizationManager.InstallButton,
@@ -66,8 +72,7 @@ public partial class MainViewModel(
 
         updateService.FinalizeUpdate(updateVersion);
 
-        if (Application.Current?.ApplicationLifetime?.TryShutdown(2) != true)
-            Environment.Exit(2);
+        App.Shutdown(2);
     }
 
     private async Task ShowUkraineSupportMessageAsync()
@@ -75,7 +80,7 @@ public partial class MainViewModel(
         if (!settingsService.IsUkraineSupportMessageEnabled)
             return;
 
-        var dialog = viewModelManager.CreateMessageBoxViewModel(
+        var dialog = viewModelManager.GetMessageBoxViewModel(
             LocalizationManager.UkraineSupportTitle,
             LocalizationManager.UkraineSupportMessage,
             LocalizationManager.LearnMoreButton,
@@ -99,7 +104,7 @@ public partial class MainViewModel(
         if (Debugger.IsAttached)
             return;
 
-        var dialog = viewModelManager.CreateMessageBoxViewModel(
+        var dialog = viewModelManager.GetMessageBoxViewModel(
             LocalizationManager.UnstableBuildTitle,
             string.Format(LocalizationManager.UnstableBuildMessage, Program.Name),
             LocalizationManager.SeeReleasesButton,
@@ -115,7 +120,7 @@ public partial class MainViewModel(
         if (settingsService.IsExtendedGammaRangeUnlocked)
             return;
 
-        var dialog = viewModelManager.CreateMessageBoxViewModel(
+        var dialog = viewModelManager.GetMessageBoxViewModel(
             LocalizationManager.LimitedGammaRangeTitle,
             string.Format(LocalizationManager.LimitedGammaRangeMessage, Program.Name),
             LocalizationManager.FixButton,
@@ -134,7 +139,7 @@ public partial class MainViewModel(
         if (!settingsService.IsFirstTimeExperienceEnabled)
             return;
 
-        var dialog = viewModelManager.CreateMessageBoxViewModel(
+        var dialog = viewModelManager.GetMessageBoxViewModel(
             LocalizationManager.WelcomeTitle,
             string.Format(LocalizationManager.WelcomeMessage, Program.Name),
             LocalizationManager.OkButton,
@@ -149,14 +154,13 @@ public partial class MainViewModel(
         if (await dialogManager.ShowDialogAsync(dialog) != true)
             return;
 
-        var settingsDialog = viewModelManager.CreateSettingsViewModel();
+        var settingsDialog = viewModelManager.GetSettingsViewModel();
         settingsDialog.ActivateTab<LocationSettingsTabViewModel>();
 
         await dialogManager.ShowDialogAsync(settingsDialog);
     }
 
-    [RelayCommand]
-    private async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
         if (_isInitialized)
             return;
@@ -175,7 +179,7 @@ public partial class MainViewModel(
 
     [RelayCommand]
     private async Task ShowSettingsAsync() =>
-        await dialogManager.ShowWindowDialogAsync(viewModelManager.CreateSettingsViewModel());
+        await dialogManager.ShowWindowDialogAsync(viewModelManager.GetSettingsViewModel());
 
     [RelayCommand]
     private void ShowAbout() => Process.StartShellExecute(Program.ProjectUrl);

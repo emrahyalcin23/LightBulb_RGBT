@@ -9,8 +9,8 @@ using CommunityToolkit.Mvvm.Input;
 using LightBulb.Framework;
 using LightBulb.Models;
 using LightBulb.Services;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.ViewModels.Dialogs;
 
@@ -78,7 +78,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 {
     private readonly SettingsService   _settingsService;
     private readonly UsbSensorService  _usbSensorService;
-    private readonly DisposableCollector _eventRoot = new();
+    private readonly IDisposable _eventSubscription;
 
     // ── Calibration points ────────────────────────────────────────────────────
 
@@ -159,8 +159,10 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 
         LoadPointsFromSettings();
 
-        _eventRoot.Add(_usbSensorService.WatchAllProperties(() => OnAllPropertiesChanged()));
-        _eventRoot.Add(_settingsService.WatchAllProperties(() => OnAllPropertiesChanged()));
+        _eventSubscription = Disposable.Merge(
+            _usbSensorService.WatchAllProperties(OnAllPropertiesChanged),
+            _settingsService.WatchAllProperties(OnAllPropertiesChanged)
+        );
 
         AddPointCommand = new RelayCommand(AddPoint);
 
@@ -367,7 +369,7 @@ public partial class UsbCalibrationViewModel : DialogViewModelBase
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _eventRoot.Dispose();
+        if (disposing) _eventSubscription.Dispose();
         base.Dispose(disposing);
     }
 }

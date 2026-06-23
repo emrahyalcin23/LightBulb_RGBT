@@ -1,31 +1,25 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LightBulb.Services;
-using LightBulb.Utils;
-using LightBulb.Utils.Extensions;
+using PowerKit;
+using PowerKit.Extensions;
 
 namespace LightBulb.Localization;
 
 public partial class LocalizationManager : ObservableObject, IDisposable
 {
-    private readonly DisposableCollector _eventRoot = new();
+    private readonly IDisposable _eventSubscription;
 
     public LocalizationManager(SettingsService settingsService)
     {
-        _eventRoot.Add(
-            settingsService.WatchProperty(
-                o => o.Language,
-                () => Language = settingsService.Language,
-                true
-            )
-        );
-
-        _eventRoot.Add(
+        _eventSubscription = Disposable.Merge(
+            settingsService.WatchProperty(o => o.Language, v => Language = v, true),
             this.WatchProperty(
                 o => o.Language,
-                () =>
+                _ =>
                 {
                     foreach (var propertyName in EnglishLocalization.Keys)
                         OnPropertyChanged(propertyName);
@@ -51,12 +45,19 @@ public partial class LocalizationManager : ObservableObject, IDisposable
                     "deu" => GermanLocalization,
                     "fra" => FrenchLocalization,
                     "spa" => SpanishLocalization,
+                    "zho"
+                        when CultureInfo
+                            .CurrentUICulture.GetSelfAndParents()
+                            .Any(c =>
+                                string.Equals(c.Name, "zh-Hans", StringComparison.OrdinalIgnoreCase)
+                            ) => ChineseSimplifiedLocalization,
                     _ => EnglishLocalization,
                 },
             Language.Ukrainian => UkrainianLocalization,
             Language.German => GermanLocalization,
             Language.French => FrenchLocalization,
             Language.Spanish => SpanishLocalization,
+            Language.ChineseSimplified => ChineseSimplifiedLocalization,
             _ => EnglishLocalization,
         };
 
@@ -71,7 +72,7 @@ public partial class LocalizationManager : ObservableObject, IDisposable
         return $"Missing localization for '{key}'";
     }
 
-    public void Dispose() => _eventRoot.Dispose();
+    public void Dispose() => _eventSubscription.Dispose();
 }
 
 public partial class LocalizationManager
@@ -80,9 +81,8 @@ public partial class LocalizationManager
 
     public string SunsetLabel => Get();
     public string SunriseLabel => Get();
-    public string SunsetTransitionStartsAt => Get();
-    public string SunriseTransitionStartsAt => Get();
-    public string AndEndsAt => Get();
+    public string SunsetTransitionTooltip => Get();
+    public string SunriseTransitionTooltip => Get();
     public string OffsetTooltipHeader => Get();
     public string TemperatureOffsetLabel => Get();
     public string BrightnessOffsetLabel => Get();
@@ -98,6 +98,8 @@ public partial class LocalizationManager
     public string StartPreviewTooltip => Get();
     public string SettingsText => Get();
     public string OpenSettingsTooltip => Get();
+
+    // Fork-specific: About button in main window
     public string AboutText => Get();
     public string OpenGitHubTooltip => Get();
 
@@ -187,6 +189,28 @@ public partial class LocalizationManager
     public string AppWhitelistLabel => Get();
     public string RefreshAppsTooltip => Get();
     public string PauseForWhitelistedTooltip => Get();
+
+    // ---- Tray icon context menu ----
+
+    public string TrayShowMenuItem => Get();
+    public string TrayHideMenuItem => Get();
+    public string TraySettingsMenuItem => Get();
+    public string TrayEnableMenuItem => Get();
+    public string TrayDisableMenuItem => Get();
+    public string TrayDisableTemporarilyMenuItem => Get();
+    public string TrayDisableUntilSunriseMenuItem => Get();
+    public string TrayDisableFor1DayMenuItem => Get();
+    public string TrayDisableFor12HoursMenuItem => Get();
+    public string TrayDisableFor6HoursMenuItem => Get();
+    public string TrayDisableFor3HoursMenuItem => Get();
+    public string TrayDisableFor1HourMenuItem => Get();
+    public string TrayDisableFor30MinutesMenuItem => Get();
+    public string TrayDisableFor15MinutesMenuItem => Get();
+    public string TrayDisableFor5MinutesMenuItem => Get();
+    public string TrayDisableFor1MinuteMenuItem => Get();
+    public string TrayExitMenuItem => Get();
+
+    public string TrayTooltipDisabled => Get();
 
     // ---- Dialog messages ----
 

@@ -12,7 +12,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LightBulb.Models;
-using LightBulb.Utils.Extensions;
+using PowerKit.Extensions;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
@@ -311,9 +311,9 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     {
         _settingsService = settingsService;
         // Auto-reload when the user changes the calibration JSON path.
-        _ = settingsService.WatchProperty(o => o.RgblCalibrationJsonPath, ReloadRgblEvaluator);
+        _ = settingsService.WatchProperty(o => o.RgblCalibrationJsonPath, _ => ReloadRgblEvaluator());
         // Reschedule the read timer immediately when the interval setting changes.
-        _ = settingsService.WatchProperty(o => o.UsbReadIntervalMinutes, RescheduleRead);
+        _ = settingsService.WatchProperty(o => o.UsbReadIntervalMinutes, _ => RescheduleRead());
         // Create default calibration file if it doesn't exist yet.
         WriteDefaultCalibrationIfMissing();
         // Load calibration immediately (regardless of whether the sensor is enabled).
