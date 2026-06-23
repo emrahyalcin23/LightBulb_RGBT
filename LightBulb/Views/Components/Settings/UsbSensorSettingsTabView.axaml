@@ -23,6 +23,14 @@
             Theme="{DynamicResource MaterialOutlinedButton}"
             ToolTip.Tip="Bağlantı moduna göre önce TCP/WiFi, sonra USB COM tarar; bulunan cihaza bağlanır." />
 
+        <!--  Bağlantı durumu — butonun hemen altında  -->
+        <TextBlock
+            Margin="0,4,0,0"
+            HorizontalAlignment="Right"
+            FontSize="11"
+            Opacity="0.7"
+            Text="{Binding ConnectionStatusText}" />
+
         <!--  Bağlantı Modu  -->
         <DockPanel
             Margin="0,16,0,0"
@@ -77,14 +85,6 @@
                 ItemsSource="{Binding AvailablePortNames}"
                 SelectedItem="{Binding PortName}" />
         </DockPanel>
-
-        <!--  Connection status (small, below port row)  -->
-        <TextBlock
-            Margin="0,4,0,0"
-            HorizontalAlignment="Right"
-            FontSize="11"
-            Opacity="0.7"
-            Text="{Binding ConnectionStatusText}" />
 
         <!--  Read interval  -->
         <!--  Slider pozisyonu: 1-59 = saniye modu, 60-179 = dakika modu (1-120 dk)  -->

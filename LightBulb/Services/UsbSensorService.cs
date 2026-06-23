@@ -696,7 +696,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         Stop();
         ReloadRgblEvaluator();
         LoadNnEvaluator();
+        // Transport opening (may block on TCP connects) and session init both run off the UI thread.
+        Task.Run(ConnectAndInit);
+    }
 
+    private void ConnectAndInit()
+    {
         var mode = _settingsService.SensorConnectionMode;
         bool opened = mode switch
         {
@@ -712,9 +717,7 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             return;
         }
 
-        // KIMSIN handshake + one-time init commands run on a background thread.
-        // IsConnected is set to true only after successful handshake.
-        Task.Run(PerformSessionInit);
+        PerformSessionInit();
     }
 
     /// <summary>
