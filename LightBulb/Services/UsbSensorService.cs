@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -1370,8 +1371,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// Scans all available serial ports and returns the first one that responds with a valid
     /// RGB reading. Updates <see cref="SettingsService.UsbPortName"/> on success.
     /// <summary>
-    /// Scans well-known TCP endpoints for a PiColor device.
-    /// Priority: configured device name (mDNS) → saved host → AP IP 192.168.4.1.
+    /// Scans for a PiColor device over TCP/WiFi using the same discovery order as
+    /// the official picolor_pil_test.ps1 script:
+    ///   1. AP IP 192.168.4.1  — always active, no DNS needed
+    ///   2. DNS/mDNS resolution of TcpDeviceName (e.g. picolor-modul-1.local)
+    ///   3. Previously saved TcpSensorHost
+    ///   4. Async parallel subnet TCP scan — identifies by TCP_CONNECTED=PICOLOR banner
     /// Updates TcpSensorHost on success.
     /// </summary>
     public Task<TcpScanResult> TryAutoDetectTcpAsync()
@@ -1382,55 +1387,63 @@ public partial class UsbSensorService : ObservableObject, IDisposable
             ConnectionTestMessage = "TCP taranıyor...";
         });
 
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
-            var port       = _settingsService.TcpSensorPort;
-            var candidates = BuildTcpCandidates(_settingsService.TcpDeviceName, _settingsService.TcpSensorHost);
-            var tried      = new List<(string Host, string Outcome)>();
+            var port    = _settingsService.TcpSensorPort;
+            var devName = _settingsService.TcpDeviceName;
+            var tried   = new List<(string Host, string Outcome)>();
             string? foundHost = null;
 
-            foreach (var host in candidates)
+            // ── Adım 1: AP IP — DNS gerektirmez, her zaman aktif ─────────────
+            Dispatcher.UIThread.Post(() =>
+                ConnectionTestMessage = "1/4  AP IP deneniyor (192.168.4.1)...");
+            if (await TryTcpProbeAsync("192.168.4.1", port, tried))
             {
-                TcpTransportState? t = null;
+                foundHost = "192.168.4.1";
+            }
+
+            // ── Adım 2: DNS / mDNS çözümlemesi ───────────────────────────────
+            if (foundHost is null && !string.IsNullOrWhiteSpace(devName))
+            {
+                Dispatcher.UIThread.Post(() =>
+                    ConnectionTestMessage = $"2/4  DNS çözümleniyor ({devName})...");
+                string? resolvedIp = null;
                 try
                 {
-                    var client = new TcpClient();
-                    if (!client.ConnectAsync(host, port).Wait(2000))
-                    {
-                        client.Dispose();
-                        tried.Add((host, "✗ Bağlantı zaman aşımı"));
-                        continue;
-                    }
-                    t = new TcpTransportState(client);
-
-                    System.Threading.Thread.Sleep(300);
-                    string identity = "";
-                    if (client.Available > 0)
-                        identity = ReadTcpLine(t).Trim();
-
-                    if (!IsKnownFirmware(identity))
-                    {
-                        t.Writer.WriteLine(KimsinCommand);
-                        identity = ReadTcpLine(t).Trim();
-                    }
-
-                    if (IsKnownFirmware(identity))
-                    {
-                        foundHost = host;
-                        tried.Add((host, $"✓ PiColor bulundu"));
-                        break;
-                    }
-                    tried.Add((host, $"✗ Yabancı cihaz: '{Escape(identity)}'"));
+                    var addrs = System.Net.Dns.GetHostAddresses(devName);
+                    resolvedIp = addrs
+                        .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)
+                        ?.ToString();
+                    if (resolvedIp is not null)
+                        tried.Add((devName, $"DNS → {resolvedIp}"));
                 }
                 catch (Exception ex)
                 {
-                    tried.Add((host, $"✗ Hata: {ex.Message}"));
+                    tried.Add((devName, $"✗ DNS çözümlenemedi: {ex.Message}"));
                 }
-                finally
+
+                if (resolvedIp is not null && await TryTcpProbeAsync(resolvedIp, port, tried))
+                    foundHost = resolvedIp;
+            }
+
+            // ── Adım 3: Kayıtlı host ──────────────────────────────────────────
+            if (foundHost is null)
+            {
+                var savedHost = _settingsService.TcpSensorHost;
+                if (!string.IsNullOrWhiteSpace(savedHost) &&
+                    !savedHost.Equals("192.168.4.1", StringComparison.OrdinalIgnoreCase) &&
+                    !savedHost.Equals(devName, StringComparison.OrdinalIgnoreCase))
                 {
-                    t?.Dispose();
+                    Dispatcher.UIThread.Post(() =>
+                        ConnectionTestMessage = $"3/4  Kayıtlı host deneniyor ({savedHost})...");
+                    if (await TryTcpProbeAsync(savedHost, port, tried))
+                        foundHost = savedHost;
                 }
             }
+
+            // ── Adım 4: Subnet TCP tarama ─────────────────────────────────────
+            if (foundHost is null)
+                foundHost = await SubnetScanForPiColorAsync(port, tried);
 
             var found = foundHost;
             Dispatcher.UIThread.Post(() =>
@@ -1449,6 +1462,174 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
             return new TcpScanResult(tried, foundHost, port);
         });
+    }
+
+    /// <summary>
+    /// Connects to host:port, reads the TCP welcome banner, and if absent sends KIMSIN.
+    /// Returns true if PiColor firmware is identified.
+    /// </summary>
+    private async Task<bool> TryTcpProbeAsync(string host, int port, List<(string, string)> tried)
+    {
+        TcpClient? client = null;
+        try
+        {
+            client = new TcpClient();
+            var connectTask = client.ConnectAsync(host, port);
+            if (await Task.WhenAny(connectTask, Task.Delay(1500)) != connectTask || !client.Connected)
+            {
+                tried.Add((host, "✗ Bağlantı zaman aşımı"));
+                return false;
+            }
+
+            var ns = client.GetStream();
+            ns.ReadTimeout = 800;
+            var buf = new byte[512];
+            int n = 0;
+            try { n = await ns.ReadAsync(buf, 0, buf.Length); } catch { }
+            var banner = System.Text.Encoding.UTF8.GetString(buf, 0, n).Trim();
+
+            if (banner.Contains(TcpConnectedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                tried.Add((host, "✓ PiColor (banner)"));
+                return true;
+            }
+
+            // Banner boşsa KIMSIN dene
+            try
+            {
+                using var sw = new StreamWriter(ns, System.Text.Encoding.UTF8, leaveOpen: true)
+                    { AutoFlush = true, NewLine = "\r\n" };
+                await sw.WriteLineAsync(KimsinCommand);
+                ns.ReadTimeout = 1500;
+                n = 0;
+                try { n = await ns.ReadAsync(buf, 0, buf.Length); } catch { }
+                var resp = System.Text.Encoding.UTF8.GetString(buf, 0, n).Trim();
+                if (IsKnownFirmware(resp))
+                {
+                    tried.Add((host, $"✓ PiColor (KIMSIN)"));
+                    return true;
+                }
+                tried.Add((host, $"✗ Yabancı: '{Escape(resp)}'"));
+            }
+            catch (Exception ex)
+            {
+                tried.Add((host, $"✗ KIMSIN hatası: {ex.Message}"));
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            tried.Add((host, $"✗ {ex.Message}"));
+            return false;
+        }
+        finally { client?.Dispose(); }
+    }
+
+    /// <summary>
+    /// Async-parallel subnet scan matching the PowerShell script logic:
+    /// all 254 addresses on each local /24 subnet are probed simultaneously;
+    /// device identified by TCP_CONNECTED=PICOLOR in the welcome banner.
+    /// </summary>
+    private async Task<string?> SubnetScanForPiColorAsync(int port, List<(string, string)> tried)
+    {
+        var localIPs = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(ni =>
+                ni.OperationalStatus == OperationalStatus.Up &&
+                ni.NetworkInterfaceType is not NetworkInterfaceType.Loopback)
+            .SelectMany(ni => ni.GetIPProperties().UnicastAddresses)
+            .Where(ua => ua.Address.AddressFamily == AddressFamily.InterNetwork)
+            .Select(ua => ua.Address.ToString())
+            .Where(IsPrivateIp)
+            .ToList();
+
+        if (localIPs.Count == 0)
+        {
+            tried.Add(("[ Subnet ]", "✗ Özel ağ arayüzü bulunamadı"));
+            return null;
+        }
+
+        var subnets = localIPs
+            .Select(ip => string.Join(".", ip.Split('.').Take(3)))
+            .Distinct()
+            .ToList();
+
+        foreach (var subnet in subnets)
+        {
+            Dispatcher.UIThread.Post(() =>
+                ConnectionTestMessage = $"4/4  {subnet}.0/24 taranıyor...");
+
+            // 254 adrese eş zamanlı async bağlantı başlat (PS script ile aynı mantık)
+            var tasks = new Dictionary<string, Task<bool>>();
+            for (int i = 1; i <= 254; i++)
+            {
+                var ip = $"{subnet}.{i}";
+                tasks[ip] = ProbeBannerAsync(ip, port);
+            }
+
+            await Task.Delay(900); // bağlantıların tamamlanması için bekle
+
+            string? found = null;
+            foreach (var (ip, t) in tasks)
+            {
+                if (!t.IsCompleted) continue;
+                if (t.Result) { found = ip; break; }
+            }
+
+            // Kalan bağlantıları arka planda temizle
+            _ = Task.Run(async () =>
+            {
+                foreach (var t in tasks.Values)
+                    try { await t; } catch { }
+            });
+
+            if (found is not null)
+            {
+                tried.Add(($"{subnet}.0/24", $"✓ Bulundu: {found}"));
+                return found;
+            }
+            tried.Add(($"{subnet}.0/24", "✗ Bulunamadı"));
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Raw TCP connect + banner read for subnet scan.
+    /// Returns true if the TCP welcome banner contains TCP_CONNECTED=PICOLOR.
+    /// Never throws.
+    /// </summary>
+    private static async Task<bool> ProbeBannerAsync(string host, int port)
+    {
+        TcpClient? client = null;
+        try
+        {
+            client = new TcpClient();
+            var ct = client.ConnectAsync(host, port);
+            await Task.WhenAny(ct, Task.Delay(800));
+            if (!ct.IsCompletedSuccessfully || !client.Connected) return false;
+
+            var ns = client.GetStream();
+            ns.ReadTimeout = 500;
+            var buf = new byte[256];
+            int n;
+            try { n = await ns.ReadAsync(buf, 0, buf.Length); }
+            catch { return false; }
+            return System.Text.Encoding.UTF8
+                .GetString(buf, 0, n)
+                .Contains("TCP_CONNECTED=PICOLOR", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+        finally { client?.Dispose(); }
+    }
+
+    private static bool IsPrivateIp(string ip)
+    {
+        var p = ip.Split('.');
+        if (p.Length != 4 ||
+            !int.TryParse(p[0], out var a) ||
+            !int.TryParse(p[1], out var b)) return false;
+        return a == 10 ||
+               (a == 172 && b is >= 16 and <= 31) ||
+               (a == 192 && b == 168);
     }
 
     /// Each port is tried with a 1-second read timeout so the scan is fast.
