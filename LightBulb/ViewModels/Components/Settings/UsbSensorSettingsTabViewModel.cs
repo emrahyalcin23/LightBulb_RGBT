@@ -156,88 +156,81 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     private async Task AutoDetectAndConnectAsync()
     {
-        // Phase 1: port tarama
-        var detectResult = await _usbSensorService.AutoDetectPortAsync();
+        var mode = SettingsService.SensorConnectionMode;
 
-        if (detectResult.FoundPort is not null)
+        // ── TCP tarama ────────────────────────────────────────────────────────
+        if (mode is SensorConnectionMode.Tcp or SensorConnectionMode.Auto)
         {
-            OnPropertyChanged(nameof(PortName));
-            if (SettingsService.IsUsbSensorEnabled)
-                _usbSensorService.Start();
+            var tcpResult = await _usbSensorService.TryAutoDetectTcpAsync();
+
+            if (tcpResult.FoundHost is not null)
+            {
+                OnPropertyChanged(nameof(TcpHost));
+                if (SettingsService.IsUsbSensorEnabled)
+                    _usbSensorService.Start();
+                return; // Başarılı — diyalog gösterme
+            }
+
+            // TCP bulunamadı: Auto modunda USB'ye devam et, TCP modunda hata göster.
+            if (mode == SensorConnectionMode.Tcp)
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("── Taranan Adresler ──");
+                foreach (var (h, outcome) in tcpResult.TriedHosts)
+                    sb.AppendLine($"{h,-30} {outcome}");
+                sb.AppendLine();
+                sb.Append("✗ TCP/WiFi üzerinden PiColor bulunamadı");
+
+                await _dialogManager.ShowWindowDialogAsync(
+                    _viewModelManager.CreateMessageBoxViewModel(
+                        title: "TCP Tarama",
+                        message: sb.ToString(),
+                        okButtonText: "Tamam",
+                        cancelButtonText: null
+                    )
+                );
+                return;
+            }
         }
-        else
+
+        // ── USB tarama (USB modu veya Auto'da TCP başarısız olunca) ───────────
+        if (mode is SensorConnectionMode.Usb or SensorConnectionMode.Auto)
         {
-            // Port bulunamadı → sadece port hata diyaloğu
+            var detectResult = await _usbSensorService.AutoDetectPortAsync();
+
+            if (detectResult.FoundPort is not null)
+            {
+                OnPropertyChanged(nameof(PortName));
+                if (SettingsService.IsUsbSensorEnabled)
+                    _usbSensorService.Start();
+                return;
+            }
+
+            // USB de bulunamadı → tarama raporu göster
             var sb = new StringBuilder();
+            if (mode == SensorConnectionMode.Auto)
+                sb.AppendLine("(TCP taraması da başarısız oldu)");
             sb.AppendLine($"Baud Rate :  {detectResult.BaudRate}");
             sb.AppendLine($"Komut     :  {detectResult.SentCommand}");
             sb.AppendLine();
-            sb.AppendLine("── Taranan Portlar ──");
+            sb.AppendLine("── Taranan COM Portları ──");
             if (detectResult.TriedPorts.Count == 0)
                 sb.AppendLine("(sistemde seri port bulunamadı)");
             else
                 foreach (var (port, outcome) in detectResult.TriedPorts)
                     sb.AppendLine($"{port,-8} {outcome}");
             sb.AppendLine();
-            sb.Append("✗ Sensör hiçbir portta bulunamadı");
+            sb.Append("✗ Sensör hiçbir COM portunda bulunamadı");
 
             await _dialogManager.ShowWindowDialogAsync(
                 _viewModelManager.CreateMessageBoxViewModel(
-                    title: "Otomatik Port Tarama",
+                    title: "Otomatik Tarama",
                     message: sb.ToString(),
                     okButtonText: "Tamam",
                     cancelButtonText: null
                 )
             );
-            return;
         }
-
-        // Phase 2: bağlantı testi
-        var connectResult = await _usbSensorService.TestConnectionAsync();
-
-        if (connectResult.Success && !_usbSensorService.IsConnected)
-            _usbSensorService.Start();
-
-        if (connectResult.Success) return; // her ikisi başarılı → diyalog yok
-
-        // Bağlantı başarısız → önce port tarama sonucu, ardından bağlantı hatası
-        var sbDetect = new StringBuilder();
-        sbDetect.AppendLine($"Baud Rate :  {detectResult.BaudRate}");
-        sbDetect.AppendLine($"Komut     :  {detectResult.SentCommand}");
-        sbDetect.AppendLine();
-        sbDetect.AppendLine("── Taranan Portlar ──");
-        foreach (var (port, outcome) in detectResult.TriedPorts)
-            sbDetect.AppendLine($"{port,-8} {outcome}");
-        sbDetect.AppendLine();
-        sbDetect.Append($"✓ Sensör bulundu → {detectResult.FoundPort} portuna geçildi");
-
-        await _dialogManager.ShowWindowDialogAsync(
-            _viewModelManager.CreateMessageBoxViewModel(
-                title: "Otomatik Port Tarama",
-                message: sbDetect.ToString(),
-                okButtonText: "Tamam",
-                cancelButtonText: null
-            )
-        );
-
-        var sbConnect = new StringBuilder();
-        sbConnect.AppendLine($"Port      :  {connectResult.PortName}");
-        sbConnect.AppendLine($"Baud Rate :  {connectResult.BaudRate}");
-        sbConnect.AppendLine($"Komut     :  {connectResult.SentCommand}");
-        sbConnect.AppendLine();
-        sbConnect.AppendLine("── Alınan Yanıt ──");
-        sbConnect.AppendLine(string.IsNullOrEmpty(connectResult.RawResponse) ? "(yanıt yok)" : connectResult.RawResponse);
-        sbConnect.AppendLine();
-        sbConnect.Append($"✗ {connectResult.ErrorMessage}");
-
-        await _dialogManager.ShowWindowDialogAsync(
-            _viewModelManager.CreateMessageBoxViewModel(
-                title: "USB Sensör Tanılama",
-                message: sbConnect.ToString(),
-                okButtonText: "Tamam",
-                cancelButtonText: null
-            )
-        );
     }
 
     private async Task AutoDetectPortAsync()
@@ -386,6 +379,12 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
     /// <summary>True when TCP host/port fields should be visible (Auto or TCP mode).</summary>
     public bool ShowTcpFields => ConnectionMode != SensorConnectionMode.Usb;
 
+    public string TcpDeviceName
+    {
+        get => SettingsService.TcpDeviceName;
+        set => SettingsService.TcpDeviceName = value ?? string.Empty;
+    }
+
     public string TcpHost
     {
         get => SettingsService.TcpSensorHost;
@@ -503,9 +502,12 @@ public class UsbSensorSettingsTabViewModel : SettingsTabViewModelBase
 
     public string ConnectionStatusText => IsTestingConnection
         ? "● Test ediliyor..."
-        : IsConnected ? $"● Bağlı ({_usbSensorService.ActiveConnectionType})" : "● Bağlı Değil";
+        : IsConnected
+            ? $"● Bağlı — {_usbSensorService.ActiveConnectionType} ({_usbSensorService.ActiveConnectionDetail})"
+            : "● Bağlı Değil";
 
-    public string ActiveConnectionType => _usbSensorService.ActiveConnectionType;
+    public string ActiveConnectionType   => _usbSensorService.ActiveConnectionType;
+    public string ActiveConnectionDetail => _usbSensorService.ActiveConnectionDetail;
 
     public string ConnectionTestMessage => _usbSensorService.ConnectionTestMessage;
 

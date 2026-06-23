@@ -293,6 +293,10 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string ActiveConnectionType { get; private set; } = "—";
 
+    /// <summary>Transport-specific detail: COM port name for USB, "host:port" for TCP, "—" when not connected.</summary>
+    [ObservableProperty]
+    public partial string ActiveConnectionDetail { get; private set; } = "—";
+
     /// <summary>True when an RGBL calibration JSON is loaded; the display pipeline uses this to decide routing.</summary>
     public bool IsRgblCalibrationActive => _rgblEvaluator is not null;
 
@@ -800,27 +804,49 @@ public partial class UsbSensorService : ObservableObject, IDisposable
 
     private bool TryOpenTcpTransport()
     {
-        var host = _settingsService.TcpSensorHost;
         var port = _settingsService.TcpSensorPort;
-        if (string.IsNullOrWhiteSpace(host)) return false;
-        try
+
+        // Priority: device name (mDNS) first, then configured host, then AP IP fallback.
+        var candidates = BuildTcpCandidates(_settingsService.TcpDeviceName, _settingsService.TcpSensorHost);
+
+        foreach (var host in candidates)
         {
-            var client = new TcpClient();
-            if (!client.ConnectAsync(host, port).Wait(3000))
+            try
             {
-                client.Dispose();
-                return false;
+                var client = new TcpClient();
+                if (!client.ConnectAsync(host, port).Wait(3000))
+                {
+                    client.Dispose();
+                    continue;
+                }
+                _tcp = new TcpTransportState(client);
+                _activeTransport = ActiveTransport.Tcp;
+                // Persist the working host so telemetry and detail label are accurate.
+                var h = host;
+                Dispatcher.UIThread.Post(() => _settingsService.TcpSensorHost = h);
+                return true;
             }
-            _tcp = new TcpTransportState(client);
-            _activeTransport = ActiveTransport.Tcp;
-            return true;
+            catch
+            {
+                _tcp?.Dispose();
+                _tcp = null;
+            }
         }
-        catch
+        return false;
+    }
+
+    private static List<string> BuildTcpCandidates(string deviceName, string configHost)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<string>();
+        void Add(string h)
         {
-            _tcp?.Dispose();
-            _tcp = null;
-            return false;
+            if (!string.IsNullOrWhiteSpace(h) && seen.Add(h)) list.Add(h);
         }
+        Add(deviceName);   // 1: mDNS hostname (highest priority)
+        Add(configHost);   // 2: previously saved/configured host
+        Add("192.168.4.1"); // 3: AP IP (always active)
+        return list;
     }
 
     /// <summary>
@@ -913,12 +939,16 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         {
             // Session is now open — mark connected, start watchdog and OKU timer.
             _sessionActive = true;
-            var transportLabel = _activeTransport == ActiveTransport.Tcp ? "TCP" : "USB";
+            var transportLabel  = _activeTransport == ActiveTransport.Tcp ? "TCP" : "USB";
+            var transportDetail = _activeTransport == ActiveTransport.Tcp
+                ? $"{_settingsService.TcpSensorHost}:{_settingsService.TcpSensorPort}"
+                : _settingsService.UsbPortName;
             Dispatcher.UIThread.Post(() =>
             {
-                IsConnected          = true;
-                LastReadError        = "";
-                ActiveConnectionType = transportLabel;
+                IsConnected            = true;
+                LastReadError          = "";
+                ActiveConnectionType   = transportLabel;
+                ActiveConnectionDetail = transportDetail;
             });
             StartConnectionWatchdog();
             ScheduleNextRead(delay: TimeSpan.Zero);
@@ -1029,10 +1059,12 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         var msg = errorMessage;
         Dispatcher.UIThread.Post(() =>
         {
-            LastReadError        = msg;
-            IsConnected          = false;
-            HasReceivedValidData = false;
-            GammaApplyBlocked    = false;
+            LastReadError          = msg;
+            IsConnected            = false;
+            HasReceivedValidData   = false;
+            GammaApplyBlocked      = false;
+            ActiveConnectionType   = "—";
+            ActiveConnectionDetail = "—";
         });
     }
 
@@ -1068,19 +1100,21 @@ public partial class UsbSensorService : ObservableObject, IDisposable
         // synchronously so a later queued Post cannot overwrite it after Start() sets true.
         if (Dispatcher.UIThread.CheckAccess())
         {
-            IsConnected          = false;
-            HasReceivedValidData = false;
-            GammaApplyBlocked    = false;
-            ActiveConnectionType = "—";
+            IsConnected            = false;
+            HasReceivedValidData   = false;
+            GammaApplyBlocked      = false;
+            ActiveConnectionType   = "—";
+            ActiveConnectionDetail = "—";
         }
         else
         {
             Dispatcher.UIThread.Post(() =>
             {
-                IsConnected          = false;
-                HasReceivedValidData = false;
-                GammaApplyBlocked    = false;
-                ActiveConnectionType = "—";
+                IsConnected            = false;
+                HasReceivedValidData   = false;
+                GammaApplyBlocked      = false;
+                ActiveConnectionType   = "—";
+                ActiveConnectionDetail = "—";
             });
         }
     }
@@ -1335,6 +1369,88 @@ public partial class UsbSensorService : ObservableObject, IDisposable
     /// <summary>
     /// Scans all available serial ports and returns the first one that responds with a valid
     /// RGB reading. Updates <see cref="SettingsService.UsbPortName"/> on success.
+    /// <summary>
+    /// Scans well-known TCP endpoints for a PiColor device.
+    /// Priority: configured device name (mDNS) → saved host → AP IP 192.168.4.1.
+    /// Updates TcpSensorHost on success.
+    /// </summary>
+    public Task<TcpScanResult> TryAutoDetectTcpAsync()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsTestingConnection = true;
+            ConnectionTestMessage = "TCP taranıyor...";
+        });
+
+        return Task.Run(() =>
+        {
+            var port       = _settingsService.TcpSensorPort;
+            var candidates = BuildTcpCandidates(_settingsService.TcpDeviceName, _settingsService.TcpSensorHost);
+            var tried      = new List<(string Host, string Outcome)>();
+            string? foundHost = null;
+
+            foreach (var host in candidates)
+            {
+                TcpTransportState? t = null;
+                try
+                {
+                    var client = new TcpClient();
+                    if (!client.ConnectAsync(host, port).Wait(2000))
+                    {
+                        client.Dispose();
+                        tried.Add((host, "✗ Bağlantı zaman aşımı"));
+                        continue;
+                    }
+                    t = new TcpTransportState(client);
+
+                    System.Threading.Thread.Sleep(300);
+                    string identity = "";
+                    if (client.Available > 0)
+                        identity = ReadTcpLine(t).Trim();
+
+                    if (!IsKnownFirmware(identity))
+                    {
+                        t.Writer.WriteLine(KimsinCommand);
+                        identity = ReadTcpLine(t).Trim();
+                    }
+
+                    if (IsKnownFirmware(identity))
+                    {
+                        foundHost = host;
+                        tried.Add((host, $"✓ PiColor bulundu"));
+                        break;
+                    }
+                    tried.Add((host, $"✗ Yabancı cihaz: '{Escape(identity)}'"));
+                }
+                catch (Exception ex)
+                {
+                    tried.Add((host, $"✗ Hata: {ex.Message}"));
+                }
+                finally
+                {
+                    t?.Dispose();
+                }
+            }
+
+            var found = foundHost;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (found is not null)
+                {
+                    _settingsService.TcpSensorHost = found;
+                    ConnectionTestMessage = $"✓ PiColor TCP'de bulundu → {found}:{port}";
+                }
+                else
+                {
+                    ConnectionTestMessage = "✗ TCP'de PiColor bulunamadı";
+                }
+                IsTestingConnection = false;
+            });
+
+            return new TcpScanResult(tried, foundHost, port);
+        });
+    }
+
     /// Each port is tried with a 1-second read timeout so the scan is fast.
     /// </summary>
     public Task<PortScanResult> AutoDetectPortAsync()
@@ -2447,4 +2563,13 @@ public record PortScanResult(
     List<(string Port, string Outcome)> TriedPorts,
     string? FoundPort,
     string FoundRaw
+);
+
+/// <summary>
+/// Result of <see cref="UsbSensorService.TryAutoDetectTcpAsync"/>.
+/// </summary>
+public record TcpScanResult(
+    List<(string Host, string Outcome)> TriedHosts,
+    string? FoundHost,
+    int Port
 );

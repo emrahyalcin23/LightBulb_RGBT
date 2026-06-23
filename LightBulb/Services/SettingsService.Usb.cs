@@ -91,6 +91,10 @@ public partial class SettingsService
     public partial SensorConnectionMode SensorConnectionMode { get; set; } = SensorConnectionMode.Auto;
 
     [ObservableProperty]
+    [JsonPropertyName("TcpDeviceName")]
+    public partial string TcpDeviceName { get; set; } = "picolor-modul-1.local";
+
+    [ObservableProperty]
     [JsonPropertyName("TcpSensorHost")]
     public partial string TcpSensorHost { get; set; } = string.Empty;
 
