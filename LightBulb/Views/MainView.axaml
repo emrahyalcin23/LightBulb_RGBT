@@ -12,7 +12,9 @@
     Height="350"
     x:DataType="viewModels:MainViewModel"
     CanResize="False"
+    Closed="Window_OnClosed"
     Icon="/favicon.ico"
+    Opened="Window_OnOpened"
     RenderOptions.BitmapInterpolationMode="HighQuality"
     WindowDecorations="None"
     WindowStartupLocation="CenterScreen">
@@ -20,10 +22,7 @@
         Background="{DynamicResource MaterialCardBackgroundBrush}"
         BorderBrush="{DynamicResource MaterialDividerBrush}"
         BorderThickness="1">
-        <dialogHostAvalonia:DialogHost
-            x:Name="DialogHost"
-            CloseOnClickAway="False"
-            Loaded="DialogHost_OnLoaded">
+        <dialogHostAvalonia:DialogHost x:Name="DialogHost" CloseOnClickAway="False">
             <Grid RowDefinitions="Auto,*,Auto">
                 <!--  Header  -->
                 <Border
